@@ -38,6 +38,8 @@ type Deps struct {
 	AdminRegs       *service.AdminRegistrationQueryService
 	MaterialMissing *service.MaterialCollectionService
 	Dashboard       *service.DashboardService
+	Accounts        *service.AdminAccountService
+	AdminLogs       *service.AdminLogQueryService
 	Tokens          *token.Signer
 
 	// UploadDir 是上传文件物理根目录（配置 UPLOAD_DIR）。非空时把
@@ -149,6 +151,9 @@ func New(deps Deps) *gin.Engine {
 		}
 		if deps.Dashboard != nil {
 			registerAdminDashboardRoutes(admin, deps.Dashboard)
+		}
+		if deps.Accounts != nil && deps.AdminLogs != nil {
+			registerAdminSystemRoutes(admin, deps.Accounts, deps.AdminLogs)
 		}
 	}
 
