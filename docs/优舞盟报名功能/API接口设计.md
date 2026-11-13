@@ -1563,12 +1563,12 @@ curl -X POST https://api.example.com/api/v1/admin/auth/login \
 |---|---|---|
 | token | string | JWT（payload 含 `admin_id`、`role`） |
 | expires_in | int | 有效期（秒），默认 7200 |
-| admin | object | `{"id":1,"username":"admin","role":"super_admin","name":"张三"}` |
+| admin | object | `{"id":1,"username":"admin","role":"super_admin","name":"张三","permissions":["reveal_phone"]}`；`permissions` 为敏感操作权限位（见 11.3，客服为空数组） |
 
 ```json
 {
   "code": 0, "message": "success",
-  "data": {"token": "eyJhbGciOi...", "expires_in": 7200, "admin": {"id": 1, "username": "admin", "role": "super_admin", "name": "张三"}}
+  "data": {"token": "eyJhbGciOi...", "expires_in": 7200, "admin": {"id": 1, "username": "admin", "role": "super_admin", "name": "张三", "permissions": ["reveal_phone"]}}
 }
 ```
 
@@ -2289,6 +2289,32 @@ curl "https://api.example.com/api/v1/admin/refund-tickets?status=pending" \
 | list[].created_at / handled_at | string | 登记/处理时间 |
 
 **错误码**：无。
+
+**11.4.2b 退款工单详情**
+
+**接口概述**
+
+| 项 | 内容 |
+|---|---|
+| 接口名称 | 退款工单详情 |
+| 功能说明 | 工单全量信息 + 订单摘要 + 政策阶段与建议退款金额 + 处理留痕（供审批页展示） |
+| 请求方法 + URL | `GET /api/v1/admin/refund-tickets/{ticket_id}` |
+| 鉴权 | 是（admin 全量；**cs 仅可查看自己登记的**，否则 40301） |
+
+**响应参数**：列表字段全集，另增：
+
+| 参数名 | 类型 | 说明 |
+|---|---|---|
+| content | string | 客服登记内容原文（= reason） |
+| order | object | 订单摘要：`order_no/transaction_id/event_id/event_name/level/dance_type/player_name/id_card_masked/amount/status/source/paid_at/created_at` |
+| policy_stage | string | lottery_before（抽签前）/ lottery_after（抽签后） |
+| suggest_amount | int | 按退费政策自动计算的可退金额（分），即审批默认值 |
+| paid_amount | int | 实付金额（分） |
+| history | array | 处理留痕：`{"action","operator","created_at","detail"}`（来自 admin_logs） |
+
+**错误码**：40401（工单不存在）。
+
+**注意事项**：`suggest_amount` 口径与同意退款接口的默认退款金额一致；detail 为操作详情 JSON 的紧凑文本。
 
 **11.4.3 处理退款（同意）**
 
