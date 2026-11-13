@@ -6,6 +6,7 @@ package token
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -40,11 +41,36 @@ type AdminClaims struct {
 type Signer struct {
 	secret []byte
 	ttl    time.Duration
+
+	// revokedAdmins 记录被停用管理员的踢下线标记（API 文档 14.1：
+	// 停用立即踢下线）。ParseAdmin 拒绝名单中的 admin_id；
+	// 重新激活时从名单移除。进程重启后名单清空，残留 token 最迟在
+	// ttl（默认 2h）内自然过期。
+	mu            sync.Mutex
+	revokedAdmins map[int64]struct{}
 }
 
 // NewSigner 构造签名器；ttl 为 token 有效期（秒级精度，来自配置）。
 func NewSigner(secret string, ttl time.Duration) *Signer {
-	return &Signer{secret: []byte(secret), ttl: ttl}
+	return &Signer{
+		secret:        []byte(secret),
+		ttl:           ttl,
+		revokedAdmins: make(map[int64]struct{}),
+	}
+}
+
+// RevokeAdmin 停用管理员：其既有 token 立即失效。
+func (s *Signer) RevokeAdmin(adminID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.revokedAdmins[adminID] = struct{}{}
+}
+
+// RestoreAdmin 重新激活管理员：解除踢下线标记（之后新签发的 token 正常可用）。
+func (s *Signer) RestoreAdmin(adminID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.revokedAdmins, adminID)
 }
 
 // TTL 返回 token 有效期，用于登录响应中的 expires_in。
@@ -126,6 +152,12 @@ func (s *Signer) ParseAdmin(raw string) (*AdminClaims, error) {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
 	}
 	if claims.AdminID <= 0 || claims.Role == "" {
+		return nil, ErrInvalidToken
+	}
+	s.mu.Lock()
+	_, revoked := s.revokedAdmins[claims.AdminID]
+	s.mu.Unlock()
+	if revoked {
 		return nil, ErrInvalidToken
 	}
 	return claims, nil
