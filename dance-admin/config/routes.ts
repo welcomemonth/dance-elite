@@ -60,18 +60,15 @@ export default [
       { path: '/operation/materials', name: '资料催收', component: './materials/list' },
     ],
   },
+  // 榜单中心（成绩录入/积分榜单/晋级/机构榜/奖金）接口文档未定义，本期隐藏入口，
+  // 仅保留赛季管理（文档 10.7 已定义、后端已实现）；下期补文档后再放开。
   {
     path: '/rank',
-    name: '榜单中心',
+    name: '赛季管理',
     icon: 'crown',
     routes: [
       { path: '/rank', redirect: '/rank/seasons' },
       { path: '/rank/seasons', name: '赛季管理', component: './rank/seasons' },
-      { path: '/rank/scores', name: '成绩录入', component: './rank/scores' },
-      { path: '/rank/leaderboards', name: '积分与榜单', component: './rank/leaderboards' },
-      { path: '/rank/promotion', name: '晋级管理', component: './rank/promotion' },
-      { path: '/rank/institutions', name: '机构年度榜', component: './rank/institutions' },
-      { path: '/rank/prizes', name: '奖金管理', component: './rank/prizes' },
     ],
   },
   {

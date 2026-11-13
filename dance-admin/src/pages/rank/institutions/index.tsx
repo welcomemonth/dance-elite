@@ -59,7 +59,7 @@ const InstitutionRanking: React.FC = () => {
               style: { minWidth: 160 },
             }}
             request={async () =>
-              (seasons ?? []).map((s) => ({ label: s.name, value: s.season_id }))
+              (seasons ?? []).map((s) => ({ label: s.name, value: s.id }))
             }
           />
         }

@@ -135,7 +135,7 @@ const Prizes: React.FC = () => {
             <ProFormSelect
               noStyle
               fieldProps={{ value: seasonId, onChange: (v: number) => setSeasonId(v), style: { minWidth: 140 } }}
-              request={async () => (seasons ?? []).map((s) => ({ label: s.name, value: s.season_id }))}
+              request={async () => (seasons ?? []).map((s) => ({ label: s.name, value: s.id }))}
             />
             <ProFormSelect
               noStyle
@@ -146,7 +146,7 @@ const Prizes: React.FC = () => {
                 style: { minWidth: 240 },
               }}
               request={async () =>
-                (events?.list ?? []).map((e) => ({ label: e.name, value: e.event_id }))
+                (events?.list ?? []).map((e) => ({ label: e.name, value: e.id }))
               }
             />
             <Button onClick={() => setRulesOpen(true)}>奖金规则配置</Button>

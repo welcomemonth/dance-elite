@@ -15,7 +15,6 @@ import {
   Typography,
 } from 'antd';
 import React, { useRef, useState } from 'react';
-import { DownloadOutlined } from '@ant-design/icons';
 import { formatDateTime } from '@/services/youwumeng/format';
 import {
   AGE_LEVEL_OPTIONS,
@@ -25,7 +24,6 @@ import {
 import { listEvents } from '@/services/youwumeng/events';
 import {
   convertWaitlist,
-  exportWaitlists,
   listWaitlists,
   notifyWaitlist,
   removeWaitlist,
@@ -73,11 +71,10 @@ const WaitlistList: React.FC = () => {
   const [modal, setModal] = useState<ModalState>(null);
   const [modalValue, setModalValue] = useState('');
   const [releasedQuota, setReleasedQuota] = useState(0);
-  const [exporting, setExporting] = useState(false);
 
   const { data: eventOptions } = useService(async () => {
     const res = await listEvents({ page: 1, page_size: 100 });
-    return res.list.map((e) => ({ label: e.name, value: e.event_id }));
+    return res.list.map((e) => ({ label: e.name, value: e.id }));
   });
 
   const closeModal = () => {
@@ -121,28 +118,6 @@ const WaitlistList: React.FC = () => {
     actionRef.current?.reload();
   };
 
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      const values = formRef.current?.getFieldsValue() as {
-        event_id?: number;
-        level?: AgeLevel;
-        dance_type?: DanceType;
-        status?: WaitlistStatus;
-      };
-      await exportWaitlists({
-        event_id: values?.event_id,
-        level: values?.level,
-        dance_type: values?.dance_type,
-        status: values?.status,
-      });
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : '导出失败');
-    } finally {
-      setExporting(false);
-    }
-  };
-
   const columns: ProColumns<WaitlistEntry>[] = [
     {
       title: '序号',
@@ -153,7 +128,7 @@ const WaitlistList: React.FC = () => {
     },
     {
       title: '选手姓名',
-      dataIndex: 'player_name',
+      dataIndex: 'name',
       width: 100,
     },
     {
@@ -200,11 +175,11 @@ const WaitlistList: React.FC = () => {
       ),
     },
     {
-      title: '备注',
-      dataIndex: 'note',
-      width: 130,
+      title: '通知时间',
+      dataIndex: 'notified_at',
+      width: 150,
       search: false,
-      render: (v) => v || '-',
+      render: (_, record) => formatDateTime(record.notified_at),
     },
     {
       title: '操作',
@@ -264,20 +239,10 @@ const WaitlistList: React.FC = () => {
           return { data: data.list, total: data.total, success: true };
         }}
         pagination={{ defaultPageSize: 20 }}
-        toolBarRender={() => [
-          <Button
-            key="export"
-            icon={<DownloadOutlined />}
-            loading={exporting}
-            onClick={handleExport}
-          >
-            导出队列
-          </Button>,
-        ]}
       />
 
       <Modal
-        title={`标记已通知 - ${modal?.type === 'notify' ? modal.record.player_name : ''}`}
+        title={`标记已通知 - ${modal?.type === 'notify' ? modal.record.name : ''}`}
         open={modal?.type === 'notify'}
         onOk={handleNotify}
         onCancel={closeModal}
@@ -296,7 +261,7 @@ const WaitlistList: React.FC = () => {
       </Modal>
 
       <Modal
-        title={`移出队列 - ${modal?.type === 'remove' ? modal.record.player_name : ''}`}
+        title={`移出队列 - ${modal?.type === 'remove' ? modal.record.name : ''}`}
         open={modal?.type === 'remove'}
         onOk={handleRemove}
         onCancel={closeModal}
@@ -313,7 +278,7 @@ const WaitlistList: React.FC = () => {
       </Modal>
 
       <Modal
-        title={`关联订单转报名 - ${modal?.type === 'convert' ? modal.record.player_name : ''}`}
+        title={`关联订单转报名 - ${modal?.type === 'convert' ? modal.record.name : ''}`}
         open={modal?.type === 'convert'}
         onOk={handleConvert}
         onCancel={closeModal}

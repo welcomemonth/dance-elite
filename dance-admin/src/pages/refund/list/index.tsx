@@ -1,11 +1,17 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { PageContainer, ProTable } from '@ant-design/pro-components';
+import {
+  ModalForm,
+  PageContainer,
+  ProFormText,
+  ProFormTextArea,
+  ProTable,
+} from '@ant-design/pro-components';
 import { history, useLocation } from '@umijs/max';
-import { Tag, Typography } from 'antd';
+import { App, Button, Tag, Typography } from 'antd';
 import React, { useRef } from 'react';
 import { formatDateTime } from '@/services/youwumeng/format';
 import { REFUND_TICKET_STATUS_LABELS } from '@/services/youwumeng/labels';
-import { listRefundTickets } from '@/services/youwumeng/refunds';
+import { createRefundTicket, listRefundTickets } from '@/services/youwumeng/refunds';
 import { listEvents } from '@/services/youwumeng/events';
 import type {
   RefundTicketBrief,
@@ -17,6 +23,7 @@ const STATUS_COLORS: Record<RefundTicketStatus, string> = {
   processing: 'processing',
   approved: 'success',
   rejected: 'default',
+  refunded: 'success',
   refund_failed: 'error',
 };
 
@@ -26,6 +33,7 @@ const useInitialKeyword = (): string => {
 };
 
 const RefundList: React.FC = () => {
+  const { message } = App.useApp();
   const actionRef = useRef<ActionType>(null);
   const initialKeyword = useInitialKeyword();
 
@@ -58,7 +66,7 @@ const RefundList: React.FC = () => {
       valueType: 'select',
       request: async () => {
         const data = await listEvents({ page: 1, page_size: 100 });
-        return data.list.map((e) => ({ label: e.name, value: e.event_id }));
+        return data.list.map((e) => ({ label: e.name, value: e.id }));
       },
     },
     { title: '选手姓名', dataIndex: 'player_name', width: 100, search: false },
@@ -140,6 +148,30 @@ const RefundList: React.FC = () => {
         }}
         pagination={{ defaultPageSize: 20 }}
         options={false}
+        toolBarRender={() => [
+          <ModalForm
+            key="create"
+            title="登记退款工单"
+            trigger={<Button type="primary">登记退款</Button>}
+            onFinish={async (values: { order_no: string; reason: string }) => {
+              await createRefundTicket(values);
+              message.success('退款工单已登记');
+              actionRef.current?.reload();
+              return true;
+            }}
+          >
+            <ProFormText
+              name="order_no"
+              label="订单号"
+              rules={[{ required: true, message: '请输入订单号' }]}
+            />
+            <ProFormTextArea
+              name="reason"
+              label="退费诉求"
+              rules={[{ required: true, message: '请填写退费诉求' }]}
+            />
+          </ModalForm>,
+        ]}
       />
     </PageContainer>
   );

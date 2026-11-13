@@ -1,7 +1,7 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useSearchParams } from '@umijs/max';
-import { App, Button, Space, Switch, Tag, Typography } from 'antd';
+import { Space, Switch, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import { formatDateTime, formatMoney } from '@/services/youwumeng/format';
 import {
@@ -10,7 +10,7 @@ import {
   ORDER_SOURCE_LABELS,
   ORDER_STATUS_LABELS,
 } from '@/services/youwumeng/labels';
-import { exportOrders, listOrders } from '@/services/youwumeng/orders';
+import { listOrders } from '@/services/youwumeng/orders';
 import { listEvents } from '@/services/youwumeng/events';
 import type {
   AgeLevel,
@@ -21,6 +21,7 @@ import type {
 } from '@/services/youwumeng/typings';
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
+  pending_payment: 'default',
   paid: 'success',
   canceled: 'default',
   refunding: 'processing',
@@ -28,22 +29,12 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
 };
 
 const OrderList: React.FC = () => {
-  const { message } = App.useApp();
   const actionRef = useRef<ActionType>(null);
   const [searchParams] = useSearchParams();
   const urlEventId = searchParams.get('event_id')
     ? Number(searchParams.get('event_id'))
     : undefined;
   const [includeCanceled, setIncludeCanceled] = useState(false);
-
-  const handleExport = async () => {
-    try {
-      await exportOrders({ include_canceled: includeCanceled });
-      message.success('导出成功');
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : '导出失败');
-    }
-  };
 
   const columns: ProColumns<OrderBrief>[] = [
     {
@@ -66,7 +57,7 @@ const OrderList: React.FC = () => {
       valueType: 'select',
       request: async () => {
         const data = await listEvents({ page: 1, page_size: 100 });
-        return data.list.map((e) => ({ label: e.name, value: e.event_id }));
+        return data.list.map((e) => ({ label: e.name, value: e.id }));
       },
     },
     {
@@ -88,11 +79,10 @@ const OrderList: React.FC = () => {
     },
     { title: '选手姓名', dataIndex: 'player_name', width: 100 },
     {
-      title: '证件号',
-      dataIndex: 'id_card_masked',
-      width: 170,
+      title: '选手编号',
+      dataIndex: 'player_no',
+      width: 110,
       search: false,
-      render: (_, record) => record.id_card_masked ?? '无证件号',
     },
     {
       title: '金额',
@@ -105,9 +95,12 @@ const OrderList: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       width: 110,
-      valueEnum: Object.fromEntries(
-        Object.entries(ORDER_STATUS_LABELS).map(([value, text]) => [value, { text }]),
-      ),
+      valueEnum: {
+        paid: { text: ORDER_STATUS_LABELS.paid },
+        canceled: { text: ORDER_STATUS_LABELS.canceled },
+        refunding: { text: ORDER_STATUS_LABELS.refunding },
+        refunded: { text: ORDER_STATUS_LABELS.refunded },
+      },
       render: (_, record) => (
         <Tag color={STATUS_COLORS[record.status]}>
           {ORDER_STATUS_LABELS[record.status]}
@@ -209,9 +202,6 @@ const OrderList: React.FC = () => {
               }}
             />
           </span>,
-          <Button key="export" onClick={handleExport}>
-            导出
-          </Button>,
         ]}
       />
     </PageContainer>

@@ -18,9 +18,21 @@ import type { Season } from '@/services/youwumeng/typings';
 
 const STATUS_COLORS: Record<Season['status'], string> = {
   upcoming: 'default',
-  ongoing: 'success',
+  active: 'success',
   archived: 'warning',
 };
+
+/** 从赛季 group_rules 推导适用的组别×舞种榜单（规则本身以服务端为准，仅展示）。 */
+function seasonBoardLabels(groupRules: string): string[] {
+  try {
+    const rules = JSON.parse(groupRules) as { levels?: { level: string }[] };
+    return (rules.levels ?? []).flatMap((l) =>
+      ['classical', 'folk'].map((danceType) => boardLabel(l.level, danceType)),
+    );
+  } catch {
+    return [];
+  }
+}
 
 const SeasonList: React.FC = () => {
   const { message } = App.useApp();
@@ -71,8 +83,8 @@ const SeasonList: React.FC = () => {
       title: '适用榜单',
       width: 320,
       render: (_, r) =>
-        r.boards.map((b) => (
-          <Tag key={`${b.level}-${b.dance_type}`}>{boardLabel(b.level, b.dance_type)}</Tag>
+        seasonBoardLabels(r.group_rules).map((label) => (
+          <Tag key={label}>{label}</Tag>
         )),
     },
     {
@@ -92,7 +104,7 @@ const SeasonList: React.FC = () => {
               <Popconfirm
                 title="归档赛季"
                 description="归档后榜单冻结为历史，小程序端可切换查看。是否继续？"
-                onConfirm={() => runArchive(r.season_id)}
+                onConfirm={() => runArchive(r)}
               >
                 <Button type="link" size="small" danger>
                   归档
@@ -108,7 +120,7 @@ const SeasonList: React.FC = () => {
     <PageContainer title={false}>
       <ProTable<Season>
         headerTitle="赛季管理"
-        rowKey="season_id"
+        rowKey="id"
         loading={loading}
         dataSource={data ?? []}
         columns={columns}
@@ -163,7 +175,7 @@ const SeasonList: React.FC = () => {
         modalProps={{ destroyOnHidden: true }}
         onFinish={async (values: { name: string; start_date: string; end_date: string }) => {
           if (!editing) return false;
-          await runUpdate(editing.season_id, values);
+          await runUpdate(editing.id, values);
           return true;
         }}
       >

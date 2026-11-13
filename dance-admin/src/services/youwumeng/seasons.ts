@@ -23,27 +23,31 @@ import type {
 // ---------- 赛季 ----------
 
 export async function listSeasons(): Promise<Season[]> {
-  return request('/api/v1/admin/seasons', { method: 'GET' });
+  const data = await request<{ list: Season[] }>('/api/v1/admin/seasons', { method: 'GET' });
+  return data.list;
 }
 
 export async function createSeason(data: {
   name: string;
   start_date: string;
   end_date: string;
-}): Promise<{ season_id: number }> {
+}): Promise<Season> {
   return request('/api/v1/admin/seasons', { method: 'POST', data });
 }
 
 export async function updateSeason(
   seasonId: number,
   data: { name?: string; start_date?: string; end_date?: string },
-): Promise<{ season_id: number }> {
+): Promise<Season> {
   return request(`/api/v1/admin/seasons/${seasonId}`, { method: 'PUT', data });
 }
 
-/** 归档赛季（榜单冻结为历史） */
-export async function archiveSeason(seasonId: number): Promise<{ season_id: number; status: string }> {
-  return request(`/api/v1/admin/seasons/${seasonId}/archive`, { method: 'POST' });
+/** 归档赛季：PUT /seasons/{id} 携带 status=archived（与 API 文档 10.7 一致，name 必填）。 */
+export async function archiveSeason(season: Season): Promise<Season> {
+  return request(`/api/v1/admin/seasons/${season.id}`, {
+    method: 'PUT',
+    data: { name: season.name, status: 'archived' },
+  });
 }
 
 // ---------- 积分规则 ----------

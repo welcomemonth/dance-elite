@@ -62,7 +62,7 @@ const EventList: React.FC = () => {
       width: 280,
       render: (_, record) => (
         <Typography.Link
-          onClick={() => history.push(`/event/detail/${record.event_id}`)}
+          onClick={() => history.push(`/event/detail/${record.id}`)}
         >
           {record.name}
         </Typography.Link>
@@ -128,31 +128,31 @@ const EventList: React.FC = () => {
       render: (_, record) => (
         <Space wrap size={4}>
           <Typography.Link
-            onClick={() => history.push(`/event/detail/${record.event_id}`)}
+            onClick={() => history.push(`/event/detail/${record.id}`)}
           >
             详情
           </Typography.Link>
           {access.canAdmin && ['draft', 'unpublished'].includes(record.status) && (
             <Typography.Link
-              onClick={() => history.push(`/event/edit/${record.event_id}`)}
+              onClick={() => history.push(`/event/edit/${record.id}`)}
             >
               编辑
             </Typography.Link>
           )}
-          {access.canAdmin && record.status === 'unpublished' && (
+          {access.canAdmin && ['draft', 'unpublished'].includes(record.status) && (
             <Popconfirm
               title="发布赛事"
               description="发布后小程序端立即可见，是否继续？"
-              onConfirm={() => runPublish(record.event_id)}
+              onConfirm={() => runPublish(record.id)}
             >
               <Typography.Link>发布</Typography.Link>
             </Popconfirm>
           )}
-          {access.canAdmin && ['registering', 'unpublished', 'reg_closed'].includes(record.status) && (
+          {access.canAdmin && ['registering', 'unpublished', 'draft', 'reg_closed'].includes(record.status) && (
             <Popconfirm
               title="下架赛事"
               description="下架后小程序端立即不可见、不可报名；已支付报名不受影响。"
-              onConfirm={() => runOffline(record.event_id)}
+              onConfirm={() => runOffline(record.id)}
             >
               <Typography.Link type="danger">下架</Typography.Link>
             </Popconfirm>
@@ -165,7 +165,7 @@ const EventList: React.FC = () => {
                   ? '重新生成后旧链接立即失效，是否继续？'
                   : '生成该赛事的免登录音频审核 H5 链接？'
               }
-              onConfirm={() => runGenToken(record.event_id)}
+              onConfirm={() => runGenToken(record.id)}
             >
               <Typography.Link>审核链接</Typography.Link>
             </Popconfirm>
@@ -179,7 +179,7 @@ const EventList: React.FC = () => {
     <PageContainer title={false}>
       <ProTable<EventBrief>
         headerTitle="赛事列表"
-        rowKey="event_id"
+        rowKey="id"
         actionRef={actionRef}
         columns={columns}
         search={{ labelWidth: 'auto' }}

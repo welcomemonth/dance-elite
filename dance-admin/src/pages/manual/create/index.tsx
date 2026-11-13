@@ -37,7 +37,7 @@ const ManualCreate: React.FC = () => {
     const res = await listEvents({ page: 1, page_size: 100 });
     return res.list
       .filter((e: EventBrief) => ['registering', 'unpublished'].includes(e.status))
-      .map((e: EventBrief) => ({ label: e.name, value: e.event_id }));
+      .map((e: EventBrief) => ({ label: e.name, value: e.id }));
   });
 
   const { data: groupOptions } = useService(

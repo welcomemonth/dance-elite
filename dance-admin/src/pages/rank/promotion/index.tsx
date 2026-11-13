@@ -98,7 +98,7 @@ const Promotion: React.FC = () => {
           <ProFormSelect
             noStyle
             fieldProps={{ value: seasonId, onChange: (v: number) => setSeasonId(v), style: { minWidth: 150 } }}
-            request={async () => (seasons ?? []).map((s) => ({ label: s.name, value: s.season_id }))}
+            request={async () => (seasons ?? []).map((s) => ({ label: s.name, value: s.id }))}
           />
         }
       >

@@ -46,6 +46,7 @@ export const DANCE_TYPE_LABELS: Record<DanceType, string> = {
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+  pending_payment: '待支付',
   paid: '已支付',
   canceled: '已取消',
   refunding: '退款处理中',
@@ -62,6 +63,7 @@ export const REFUND_TICKET_STATUS_LABELS: Record<RefundTicketStatus, string> = {
   processing: '处理中',
   approved: '已同意',
   rejected: '已驳回',
+  refunded: '已退款',
   refund_failed: '退款失败',
 };
 
@@ -112,7 +114,7 @@ export const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
 
 export const SEASON_STATUS_LABELS: Record<SeasonStatus, string> = {
   upcoming: '未开始',
-  ongoing: '进行中',
+  active: '进行中',
   archived: '已归档',
 };
 

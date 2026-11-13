@@ -1,8 +1,7 @@
-import { DownloadOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useAccess, useSearchParams } from '@umijs/max';
-import { App, Button, Modal, Space, Tag, Typography } from 'antd';
+import { App, Modal, Space, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import {
   DANCE_TYPE_LABELS,
@@ -11,7 +10,6 @@ import {
 import { formatDateTime } from '@/services/youwumeng/format';
 import { listEvents } from '@/services/youwumeng/events';
 import {
-  exportMissingMaterials,
   listMissingMaterials,
   markMaterialContacted,
 } from '@/services/youwumeng/materials';
@@ -43,7 +41,7 @@ const MaterialsList: React.FC = () => {
       valueType: 'select',
       request: async () => {
         const data = await listEvents({ page: 1, page_size: 100 });
-        return data.list.map((e) => ({ label: e.name, value: e.event_id }));
+        return data.list.map((e) => ({ label: e.name, value: e.id }));
       },
     },
     { title: '选手姓名', dataIndex: 'player_name', width: 100 },
@@ -81,7 +79,11 @@ const MaterialsList: React.FC = () => {
       dataIndex: 'contacted',
       width: 90,
       render: (_, r) =>
-        r.contacted ? <Tag color="success">✓ {r.contact_note ?? ''}</Tag> : <Tag>未联系</Tag>,
+        r.contacted ? (
+          <Tag color="success">✓ {formatDateTime(r.contacted_at)}</Tag>
+        ) : (
+          <Tag>未联系</Tag>
+        ),
     },
     {
       title: '操作',
@@ -124,22 +126,6 @@ const MaterialsList: React.FC = () => {
           return { data: data.list, total: data.total, success: true };
         }}
         pagination={{ defaultPageSize: 20 }}
-        toolBarRender={() => [
-          <Button
-            key="export"
-            icon={<DownloadOutlined />}
-            onClick={async () => {
-              try {
-                await exportMissingMaterials({});
-                message.success('导出成功');
-              } catch (e) {
-                message.error((e as Error).message || '导出失败');
-              }
-            }}
-          >
-            导出催收名单
-          </Button>,
-        ]}
       />
       <Modal
         title={`标记已联系：${contactTarget?.player_name ?? ''}`}

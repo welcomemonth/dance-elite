@@ -50,6 +50,13 @@ export async function offlineEvent(eventId: number): Promise<{ event_id: number;
   return request(`/api/v1/admin/events/${eventId}/offline`, { method: 'POST' });
 }
 
+/** POST /api/v1/admin/events/{event_id}/close-registration */
+export async function closeRegistration(
+  eventId: number,
+): Promise<{ event_id: number; status: string }> {
+  return request(`/api/v1/admin/events/${eventId}/close-registration`, { method: 'POST' });
+}
+
 /** PUT /api/v1/admin/events/{event_id}/groups/{group_id}/quota */
 export async function setGroupQuota(
   eventId: number,

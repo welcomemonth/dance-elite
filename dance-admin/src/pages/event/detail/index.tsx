@@ -22,6 +22,7 @@ import {
 import React, { useRef, useState } from 'react';
 import {
   closeGroup,
+  closeRegistration,
   generateAudioReviewToken,
   getEvent,
   publishEvent,
@@ -51,6 +52,10 @@ const EventDetail: React.FC = () => {
   });
 
   const reload = () => refresh();
+  // 后台与 H5 同域部署，链接展示为可直接发给审核人的完整地址。
+  const audioReviewLink = event?.audio_review_token
+    ? `${window.location.origin}/audio-review/${event.audio_review_token}`
+    : null;
 
   if (!loading && !event) {
     return (
@@ -60,14 +65,13 @@ const EventDetail: React.FC = () => {
     );
   }
 
-  const timeline = event?.timeline;
-  const timelineItems = timeline
+  const timelineItems = event
     ? [
-        { title: '报名开始', time: timeline.reg_start_at },
-        { title: '截止报名', time: timeline.reg_end_at },
-        { title: '抽签', time: timeline.lottery_at },
-        { title: '核对舞蹈音频', time: timeline.material_check_at },
-        { title: '开始比赛', time: timeline.start_at },
+        { title: '报名开始', time: event.reg_start_at },
+        { title: '截止报名', time: event.reg_end_at },
+        { title: '抽签', time: event.lottery_at },
+        { title: '核对舞蹈音频', time: event.material_check_at },
+        { title: '开始比赛', time: event.start_at },
       ]
     : [];
   const currentStep = timelineItems.filter((t) => new Date(t.time).getTime() <= Date.now()).length;
@@ -140,23 +144,44 @@ const EventDetail: React.FC = () => {
       title={event?.name ?? '加载中…'}
       loading={loading}
       extra={
-        event && ['unpublished', 'draft'].includes(event.status) && access.canAdmin ? (
-          <Button
-            type="primary"
-            onClick={() =>
-              Modal.confirm({
-                title: '发布赛事',
-                content: '发布后小程序端立即可见，是否继续？',
-                onOk: async () => {
-                  await publishEvent(event.event_id);
-                  message.success('已发布');
-                  reload();
-                },
-              })
-            }
-          >
-            发布
-          </Button>
+        event && access.canAdmin ? (
+          <Space>
+            {['unpublished', 'draft'].includes(event.status) && (
+              <Button
+                type="primary"
+                onClick={() =>
+                  Modal.confirm({
+                    title: '发布赛事',
+                    content: '发布后小程序端立即可见，是否继续？',
+                    onOk: async () => {
+                      await publishEvent(event.id);
+                      message.success('已发布');
+                      reload();
+                    },
+                  })
+                }
+              >
+                发布
+              </Button>
+            )}
+            {event.status === 'registering' && (
+              <Button
+                onClick={() =>
+                  Modal.confirm({
+                    title: '关闭报名',
+                    content: '关闭后小程序端不可再报名，已支付报名不受影响。是否继续？',
+                    onOk: async () => {
+                      await closeRegistration(event.id);
+                      message.success('已关闭报名');
+                      reload();
+                    },
+                  })
+                }
+              >
+                关闭报名
+              </Button>
+            )}
+          </Space>
         ) : undefined
       }
     >
@@ -178,16 +203,16 @@ const EventDetail: React.FC = () => {
                   span: 3,
                   render: () => (
                     <Space>
-                      {event.audio_review_token ? (
+                      {audioReviewLink ? (
                         <>
                           <Typography.Text code copyable>
-                            {`/audio-review/${event.audio_review_token}`}
+                            {audioReviewLink}
                           </Typography.Text>
                           <Popconfirm
                             title="重新生成"
                             description="重新生成后旧链接立即失效，是否继续？"
                             onConfirm={async () => {
-                              const r = await generateAudioReviewToken(event.event_id);
+                              const r = await generateAudioReviewToken(event.id);
                               message.success(`新链接：${r.url}`);
                               reload();
                             }}
@@ -198,7 +223,7 @@ const EventDetail: React.FC = () => {
                       ) : (
                         <Typography.Link
                           onClick={async () => {
-                            const r = await generateAudioReviewToken(event.event_id);
+                            const r = await generateAudioReviewToken(event.id);
                             message.success(`已生成：${r.url}`);
                             reload();
                           }}
@@ -248,7 +273,7 @@ const EventDetail: React.FC = () => {
                     <Typography.Text type="secondary">
                       该赛事全部有效报名请在订单管理中查看（自动按本赛事筛选）。
                     </Typography.Text>
-                    <Button onClick={() => history.push(`/order/list?event_id=${event.event_id}`)}>
+                    <Button onClick={() => history.push(`/order/list?event_id=${event.id}`)}>
                       前往订单管理
                     </Button>
                   </Space>
@@ -258,7 +283,7 @@ const EventDetail: React.FC = () => {
                 key: 'waitlist',
                 label: '候补队列',
                 children: (
-                  <Button onClick={() => history.push(`/operation/waitlist?event_id=${event.event_id}`)}>
+                  <Button onClick={() => history.push(`/operation/waitlist?event_id=${event.id}`)}>
                     前往候补管理
                   </Button>
                 ),
@@ -267,7 +292,7 @@ const EventDetail: React.FC = () => {
                 key: 'materials',
                 label: '资料完成度',
                 children: (
-                  <Button onClick={() => history.push(`/operation/materials?event_id=${event.event_id}`)}>
+                  <Button onClick={() => history.push(`/operation/materials?event_id=${event.id}`)}>
                     前往资料催收
                   </Button>
                 ),
@@ -276,7 +301,7 @@ const EventDetail: React.FC = () => {
                 key: 'refunds',
                 label: '退款记录',
                 children: (
-                  <Button onClick={() => history.push(`/order/refunds?event_id=${event.event_id}`)}>
+                  <Button onClick={() => history.push(`/order/refunds?event_id=${event.id}`)}>
                     前往退款工单
                   </Button>
                 ),

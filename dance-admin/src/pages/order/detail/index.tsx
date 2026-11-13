@@ -1,4 +1,4 @@
-import { useAccess } from '@umijs/max';
+import { history, useAccess } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
 import { useService } from '@/services/youwumeng/useService';
 import {
@@ -16,8 +16,7 @@ import {
   Typography,
 } from 'antd';
 import React, { useState } from 'react';
-import { useParams } from '@umijs/max';
-import { formatDateTime, formatMoney } from '@/services/youwumeng/format';
+import { useParams } from '@umijs/max';import { formatDateTime, formatMoney } from '@/services/youwumeng/format';
 import {
   DANCE_TYPE_LABELS,
   ORDER_SOURCE_LABELS,
@@ -56,7 +55,7 @@ const OrderDetail: React.FC = () => {
     );
   }
 
-  const { order, registration, payments, materials, operation_logs: logs, remarks } = data ?? {};
+  const { order, registration, payments, materials, operation_logs: logs, refund_tickets: refundTickets } = data ?? {};
   const materialItems = [
     { label: '证件照', value: materials?.photo_url, type: 'photo' as const },
     { label: '音频', value: materials?.audio_url, type: 'audio' as const },
@@ -70,7 +69,7 @@ const OrderDetail: React.FC = () => {
         <Card title="报名信息" size="small">
           <Descriptions size="small" column={3} bordered>
             <Descriptions.Item label="赛事">
-              {registration?.event_name}
+              {order?.event_name}
             </Descriptions.Item>
             <Descriptions.Item label="组别">
               {registration?.level} · {DANCE_TYPE_LABELS[registration?.dance_type as 'classical'] ?? registration?.dance_type}
@@ -78,8 +77,8 @@ const OrderDetail: React.FC = () => {
             <Descriptions.Item label="选手姓名">
               {registration?.player_name}
             </Descriptions.Item>
-            <Descriptions.Item label="证件号（脱敏）">
-              {registration?.id_card_masked ?? '无证件号'}
+            <Descriptions.Item label="选手编号">
+              {registration?.player_no ?? order?.player_no ?? '—'}
             </Descriptions.Item>
             <Descriptions.Item label="机构">{registration?.institution || '-'}</Descriptions.Item>
             <Descriptions.Item label="联系电话">
@@ -96,9 +95,6 @@ const OrderDetail: React.FC = () => {
                   </Button>
                 )}
               </Space>
-            </Descriptions.Item>
-            <Descriptions.Item label="资料截止时间">
-              {formatDateTime(registration?.material_deadline)}
             </Descriptions.Item>
             <Descriptions.Item label="来源">
               {ORDER_SOURCE_LABELS[order?.source as 'miniapp'] ?? order?.source}
@@ -127,7 +123,7 @@ const OrderDetail: React.FC = () => {
           </Descriptions>
           <Table
             style={{ marginTop: 12 }}
-            rowKey={(r) => `${r.type}-${r.transaction_id}`}
+            rowKey={(r) => `${r.type}-${r.payment_id}`}
             size="small"
             pagination={false}
             dataSource={payments ?? []}
@@ -209,15 +205,37 @@ const OrderDetail: React.FC = () => {
           />
         </Card>
 
-        <Card title="备注" size="small">
-          {remarks && remarks.length > 0 ? (
-            remarks.map((r) => (
-              <Typography.Paragraph key={r.id} style={{ marginBottom: 4 }}>
-                {r.content}（{r.operator} · {formatDateTime(r.created_at)}）
-              </Typography.Paragraph>
-            ))
+        <Card title="退款工单" size="small">
+          {refundTickets && refundTickets.length > 0 ? (
+            <Table
+              rowKey="ticket_id"
+              size="small"
+              pagination={false}
+              dataSource={refundTickets}
+              columns={[
+                {
+                  title: '工单号',
+                  dataIndex: 'ticket_no',
+                  render: (v: string, r) => (
+                    <Typography.Link
+                      onClick={() => history.push(`/order/refunds/${r.ticket_id}`)}
+                    >
+                      {v}
+                    </Typography.Link>
+                  ),
+                },
+                { title: '状态', dataIndex: 'status' },
+                { title: '诉求', dataIndex: 'reason', ellipsis: true },
+                { title: '处理人', dataIndex: 'handler_name', render: (v: string) => v || '-' },
+                {
+                  title: '时间',
+                  dataIndex: 'created_at',
+                  render: (v: string) => formatDateTime(v),
+                },
+              ]}
+            />
           ) : (
-            <Typography.Text type="secondary">暂无备注</Typography.Text>
+            <Typography.Text type="secondary">暂无退款工单</Typography.Text>
           )}
         </Card>
       </Space>

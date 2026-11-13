@@ -10,6 +10,7 @@ import { listOrders } from '@/services/youwumeng/orders';
 import type { OrderBrief, OrderStatus } from '@/services/youwumeng/typings';
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
+  pending_payment: 'default',
   paid: 'success',
   canceled: 'default',
   refunding: 'warning',

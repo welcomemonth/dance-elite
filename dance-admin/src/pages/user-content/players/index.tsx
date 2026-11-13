@@ -37,7 +37,7 @@ const ID_TYPE_LABELS: Record<PlayerBrief['id_type'], string> = {
   other: '其他',
 };
 
-const GENDER_LABELS: Record<PlayerBrief['gender'], string> = {
+const GENDER_LABELS: Record<NonNullable<PlayerBrief['gender']>, string> = {
   male: '男',
   female: '女',
 };
@@ -86,7 +86,7 @@ function PlayerArchives() {
       dataIndex: 'gender',
       width: 70,
       search: false,
-      render: (_, r) => GENDER_LABELS[r.gender],
+      render: (_, r) => (r.gender ? GENDER_LABELS[r.gender] : '—'),
     },
     { title: '机构', dataIndex: 'institution', width: 140, search: false, render: (v) => v || '—' },
     { title: '报名次数', dataIndex: 'registration_count', width: 90, search: false },
@@ -144,7 +144,7 @@ function PlayerArchives() {
                 { title: '证件类型', dataIndex: 'id_type', render: () => ID_TYPE_LABELS[detail.id_type] },
                 { title: '证件号', dataIndex: 'id_card_masked', render: (v) => (v as string) ?? '—' },
                 { title: '出生日期', dataIndex: 'birth_date' },
-                { title: '性别', dataIndex: 'gender', render: () => GENDER_LABELS[detail.gender] },
+                { title: '性别', dataIndex: 'gender', render: () => (detail.gender ? GENDER_LABELS[detail.gender] : '—') },
                 { title: '机构', dataIndex: 'institution', render: (v) => (v as string) || '—' },
               ]}
             />

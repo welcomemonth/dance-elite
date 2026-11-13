@@ -23,6 +23,14 @@ export async function listRefundTickets(
   return request('/api/v1/admin/refund-tickets', { method: 'GET', params });
 }
 
+/** POST /api/v1/admin/refund-tickets（客服登记退款工单） */
+export async function createRefundTicket(data: {
+  order_no: string;
+  reason: string;
+}): Promise<{ ticket_no: string; status: string }> {
+  return request('/api/v1/admin/refund-tickets', { method: 'POST', data });
+}
+
 /** GET /api/v1/admin/refund-tickets/{ticket_id}（*待定*：详情接口，含政策阶段与建议金额） */
 export async function getRefundTicket(ticketId: number): Promise<RefundTicketDetail> {
   return request(`/api/v1/admin/refund-tickets/${ticketId}`, { method: 'GET' });

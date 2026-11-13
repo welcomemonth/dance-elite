@@ -75,7 +75,7 @@ const CsTickets: React.FC = () => {
         );
       },
     },
-    { title: '登记人', dataIndex: 'created_by', width: 100 },
+    { title: '登记人', dataIndex: 'created_by_name', width: 100, render: (_, r) => r.created_by_name ?? '-' },
     {
       title: '关联订单',
       dataIndex: 'related_order_no',

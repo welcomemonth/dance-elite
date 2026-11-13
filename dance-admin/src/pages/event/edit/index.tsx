@@ -92,7 +92,7 @@ const EventEditForm: React.FC = () => {
   useEffect(() => {
     listSeasons().then((list) =>
       setSeasonOptions(
-        list.map((s) => ({ label: s.name, value: s.season_id })),
+        list.map((s) => ({ label: s.name, value: s.id })),
       ),
     );
   }, []);
@@ -110,11 +110,11 @@ const EventEditForm: React.FC = () => {
           venue: event.venue,
           event_date: dayjs(event.event_date),
           fee_yuan: event.fee / 100,
-          reg_start_at: dayjs(event.timeline.reg_start_at),
-          reg_end_at: dayjs(event.timeline.reg_end_at),
-          lottery_at: dayjs(event.timeline.lottery_at),
-          material_check_at: dayjs(event.timeline.material_check_at),
-          start_at: dayjs(event.timeline.start_at),
+          reg_start_at: dayjs(event.reg_start_at),
+          reg_end_at: dayjs(event.reg_end_at),
+          lottery_at: dayjs(event.lottery_at),
+          material_check_at: dayjs(event.material_check_at),
+          start_at: dayjs(event.start_at),
           groups: event.groups.map((g) => ({
             group_id: g.group_id,
             level: g.level,

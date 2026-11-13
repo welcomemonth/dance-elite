@@ -75,7 +75,7 @@ const ScoreEntry: React.FC = () => {
             onFinish={async (values) => {
               const seasonId = values.season_id as number;
               const list = await listEvents({ page: 1, page_size: 100 });
-              setEventOptions(list.list.filter((e) => e.season_id === seasonId).map((e) => ({ label: e.name, value: e.event_id })));
+              setEventOptions(list.list.filter((e) => e.season_id === seasonId).map((e) => ({ label: e.name, value: e.id })));
               const board = BOARDS[values.board_index as number];
               setSelection({ eventId: values.event_id as number, level: board.level, danceType: board.dance_type });
               return true;
@@ -87,8 +87,8 @@ const ScoreEntry: React.FC = () => {
               rules={[{ required: true }]}
               request={async () => {
                 const list = await listSeasons();
-                setSeasons(list.map((s) => ({ label: s.name, value: s.season_id })));
-                return list.map((s) => ({ label: s.name, value: s.season_id }));
+                setSeasons(list.map((s) => ({ label: s.name, value: s.id })));
+                return list.map((s) => ({ label: s.name, value: s.id }));
               }}
             />
             <ProFormSelect

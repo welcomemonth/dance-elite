@@ -131,7 +131,8 @@ export interface EventGroup {
 }
 
 export interface EventBrief {
-  event_id: number;
+  /** 赛事 ID（API 文档 10.1，字段名与小程序端一致） */
+  id: number;
   name: string;
   season_id: number;
   level: EventLevel;
@@ -139,9 +140,14 @@ export interface EventBrief {
   venue: string;
   event_date: string;
   fee: number;
-  cover_url: string;
+  /** 封面图相对路径（未上传为 null） */
+  cover_path: string | null;
   status: EventStatus;
-  timeline: EventTimeline;
+  reg_start_at: string;
+  reg_end_at: string;
+  lottery_at: string;
+  material_check_at: string;
+  start_at: string;
   groups: EventGroup[];
   refund_policy: string;
   work_duration_limit: string;
@@ -188,20 +194,21 @@ export interface AudioReviewTokenResult {
 
 // ---------- 订单 ----------
 
-export type OrderStatus = 'paid' | 'canceled' | 'refunding' | 'refunded';
+export type OrderStatus = 'pending_payment' | 'paid' | 'canceled' | 'refunding' | 'refunded';
 
 export type OrderSource = 'miniapp' | 'manual';
 
 export interface OrderBrief {
   order_no: string;
-  transaction_id: string;
+  transaction_id: string | null;
   event_id: number;
   event_name: string;
   level: AgeLevel;
   dance_type: DanceType;
+  /** 选手编号（系统内唯一标识；系统不存证件号明文） */
+  player_no: string;
   player_name: string;
-  /** 脱敏证件号（系统仅存哈希，物理上无明文） */
-  id_card_masked: string | null;
+  id_type: 'id_card' | 'passport' | 'hk_macau' | 'other';
   amount: number;
   status: OrderStatus;
   source: OrderSource;
@@ -212,37 +219,53 @@ export interface OrderBrief {
 export type PaymentFlowType = 'pay' | 'refund';
 
 export interface PaymentFlow {
+  payment_id: number;
   type: PaymentFlowType;
-  prepay_id: string;
-  transaction_id: string;
-  refund_id: string;
+  prepay_id: string | null;
+  transaction_id: string | null;
+  refund_id: string | null;
   amount: number;
   status: string;
-  notified_at: string;
+  notified_at: string | null;
+  created_at: string;
 }
 
+/** 订单详情中的报名信息（API 文档 11.2） */
 export interface RegistrationDetail {
   registration_id: number;
-  event_name: string;
+  event_id: number;
+  group_id: number;
   level: AgeLevel;
   dance_type: DanceType;
+  player_no: string;
   player_name: string;
-  id_card_masked: string | null;
   id_type: string;
-  institution: string;
-  contact_phone: string;
-  material_deadline: string;
+  institution: string | null;
+  contact_phone: string | null;
+  status: string;
+  source: string;
 }
 
+/** 订单详情中的资料区（8 项资料快照 + 截止只读标记） */
 export interface MaterialsInfo {
   photo_url: string | null;
   audio_url: string | null;
-  audio_name: string | null;
+  audio_filename: string | null;
   program_name: string | null;
+  teacher_name: string | null;
   contact_phone: string | null;
+  express_address: string | null;
+  work_intro: string | null;
+  special_req: string | null;
   updated_at: string | null;
   /** 超过「核对舞蹈音频」时间后为 true，资料整体只读 */
   readonly: boolean;
+}
+
+export interface MaterialStatus {
+  total: number;
+  completed: number;
+  missing: string[];
 }
 
 export interface OperationLogEntry {
@@ -253,30 +276,47 @@ export interface OperationLogEntry {
   created_at: string;
 }
 
-export interface OrderRemark {
-  id: number;
-  content: string;
-  operator: string;
-  created_at: string;
-}
-
-export interface RefundTicketBrief {
+/** 订单关联的退款工单（可多条） */
+export interface OrderRefundTicket {
   ticket_id: number;
   ticket_no: string;
   status: RefundTicketStatus;
+  reason: string;
+  applicant: string | null;
+  reject_reason: string | null;
+  created_by_name: string | null;
+  handler_name: string | null;
+  handled_at: string | null;
+  created_at: string;
+}
+
+/** 订单关联的客服工单 */
+export interface OrderCsTicket {
+  ticket_id: number;
+  type: CsTicketType;
+  status: CsTicketStatus;
+  user_name: string | null;
+  phone: string;
+  content: string;
+  related_registration_id: number | null;
+  remark: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface OrderDetail {
   order: OrderBrief & {
-    cancel_reason: string | null;
     registration_id: number;
+    canceled_at: string | null;
+    cancel_reason: string | null;
   };
   registration: RegistrationDetail;
   payments: PaymentFlow[];
-  refund_ticket: RefundTicketBrief | null;
+  refund_tickets: OrderRefundTicket[];
+  cs_tickets: OrderCsTicket[];
   materials: MaterialsInfo;
+  material_status: MaterialStatus;
   operation_logs: OperationLogEntry[];
-  remarks: OrderRemark[];
 }
 
 // ---------- 退款工单 ----------
@@ -286,6 +326,7 @@ export type RefundTicketStatus =
   | 'processing'
   | 'approved'
   | 'rejected'
+  | 'refunded'
   | 'refund_failed';
 
 export interface RefundTicketBrief {
@@ -353,17 +394,19 @@ export interface WaitlistEntry {
   position_no: number;
   event_id: number;
   event_name: string;
+  group_id: number;
   level: AgeLevel;
   dance_type: DanceType;
-  player_name: string;
+  /** 选手姓名（API 文档 12.1：字段名为 name） */
+  name: string;
   id_card_masked: string | null;
-  institution: string;
+  institution: string | null;
   /** 联系电话（明文，仅本接口与导出） */
   phone: string;
   status: WaitlistStatus;
   created_at: string;
   notified_at: string | null;
-  note: string | null;
+  handled_at: string | null;
 }
 
 export interface WaitlistList extends PagedList<WaitlistEntry> {
@@ -391,7 +434,8 @@ export interface MissingMaterialEntry {
   material_deadline: string;
   material_updated_at: string | null;
   contacted: boolean;
-  contact_note: string | null;
+  /** 最近一次催收时间（API 文档 12.3） */
+  contacted_at: string | null;
 }
 
 // ---------- 用户与选手 ----------
@@ -404,7 +448,7 @@ export interface WxUser {
   registration_count: number;
   status: 'active' | 'blocked';
   created_at: string;
-  last_login_at: string;
+  last_login_at: string | null;
 }
 
 export interface PlayerBrief {
@@ -413,8 +457,8 @@ export interface PlayerBrief {
   name: string;
   id_type: 'id_card' | 'passport' | 'hk_macau' | 'other';
   id_card_masked: string | null;
-  birth_date: string;
-  gender: 'male' | 'female';
+  birth_date: string | null;
+  gender: 'male' | 'female' | null;
   institution: string;
   /** 重复档案合并指向 */
   merged_into: number | null;
@@ -459,7 +503,9 @@ export interface CsTicket {
   phone: string;
   content: string;
   status: CsTicketStatus;
-  created_by: string;
+  /** 登记人管理员 ID；展示用 created_by_name */
+  created_by: number | null;
+  created_by_name: string | null;
   related_order_no: string | null;
   remark: string | null;
   created_at: string;
@@ -511,17 +557,20 @@ export interface LogEntry {
 
 // ---------- 榜单中心（*待定*：API 文档尚未覆盖，前后端以本契约为准） ----------
 
-export type SeasonStatus = 'upcoming' | 'ongoing' | 'archived';
+export type SeasonStatus = 'upcoming' | 'active' | 'archived';
 
+/** 赛季对象（API 文档 10.7：完整赛季对象，含 group_rules/archived_at） */
 export interface Season {
-  season_id: number;
+  id: number;
   name: string;
-  start_date: string;
-  end_date: string;
+  start_date: string | null;
+  end_date: string | null;
   status: SeasonStatus;
-  /** 适用榜单（默认 3 组别 × 2 舞种 = 6） */
-  boards: { level: AgeLevel; dance_type: DanceType }[];
+  /** 组别年龄规则 JSON 文本（创建时从系统设置复制、只读） */
+  group_rules: string;
+  archived_at: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export type Award = 'champion' | 'runner_up' | 'third_place' | 'elite_dancer' | 'special_gold' | 'gold' | 'silver';
