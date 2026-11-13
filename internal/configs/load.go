@@ -54,6 +54,8 @@ func read() (*Config, error) {
 		UploadDir: envOr("UPLOAD_DIR", "uploads"),
 		PayMock:   payMock,
 
+		PublicBaseURL: os.Getenv("PUBLIC_BASE_URL"),
+
 		JWTSecret:        os.Getenv("JWT_SECRET"),
 		JWTExpireSeconds: jwtExpire,
 		IDCardHMACKey:    os.Getenv("ID_CARD_HMAC_KEY"),

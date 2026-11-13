@@ -43,6 +43,7 @@ type Deps struct {
 	AdminLogs       *service.AdminLogQueryService
 	UserContents    *service.AdminUserQueryService
 	Contents        *service.ContentService
+	AudioReview     *service.AudioReviewService
 	Tokens          *token.Signer
 
 	// UploadDir 是上传文件物理根目录（配置 UPLOAD_DIR）。非空时把
@@ -161,6 +162,14 @@ func New(deps Deps) *gin.Engine {
 		if deps.UserContents != nil && deps.Contents != nil {
 			registerAdminUserContentRoutes(admin, deps.UserContents, deps.Contents)
 		}
+		if deps.AudioReview != nil {
+			registerAdminAudioReviewRoutes(admin, deps.AudioReview)
+		}
+	}
+
+	// 音频审核 H5（免登录，URL token 鉴权，API 文档 7.1）。
+	if deps.AudioReview != nil {
+		registerAudioReviewH5Routes(engine.Group("/h5"), deps.AudioReview)
 	}
 
 	// 健康检查

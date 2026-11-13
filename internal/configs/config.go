@@ -13,6 +13,9 @@ type Config struct {
 	DBPath    string
 	UploadDir string
 	PayMock   bool
+	// PublicBaseURL 是对外可访问的服务地址（如 https://api.example.com），
+	// 用于拼接音频审核等外链；为空时接口返回相对路径。
+	PublicBaseURL string
 
 	// 鉴权与安全
 	JWTSecret        string
