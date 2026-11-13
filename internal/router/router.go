@@ -37,6 +37,7 @@ type Deps struct {
 	AdminOrders     *service.AdminOrderQueryService
 	AdminRegs       *service.AdminRegistrationQueryService
 	MaterialMissing *service.MaterialCollectionService
+	Dashboard       *service.DashboardService
 	Tokens          *token.Signer
 
 	// UploadDir 是上传文件物理根目录（配置 UPLOAD_DIR）。非空时把
@@ -145,6 +146,9 @@ func New(deps Deps) *gin.Engine {
 		// 后台资料催收（T17）：名单与标记已联系 cs/admin 均可。
 		if deps.MaterialMissing != nil {
 			registerAdminMaterialRoutes(admin, deps.MaterialMissing)
+		}
+		if deps.Dashboard != nil {
+			registerAdminDashboardRoutes(admin, deps.Dashboard)
 		}
 	}
 
