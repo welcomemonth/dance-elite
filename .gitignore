@@ -50,3 +50,6 @@ uploads
 !dance-admin/.claude/
 dance-admin/e2e-out/
 dance-admin/docs/
+
+# smoke test token (contains live JWT, never commit)
+scripts/smoke/.token
