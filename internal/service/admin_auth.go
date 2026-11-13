@@ -117,10 +117,11 @@ func (s *AdminAuthService) Login(ctx context.Context, req model.AdminLoginReques
 		Token:     signed,
 		ExpiresIn: int(s.tokens.TTL().Seconds()),
 		Admin: model.AdminInfo{
-			ID:       admin.ID,
-			Username: admin.Username,
-			Role:     admin.Role,
-			Name:     admin.Name,
+			ID:          admin.ID,
+			Username:    admin.Username,
+			Role:        admin.Role,
+			Name:        admin.Name,
+			Permissions: model.PermissionsForRole(admin.Role),
 		},
 	}, nil
 }

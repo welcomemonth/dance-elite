@@ -1,7 +1,11 @@
 package router
 
 import (
+	"strconv"
+	"time"
+
 	"github.com/gin-gonic/gin"
+	"github.com/meetmonth/dance-elite/internal/middleware"
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
 	"github.com/meetmonth/dance-elite/internal/service"
@@ -19,6 +23,20 @@ func registerAdminOrderRoutes(group *gin.RouterGroup, svc *service.AdminOrderQue
 	orders := group.Group("/orders")
 	orders.GET("", h.list)
 	orders.GET("/:order_no", h.detail)
+	// 明文查看手机号：需独立权限（默认拒绝 → 40301），按账号限流 10 次/分钟，
+	// 每次调用落 reveal_phone 日志（API 文档 11.3）。
+	orders.POST("/:order_no/reveal-phone",
+		middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin),
+		middleware.RateLimitKeyed(10, time.Minute, adminRateKey),
+		h.revealPhone)
+}
+
+// adminRateKey 返回按管理员账号限流的键。
+func adminRateKey(c *gin.Context) string {
+	if id, ok := middleware.GetAdminID(c); ok {
+		return "admin:" + strconv.FormatInt(id, 10)
+	}
+	return ""
 }
 
 // list 订单分页列表（赛事/组别/舞种/状态/来源/支付时间/关键字筛选）。
@@ -51,6 +69,21 @@ func (h *adminOrderHandler) list(c *gin.Context) {
 // detail 订单详情（订单 + 支付流水 + 退款工单 + 客服工单 + 资料 + 操作记录）。
 func (h *adminOrderHandler) detail(c *gin.Context) {
 	resp, err := h.svc.Detail(c.Request.Context(), c.Param("order_no"))
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	httpx.OK(c, resp)
+}
+
+// revealPhone 明文查看订单联系电话（API 文档 11.3），调用留痕。
+func (h *adminOrderHandler) revealPhone(c *gin.Context) {
+	actorID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	resp, err := h.svc.RevealPhone(c.Request.Context(), actorID, c.Param("order_no"))
 	if err != nil {
 		httpx.AbortError(c, err)
 		return

@@ -105,3 +105,8 @@ type AdminOrderDetailResponse struct {
 	MaterialStatus MaterialStatus               `json:"material_status"`
 	OperationLogs  []AdminOperationLogItem      `json:"operation_logs"`
 }
+
+// AdminRevealPhoneResponse 是明文查看联系电话的响应（API 文档 11.3）。
+type AdminRevealPhoneResponse struct {
+	ContactPhone string `json:"contact_phone"`
+}

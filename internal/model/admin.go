@@ -35,6 +35,23 @@ type AdminInfo struct {
 	Username string  `json:"username"`
 	Role     string  `json:"role"`
 	Name     *string `json:"name"`
+	// Permissions 是敏感操作权限位；前端据此显隐「明文查看」等入口
+	// （API 文档 11.3：手机号明文查看需独立权限，默认拒绝）。
+	Permissions []string `json:"permissions"`
+}
+
+// PermissionRevealPhone 是手机号明文查看的权限位（API 文档 11.3）。
+const PermissionRevealPhone = "reveal_phone"
+
+// PermissionsForRole 返回角色的敏感权限位：管理员与超管可查看手机号明文，
+// 客服只读且不授予（后台设计文档 0.2 权限矩阵）。
+func PermissionsForRole(role string) []string {
+	switch role {
+	case RoleSuperAdmin, RoleAdmin:
+		return []string{PermissionRevealPhone}
+	default:
+		return []string{}
+	}
 }
 
 // AdminLoginRequest 是 POST /api/v1/admin/auth/login 的请求体（API 文档 8.1）。

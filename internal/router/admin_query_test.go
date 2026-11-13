@@ -320,3 +320,45 @@ func flattenCells(rows [][]string) []string {
 	}
 	return out
 }
+
+// TestAdminOrderRevealPhoneHTTP 覆盖明文查看手机号的角色限制、响应与留痕（API 文档 11.3）。
+func TestAdminOrderRevealPhoneHTTP(t *testing.T) {
+	engine, signer, db := newRefundTestEngine(t)
+	adminHeaders := map[string]string{"Authorization": "Bearer " + adminToken(t, engine)}
+	csHeaders := map[string]string{"Authorization": "Bearer " + csAdminToken(t, signer)}
+	seasonID := setupSeason(t, engine, adminHeaders)
+	eventID, groupID := mustCreateWaitlistEvent(t, engine, db, adminHeaders, seasonID, "明文查看接口", 10)
+	userID := mustInsertRouterUserWithPhone(t, db, "o-reveal-phone", "13800000009", "明文查看用户")
+	mustHTTPOrder(t, db, eventID, groupID, userID, "RvlPh001", "ORD-RVL-1", "paid", "miniapp")
+	if _, err := db.SQL().ExecContext(t.Context(),
+		`UPDATE registrations SET contact_phone = '13812345678'
+		 WHERE id = (SELECT registration_id FROM orders WHERE order_no = 'ORD-RVL-1')`); err != nil {
+		t.Fatalf("set contact phone: %v", err)
+	}
+
+	path := "/api/v1/admin/orders/ORD-RVL-1/reveal-phone"
+	assertCode(t, postJSON(t, engine, http.MethodPost, path, "", nil), 40101)
+	assertCode(t, postJSON(t, engine, http.MethodPost, path, "", csHeaders), 40301)
+
+	w := postJSON(t, engine, http.MethodPost, path, "", adminHeaders)
+	if w.Code != http.StatusOK {
+		t.Fatalf("reveal status = %d, body = %s", w.Code, w.Body)
+	}
+	data := decodeData(t, w.Body.Bytes())
+	assertObjectKeys(t, "reveal phone", data, "contact_phone")
+	if data["contact_phone"] != "13812345678" {
+		t.Fatalf("contact_phone = %v", data["contact_phone"])
+	}
+
+	var logs int
+	if err := db.SQL().QueryRowContext(t.Context(),
+		`SELECT COUNT(*) FROM admin_logs WHERE action = 'reveal_phone' AND target_type = 'order'`).Scan(&logs); err != nil {
+		t.Fatalf("count reveal logs: %v", err)
+	}
+	if logs != 1 {
+		t.Fatalf("reveal_phone logs = %d, want 1", logs)
+	}
+
+	assertCode(t, postJSON(t, engine, http.MethodPost,
+		"/api/v1/admin/orders/ORD-NOPE/reveal-phone", "", adminHeaders), 40401)
+}
