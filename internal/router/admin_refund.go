@@ -12,18 +12,74 @@ import (
 
 // adminRefundHandler 承载后台退款工单接口（开发计划 T15，API 文档 11.4）。
 type adminRefundHandler struct {
-	svc *service.RefundService
+	svc     *service.RefundService
+	queries *service.AdminRefundQueryService
 }
 
 // registerAdminRefundRoutes 注册 /api/v1/admin/refund-tickets 下的接口。
-// 登记：客服/管理员均可（T15 计划）；同意/驳回：仅 admin / super_admin。
-func registerAdminRefundRoutes(group *gin.RouterGroup, svc *service.RefundService) {
-	h := &adminRefundHandler{svc: svc}
+// 登记：客服/管理员均可（T15 计划）；同意/驳回：仅 admin / super_admin；
+// 列表/详情：cs/admin 只读（cs 仅自己登记的，API 文档 11.4.2/11.4.2b）。
+func registerAdminRefundRoutes(group *gin.RouterGroup, svc *service.RefundService, queries *service.AdminRefundQueryService) {
+	h := &adminRefundHandler{svc: svc, queries: queries}
 	tickets := group.Group("/refund-tickets")
+	if queries != nil {
+		tickets.GET("", h.list)
+		tickets.GET("/:ticket_id", h.detail)
+	}
 	tickets.POST("", h.create)
 	write := tickets.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
 	write.POST("/:ticket_id/approve", h.approve)
 	write.POST("/:ticket_id/reject", h.reject)
+}
+
+// list 退款工单列表（API 文档 11.4.2）。
+func (h *adminRefundHandler) list(c *gin.Context) {
+	adminID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	role, _ := middleware.GetAdminRole(c)
+	eventID, ok := optionalInt64Query(c, "event_id")
+	if !ok {
+		httpx.AbortError(c, httpx.ErrBadRequest("event_id 不合法"))
+		return
+	}
+	resp, err := h.queries.List(c.Request.Context(), role, adminID, model.AdminRefundTicketListQuery{
+		Status:      c.Query("status"),
+		EventID:     eventID,
+		CreatedFrom: c.Query("created_from"),
+		CreatedTo:   c.Query("created_to"),
+		Keyword:     c.Query("keyword"),
+		Page:        queryInt(c, "page", 1),
+		PageSize:    queryIntMax(c, "page_size", 20, 100),
+	})
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	httpx.OK(c, resp)
+}
+
+// detail 退款工单详情（API 文档 11.4.2b）。
+func (h *adminRefundHandler) detail(c *gin.Context) {
+	adminID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	role, _ := middleware.GetAdminRole(c)
+	ticketID, err := strconv.ParseInt(c.Param("ticket_id"), 10, 64)
+	if err != nil || ticketID <= 0 {
+		httpx.AbortError(c, httpx.ErrBadRequest("工单 ID 不合法"))
+		return
+	}
+	resp, err := h.queries.Detail(c.Request.Context(), role, adminID, ticketID)
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	httpx.OK(c, resp)
 }
 
 // create 后台代录退款工单。

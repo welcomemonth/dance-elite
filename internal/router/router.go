@@ -30,6 +30,7 @@ type Deps struct {
 	Orders          *service.OrderService
 	Payments        *service.PaymentService
 	Refunds         *service.RefundService
+	AdminRefunds    *service.AdminRefundQueryService
 	Waitlists       *service.WaitlistService
 	CSTickets       *service.CSTicketService
 	ManualRegs      *service.ManualRegistrationService
@@ -126,7 +127,7 @@ func New(deps Deps) *gin.Engine {
 		}
 		// 后台退款工单（T15）：登记 cs/admin 均可，处理仅 admin / super_admin。
 		if deps.Refunds != nil {
-			registerAdminRefundRoutes(admin, deps.Refunds)
+			registerAdminRefundRoutes(admin, deps.Refunds, deps.AdminRefunds)
 		}
 		// 后台客服工单（T16）：登记/列表 cs/admin 均可，流转仅 admin / super_admin。
 		if deps.CSTickets != nil {
