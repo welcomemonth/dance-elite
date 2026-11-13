@@ -2,7 +2,7 @@
  * @name umi 的路由配置
  * @description 只支持 path,component,routes,redirect,wrappers,name,icon,access 的配置
  * 菜单结构对齐 docs/后台管理/优舞盟后台管理页面与功能设计.md 0.3 节。
- * name 直接写中文（未配置 i18n key 时按原文展示）；不带 name 的路由不进左侧导航。
+ * name 直接写中文，作为菜单与面包屑文案；不带 name 的路由不进左侧导航。
  */
 export default [
   {

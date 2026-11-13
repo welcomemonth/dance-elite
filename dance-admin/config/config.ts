@@ -120,7 +120,8 @@ const config: UmiConfig = defineConfig({
    */
   title: '优舞盟后台管理',
   layout: {
-    locale: true,
+    // 不使用国际化：菜单名直接使用 routes.ts 中的中文 name
+    locale: false,
     ...defaultSettings,
   },
   /**
@@ -131,17 +132,6 @@ const config: UmiConfig = defineConfig({
   moment2dayjs: {
     preset: 'antd',
     plugins: ['duration', 'relativeTime'],
-  },
-  /**
-   * @name 国际化插件
-   * @doc https://umijs.org/docs/max/i18n
-   */
-  locale: {
-    // default zh-CN
-    default: 'zh-CN',
-    antd: true,
-    // default true, when it is true, will use `navigator.language` overwrite default
-    baseNavigator: true,
   },
   /**
    * @name antd 插件

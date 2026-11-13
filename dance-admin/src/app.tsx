@@ -1,12 +1,16 @@
 import type { Settings as LayoutSettings } from '@ant-design/pro-components';
 import type { RequestConfig, RunTimeLayoutConfig } from '@umijs/max';
 import { history, Link } from '@umijs/max';
+import { ConfigProvider } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
+import 'dayjs/locale/zh-cn';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import React from 'react';
 
 // Initialize dayjs plugins globally
 dayjs.extend(relativeTime);
+dayjs.locale('zh-cn');
 
 import { AvatarDropdown, ErrorBoundary, OfflineBanner } from '@/components';
 import { clearSession, getStoredAdmin } from '@/services/youwumeng/auth';
@@ -86,9 +90,9 @@ export const request: RequestConfig = {
 
 export function rootContainer(container: React.ReactNode) {
   return (
-    <>
+    <ConfigProvider locale={zhCN}>
       <OfflineBanner />
       <ErrorBoundary>{container}</ErrorBoundary>
-    </>
+    </ConfigProvider>
   );
 }

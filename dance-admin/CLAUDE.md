@@ -52,7 +52,7 @@ Other: `pnpm openapi` (regenerate `src/services/`), `pnpm simple` (**irreversibl
 
 ## Architecture Essentials
 
-**Config**: `config/config.ts` (defineConfig), `config/routes.ts` (declarative routes). Route `name` → `menu.xxx` i18n key; `access` field gates visibility.
+**Config**: `config/config.ts` (defineConfig), `config/routes.ts` (declarative routes). Route `name` 直接是中文菜单文案（未启用 i18n）；`access` field gates visibility.
 
 **Convention files** (`src/`): `app.tsx` (runtime config + `getInitialState`), `access.ts` (permissions), `global.tsx` (side effects), `loading.tsx`, `typings.d.ts`.
 
@@ -64,7 +64,7 @@ Other: `pnpm openapi` (regenerate `src/services/`), `pnpm simple` (**irreversibl
 
 **Request**: built-in `request` from `@umijs/max`, configured in `src/requestErrorConfig.ts`. Per-page `service.ts` for non-generated APIs.
 
-**i18n**: 8 locales in `src/locales/`. `useIntl().formatMessage({ id, defaultMessage })`.
+**i18n**: 未启用。locale 插件与 `src/locales/` 已移除，界面文案直接写中文；antd 组件中文语言包由 `src/app.tsx` 的 `ConfigProvider locale={zhCN}` + dayjs `zh-cn` 提供。
 
 **Mock**: `mock/` (global) + `src/pages/**/_mock.ts` (co-located). Express-style handlers.
 

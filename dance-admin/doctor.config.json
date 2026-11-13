@@ -21,7 +21,6 @@
           "src/global.tsx",
           "src/global.style.ts",
           "src/loading.tsx",
-          "src/locales/**",
           "src/pages/**",
           "tests/__mocks__/**"
         ],
