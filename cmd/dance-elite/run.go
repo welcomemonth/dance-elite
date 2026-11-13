@@ -72,11 +72,18 @@ func run(ctx context.Context, cfg *config.Config) error {
 	orderService := service.NewOrderService(stores, payGateway)
 	paymentService := service.NewPaymentService(stores, payGateway, payGateway)
 	refundService := service.NewRefundService(stores, payGateway, payGateway)
+	adminRefundQueryService := service.NewAdminRefundQueryService(stores)
 	csTicketService := service.NewCSTicketService(stores)
 	manualRegService := service.NewManualRegistrationService(stores, playerService)
 	adminOrderQueryService := service.NewAdminOrderQueryService(stores)
 	adminRegistrationQueryService := service.NewAdminRegistrationQueryService(stores)
 	materialCollectionService := service.NewMaterialCollectionService(stores)
+	dashboardService := service.NewDashboardService(stores)
+	accountService := service.NewAdminAccountService(stores, tokens)
+	adminLogQueryService := service.NewAdminLogQueryService(stores)
+	userContentQueryService := service.NewAdminUserQueryService(stores)
+	contentService := service.NewContentService(stores)
+	audioReviewService := service.NewAudioReviewService(stores, cfg.PublicBaseURL)
 
 	engine := router.New(router.Deps{
 		Stores:          stores,
@@ -90,6 +97,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		Orders:          orderService,
 		Payments:        paymentService,
 		Refunds:         refundService,
+		AdminRefunds:    adminRefundQueryService,
 		Waitlists:       waitlistService,
 		CSTickets:       csTicketService,
 		ManualRegs:      manualRegService,
@@ -97,6 +105,12 @@ func run(ctx context.Context, cfg *config.Config) error {
 		AdminOrders:     adminOrderQueryService,
 		AdminRegs:       adminRegistrationQueryService,
 		MaterialMissing: materialCollectionService,
+		Dashboard:       dashboardService,
+		Accounts:        accountService,
+		AdminLogs:       adminLogQueryService,
+		UserContents:    userContentQueryService,
+		Contents:        contentService,
+		AudioReview:     audioReviewService,
 		Tokens:          tokens,
 		UploadDir:       cfg.UploadDir,
 	})
