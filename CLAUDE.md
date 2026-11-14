@@ -20,7 +20,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 | HTTP | Gin | v1.12 |
 | ORM | GORM | v2（driver: sqlite） |
 | Database | SQLite | 单机部署，数据量小 |
-| Frontend（后台/H5） | React + TypeScript + Vite | 19.x / 5.x |
+| Frontend（后台/H5） | React + TypeScript + Umi Max | 19.x / 5.x |
 | Config | godotenv + 环境变量 | — |
 | Auth | golang-jwt/jwt v5 | — |
 | Excel | excelize/v2 | — |
@@ -99,6 +99,7 @@ bash scripts/build.sh && bash scripts/push-aliyun.sh
 - 音频审核页：每赛事一个免登录 H5，按 `audio_review_token` 访问
 - 舞种仅古典舞（`classical`）和民族民间舞（`folk`）；年龄组 U11/U13/U15 按出生年自动判定
 - 支付：提交报名即创建订单并拉起微信支付；关闭/返回则订单取消消失但留档；小程序端无自助退款，需客服登记 + 管理员后台人工退款
+- 赛事状态按时间线自动流转（进程内定时任务，默认每 60s）：`reg_end_at` → reg_closed、`start_at` → ongoing、比赛日期（event_date）与 start_at 中较晚一天的次日 00:00 → finished；只前进不回退，未发布赛事不自动发布；待支付订单 15 分钟超时（先查单补结账，确认未支付才取消，`cancel_reason=system`）
 - 一人同一赛事限报 1 个组别、可报多个舞种；不支持批量代报
 
 ## Backend Rules (Go)

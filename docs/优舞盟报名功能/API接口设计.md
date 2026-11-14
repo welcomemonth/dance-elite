@@ -209,7 +209,7 @@ curl -X PUT https://api.example.com/api/v1/auth/phone \
 
 | 参数名 | 类型 | 必填 | 说明 | 示例值 |
 |---|---|---|---|---|
-| status | string | 否 | 状态筛选：`registering`/`upcoming`/`reg_closed`/`finished`，缺省全部 | `registering` |
+| status | string | 否 | 状态筛选：`registering`/`upcoming`/`reg_closed`/`finished`，缺省全部（展示态由时间线实时推导，见 10.4c） | `registering` |
 | page / page_size | int | 否 | 分页 | `1` / `20` |
 
 **请求示例**
@@ -230,7 +230,7 @@ curl "https://api.example.com/api/v1/events?status=registering&page=1&page_size=
 | list[].event_date | string | 比赛日期（YYYY-MM-DD） |
 | list[].cover_url | string | 封面图 URL |
 | list[].fee | int | 报名费（分），总决赛为 0 |
-| list[].status | string | registering / upcoming / reg_closed / finished |
+| list[].status | string | registering / upcoming / reg_closed / finished（展示态：存储态 `ongoing` 对外映射为 `reg_closed`，见 10.4c） |
 | list[].reg_end_at | string | 截止报名时间 |
 | list[].group_summary | array | 各组别×舞种报名热度：`[{"level":"U11","dance_type":"classical","registered":37,"quota":40}]` |
 | list[].registered_by_me | bool | 当前用户是否有有效报名（未登录恒 false） |
@@ -264,7 +264,7 @@ curl "https://api.example.com/api/v1/events?status=registering&page=1&page_size=
 
 **错误码**：无业务错误码。
 
-**注意事项**：只返回后台已发布（`status != draft/unpublished/offline`）的赛事；名额热度为近似值（读多写少场景不强制实时，缓存 30 秒）。
+**注意事项**：只返回后台已发布（`status != draft/unpublished/offline`）的赛事；名额热度为近似值（读多写少场景不强制实时，缓存 30 秒）。`status` 为展示态，由时间线实时推导（未开始/报名中/已截止/已结束），不直接等于库中 `events.status`；比赛进行中显示为「报名已截止」。
 
 ---
 
@@ -337,7 +337,7 @@ curl "https://api.example.com/api/v1/events/12"
 
 **错误码**：40401（赛事不存在或未发布）。
 
-**注意事项**：已下架（offline）赛事对已持有有效报名用户的"我的报名"仍可见，但详情页访问返回 40401。
+**注意事项**：已下架（offline）赛事对已持有有效报名用户的"我的报名"仍可见，但详情页访问返回 40401。`status` 口径同 2.1（展示态、时间线推导，`ongoing` 映射为 `reg_closed`）。
 
 ---
 
@@ -350,7 +350,7 @@ curl "https://api.example.com/api/v1/events/12"
 | 项 | 内容 |
 |---|---|
 | 接口名称 | 提交报名 |
-| 功能说明 | 校验身份证 → 判定组别 → 校验重复/名额 → 事务内创建报名单 + 订单 + 微信支付预下单，返回收银台参数。点击支付即调起微信支付；用户关闭/取消/支付失败由回调落库为已取消 |
+| 功能说明 | 校验身份证 → 判定组别 → 校验重复/名额 → 事务内创建报名单 + 订单（内部待支付态，15 分钟有效），返回订单信息。随后调 3.1b 换取支付参数并拉起微信支付；用户关闭/取消/支付失败时小程序调 3.5 立即取消，未调用的由服务端 15 分钟超时回收 |
 | 请求方法 + URL | `POST /api/v1/events/{event_id}/registrations` |
 | 鉴权 | 是（小程序用户） |
 
@@ -432,6 +432,7 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 - **幂等**：`idempotency_key` + 服务端唯一索引 `UNIQUE(user_id, idempotency_key)`，重复提交返回首次创建的订单；网络重试安全。判重永久生效（强于早期"5 分钟内"的表述）；若订单已结束（已支付/已取消），同键再提交返回 40901，客户端应换新幂等键重新发起报名。
 - **支付参数拆分（T9 落地口径）**：本接口只创建报名单 + 订单，响应中 `pay_params` 由支付预下单接口 `POST /api/v1/orders/{order_id}/prepay`（T10）换取，小程序拿到后再拉起微信支付。组别 `level` 由服务端按身份证出生年份判定回填，请求体不携带。
 - **并发抢名额**：名额校验与写单在同一事务内完成（`taken < quota` 原子条件 UPDATE），SQLite 单写入者天然串行，仅一人成功。
+- **订单有效期（T34）**：订单创建时写入 `expire_at = 创建时间 + ORDER_EXPIRE_MINUTES`（默认 15 分钟）。有效期内需完成预下单与支付；未完成的订单由服务端定时任务回收（先向微信查单：已支付则补结账，确认未支付才取消），取消原因记 `system`，名额即时释放。用户主动关闭收银台时小程序应**立即调用 3.5**，不要等超时。
 - **安全**：身份证明文仅存在于请求体内存，立即 HMAC-SHA256 哈希后丢弃；日志、错误信息、数据库中均无明文。
 - **限流**：单用户 1 次/5 秒。
 
@@ -444,7 +445,7 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 | 项 | 内容 |
 |---|---|
 | 接口名称 | 支付预下单 |
-| 功能说明 | 对已创建的待支付订单调用微信支付 V3 预下单（JSAPI），返回小程序拉起微信支付所需的 pay_params。重复调用复用已持久化的 `prepay_id`，不向微信重复下单 |
+| 功能说明 | 对已创建的待支付订单调用微信支付 V3 预下单（JSAPI），返回小程序拉起微信支付所需的 pay_params。重复调用复用已持久化的 `prepay_id`，不向微信重复下单。订单有效期 15 分钟，微信下单的 `time_expire` 取订单 `expire_at` |
 | 请求方法 + URL | `POST /api/v1/orders/{order_id}/prepay` |
 | 鉴权 | 是（小程序用户，仅订单本人可调） |
 
@@ -486,13 +487,14 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 | 40001 | 参数错（order_id 非数字） | — |
 | 40101 | 未登录 | 引导登录 |
 | 40401 | 订单不存在或不属于当前用户 | 刷新报名列表 |
-| 40901 | 订单状态不允许（非待支付） | 刷新报名状态 |
+| 40901 | 订单状态不允许（非待支付，或已超过 15 分钟有效期已被取消） | 刷新报名状态，必要时重新提交报名 |
 | 42901 | 触发限流（10 次/分钟） | 稍后重试 |
 | 50001 | 微信支付网关失败 | 稍后重试 |
 
 **注意事项**
 
 - **幂等复用**：`prepay_id` 持久化在订单上（条件写入：`status='pending_payment' AND prepay_id IS NULL`），同一订单重复预下单直接复用，并发请求按订单串行化，网关只调用一次。
+- **有效期（T34）**：预下单时以订单 `expire_at` 作为微信 `time_expire`（RFC 3339，+08:00）；若订单已过期，服务端先向微信查单，确认未支付才走系统取消并返回 40901，不向微信下单。到期未支付的订单由定时任务先查单再决定补结账或取消，避免「钱已扣但本地取消」。
 - **mock 通道**：`PAY_MOCK=true`（默认开启）时由 MockGateway 返回 `mock-prepay-*` 与 `MOCK-SIGN`，小程序可完整走通支付流程；接入真实微信支付后关闭。
 - **限流**：单用户 10 次/分钟。
 - **安全**：签名私钥只经环境变量注入，不落库、不进日志；日志中不打印支付密钥与完整回调报文之外的内容。
@@ -554,6 +556,7 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 **注意事项**
 
 - 仅在订单为 `pending_payment` 时向微信发起查单；已结束订单直接返回库内状态，不调网关。
+- 已过 `expire_at` 但尚未被定时任务回收的订单，本接口仍按待支付返回；定时任务下一轮（≤60 秒）会先查单再补结账或取消。前端无需据此做特殊处理。
 - 查单命中 SUCCESS 时执行与回调一致的幂等结账事务（写流水 → 订单 paid → 报名 active），重复查询安全。
 - 查单命中 CLOSED / REVOKED / PAYERROR 时执行 T12 取消（订单 canceled、名额释放、关闭流水留档）；NOTPAY 保持待支付（用户仍可能完成支付）。
 - mock 通道下查单恒返回 NOTPAY，本地联调支付成功请直接 POST 3.2 的明文回调报文。
@@ -773,7 +776,7 @@ curl "https://api.example.com/api/v1/registrations/5001" -H "Authorization: Bear
 | 项 | 内容 |
 |---|---|
 | 接口名称 | 取消订单 |
-| 功能说明 | 用户关闭收银台/取消支付/支付失败后取消待支付订单：立即释放名额、订单留档（仅后台对账可见） |
+| 功能说明 | 用户关闭收银台/取消支付/支付失败后取消待支付订单：立即释放名额、订单留档（仅后台对账可见）。小程序必须在 `wx.requestPayment` 失败（取消/关闭/返回）时立即调用本接口；服务端 15 分钟超时回收仅兜底客户端未调用的情况 |
 | 请求方法 + URL | `POST /api/v1/orders/{order_id}/cancel` |
 | 鉴权 | 是（仅本人订单） |
 
@@ -838,6 +841,7 @@ curl -X POST "https://api.example.com/api/v1/orders/9001/cancel" \
 - **事务**：`orders → canceled`（写 `cancel_reason` / `canceled_at`）→ `registrations → canceled` → `event_groups.taken - 1`（名额即时释放）→ 写 `payments(type=pay, status=closed)` 留档；任一步失败整事务回滚。
 - **幂等**：已取消订单重复调用返回同一留档状态，不重复释放名额、不重复写流水。
 - **重新报名**：取消后可直接走 3.1 校验链重新下单，无任何超时/等待限制；取消单不在小程序「我的报名」展示。
+- **超时兜底（T34）**：客户端未调用本接口（杀进程、断网等）时，订单在 `expire_at`（默认创建后 15 分钟）由服务端定时回收：先向微信查单，确认未支付后以 `cancel_reason=system` 执行与本节完全相同的事务（释放名额、留档）。因此「关闭收银台立即取消」是体验与名额回收的最优路径，超时回收只是兜底。
 - **并发**：与支付成功回调并发时以先到者为准。本地已取消后收到支付成功回调会拒绝结账并告警，按 T15 人工退款处理（防"钱到账但名额已释放"）。
 - 已支付订单不可自助取消；退款统一由客服登记、后台人工处理（T15）。
 
@@ -1909,7 +1913,27 @@ curl -X POST https://api.example.com/api/v1/admin/events/12/publish \
 
 **失败响应**：40401；41012（非 registering 状态，如重复关闭）。
 
-**注意事项**：记操作日志（前后状态）；关闭后小程序端该赛事不可再报名。
+**注意事项**：记操作日志（前后状态）；关闭后小程序端该赛事不可再报名（存储状态优先级高于时间线，不会被推导回报名中）。关闭报名也可由系统在 `reg_end_at` 自动完成（见 10.4c）。
+
+---
+
+### 10.4c 状态自动流转（系统任务，无接口）
+
+赛事状态由服务端定时任务（默认每 60 秒一轮，启动时先执行一次）按时间线自动推进，**只前进不回退**：
+
+| 流转 | 触发条件 |
+|---|---|
+| registering → reg_closed | 当前时间 ≥ `reg_end_at` |
+| reg_closed → ongoing | 当前时间 ≥ `start_at` |
+| ongoing → finished | 当前时间 ≥ 比赛日期（`event_date`）与开始比赛时间（`start_at`）中较晚一天的次日 00:00（+08:00） |
+
+规则：
+
+- 仅对 `registering` / `reg_closed` / `ongoing` 推进；`draft` / `unpublished` / `offline` 不参与自动流转，**未发布赛事不会自动发布**。
+- 自动流转写 `admin_logs`，`admin_id` 为空表示系统动作（action=`admin.event.auto_transition`）。
+- 后台手动操作仍然有效：手动「关闭报名」可提前把赛事置为 `reg_closed`，时间线不会把它推导回 `registering`；`offline` 为终止态。
+- 后台 `10.1` 的 `status` 筛选作用于落库状态（最长滞后一个调度周期，约 60 秒）；小程序端展示态实时推导，不受影响。
+- `finished` 后赛事不可再编辑、调名额、开关组别；T33 的赛后媒体清理以该状态为触发依据。
 
 ---
 
@@ -2959,15 +2983,19 @@ curl "https://api.example.com/api/v1/admin/logs?action=refund&page=1&page_size=5
 ### A.1 订单状态机
 
 ```
-[*] --支付成功--> paid
-[*] --关闭/取消/支付失败--> canceled（立即释放名额，留档）
+[*] --创建订单--> pending_payment（内部中间态，接口不对外暴露）
+pending_payment --支付成功回调/主动查单 SUCCESS--> paid
+pending_payment --用户关闭收银台（3.5 取消）--> canceled（立即释放名额，留档）
+pending_payment --到期（默认创建后 15 分钟）--> 先向微信查单：
+    SUCCESS → paid；NOTPAY/CLOSED/REVOKED/PAYERROR → canceled（cancel_reason=system）
+   查单失败 → 保持待支付，下一轮重试
 canceled --重新发起报名--> 新订单（原单仍留档）
 paid --客服登记+管理员发起--> refunding
 refunding --驳回--> paid
 refunding --同意+微信退款成功--> refunded（报名 withdrawn，名额释放）
 ```
 
-> **不存在"待支付"状态。**
+> **小程序端不存在「待支付」页面状态**：`pending_payment` 仅为服务端中间态，小程序关闭收银台即调 3.5 取消；超时回收只兜底客户端未调用的情况。
 
 ### A.2 报名单状态机
 
@@ -2991,8 +3019,10 @@ waiting/notified --用户放弃/管理员移出--> given_up / removed
 | event.level | grade_a（甲级赛）/ super（超级赛）/ final（年度总决赛） |
 | dance_type | classical（古典舞）/ folk（民族民间舞） |
 | level（组别） | U11 / U13 / U15 |
-| order.status | paid / canceled / refunding / refunded |
-| registration.status | active / canceled / withdrawn |
+| order.status | pending_payment（内部中间态，15 分钟有效）/ paid / canceled / refunding / refunded |
+| registration.status | pending_payment（内部中间态）/ active / canceled / withdrawn |
+| event.status（落库） | draft / unpublished / registering / reg_closed / ongoing / finished / offline；registering→reg_closed→ongoing→finished 由定时任务按时间线自动推进（10.4c） |
+| event.status（小程序展示） | upcoming / registering / reg_closed / finished（时间线推导，`ongoing` 映射为 `reg_closed`） |
 | registration.source | miniapp / manual |
 | refund_ticket.status | pending / processing / approved / rejected / refund_failed |
 | waitlist.status | waiting / notified / converted / given_up / removed |
