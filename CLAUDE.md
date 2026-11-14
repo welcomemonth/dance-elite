@@ -35,6 +35,9 @@ Do not upgrade major versions or add new major dependencies without explicit app
 # Run (dev)
 go run ./cmd/dance-elite
 
+# Build frontend (pnpm build 自动同步到 internal/web/dist；本地开发用 pnpm dev 可跳过)
+cd dance-admin && pnpm build
+
 # Build & test
 go build ./...
 go test ./...
@@ -59,6 +62,7 @@ bash scripts/build.sh && bash scripts/push-aliyun.sh
 │   ├── service/            # 业务逻辑层（依赖注入 store，可注入 fake 测试）
 │   ├── store/              # 数据访问层（SQLite：db.go 连接池 / migrate.go 迁移 / tx.go 事务）
 │   ├── model/              # 数据模型与 DTO（request / response）
+│   ├── web/                # 前端构建产物 embed（dist/ 由 dance-admin 的 pnpm build 自动同步，不入库）
 │   ├── configs/            # 配置加载（默认值 + .env + 环境变量，启动自检）
 │   ├── middleware/         # Gin 中间件（RequestID / AccessLog / Recovery）
 │   ├── pkg/httpx/          # 统一响应包装 + 全局错误码 + HandleErrors
@@ -124,7 +128,7 @@ bash scripts/build.sh && bash scripts/push-aliyun.sh
 ## Frontend Rules (React / TypeScript)
 
 - TypeScript strict，不用 `any`；函数组件 + hooks。
-- 后台管理端与 H5 使用 React（工程在 `dance-admin/`，Ant Design Pro / Umi Max，非 Vite）；构建产物如何由后端托管在 T32 确定（embed 指令与被嵌入资源须同目录）。
+- 后台管理端与 H5 使用 React（工程在 `dance-admin/`，Ant Design Pro / Umi Max，非 Vite）；在 `dance-admin/` 执行 `pnpm build` 时由 build 脚本自动同步产物到 `internal/web/dist/`，再由 `internal/web` 用 `//go:embed all:dist` 嵌入。后端在根路径托管 SPA：`/api`、`/h5`、`/static` 未命中返回统一 JSON 404，页面导航（含 `/audio-review/{token}`）回退 `index.html`。`internal/web/dist/` 不入库，只保留 `.gitkeep`。
 - 请求封装统一处理响应包装（`code`/`message`/`data`）、Bearer token 与错误码提示；分页遵循统一分页结构。
 - 不在前端存放业务规则副本（年龄判定、名额校验等以服务端为准）。
 
