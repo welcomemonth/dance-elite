@@ -1,6 +1,6 @@
 // Package web 内嵌后台管理端与音频审核 H5 的前端构建产物。
 //
-// 产物由 scripts/build-frontend.sh 从 dance-admin/dist 同步到 dist/，
+// 产物由 dance-admin 的 `pnpm build` 从 dance-admin/dist 同步到本包的 dist/，
 // 目录内容不入库（仅保留 .gitkeep）。因此发布构建前必须先构建前端，
 // 否则二进制内没有页面资源，路由层会跳过托管。
 package web
