@@ -5,6 +5,11 @@ build
 data
 uploads
 *.exe
+# 前端工程依赖与本地构建产物：image 用的是 internal/web/dist，不是这里的 dist
+dance-admin/node_modules
+dance-admin/dist
+dance-admin/.umi
+dance-admin/e2e-out
 # 本地开发密钥绝不进镜像
 .env
 .env.*
