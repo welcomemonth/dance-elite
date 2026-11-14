@@ -1,7 +1,7 @@
 ﻿import type { RequestConfig } from '@umijs/max';
 import { history } from '@umijs/max';
 import { message } from 'antd';
-import { getToken } from '@/services/youwumeng/auth';
+import { getToken, clearSession } from '@/services/youwumeng/auth';
 import type { ApiResponse } from '@/services/youwumeng/typings';
 
 /**
@@ -23,6 +23,20 @@ const throwBizError = (res: unknown): void => {
   }
 };
 
+const LOGIN_PATH = '/user/login';
+
+/** 未登录/登录过期：清理本地会话并回登录页（保留 redirect 便于登录后返回） */
+const redirectToLogin = (): void => {
+  clearSession();
+  const { pathname, search, hash } = history.location;
+  // 并发请求同时 401 时只跳一次：否则后续调用会把 /user/login 本身写进
+  // redirect，登录成功后又被送回登录页。
+  if (pathname === LOGIN_PATH) return;
+  history.replace(
+    `${LOGIN_PATH}?redirect=${encodeURIComponent(pathname + search + hash)}`,
+  );
+};
+
 export const errorConfig: RequestConfig = {
   errorConfig: {
     errorThrower: throwBizError,
@@ -32,24 +46,32 @@ export const errorConfig: RequestConfig = {
       const err = error as {
         name?: string;
         info?: { code: number; message: string };
-        response?: { status?: number };
+        response?: { status?: number; data?: ApiResponse<unknown> };
       };
 
       if (err?.name === 'BizError' && err.info) {
         const { code, message: msg } = err.info;
         if (code === 40101) {
-          // 未登录/登录过期 → 回登录页
-          const { pathname, search, hash } = history.location;
-          history.replace(
-            `/user/login?redirect=${encodeURIComponent(pathname + search + hash)}`,
-          );
+          redirectToLogin();
           return;
         }
         message.error(msg);
         return;
       }
       if (err?.response) {
-        message.error(`请求失败：HTTP ${err.response.status}`);
+        const { status, data } = err.response;
+        if (status === 401 && data?.code === 40101) {
+          // HTTP 401 时响应拦截器不会执行（axios 直接拒绝），这里按 body.code 判断
+          // 是否为 token 失效；40102–40104 是登录失败，走下面的后端 message 提示。
+          redirectToLogin();
+          return;
+        }
+        // 后端错误响应都带 { code, message }，优先展示（如 40103 密码错误、40302 账号已停用）。
+        if (data?.message) {
+          message.error(data.message);
+          return;
+        }
+        message.error(`请求失败：HTTP ${status}`);
         return;
       }
       message.error('网络异常，请重试');

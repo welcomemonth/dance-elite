@@ -1,21 +1,24 @@
-import { message, notification } from 'antd';
+import { message } from 'antd';
+import { history } from '@umijs/max';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearSession, saveSession } from '@/services/youwumeng/auth';
 import { errorConfig } from './requestErrorConfig';
 
 vi.mock('antd', () => ({
   message: {
-    warning: vi.fn(),
     error: vi.fn(),
-  },
-  notification: {
-    open: vi.fn(),
   },
 }));
 
 vi.mock('@umijs/max', () => ({
-  getIntl: vi.fn(() => ({
-    formatMessage: vi.fn(({ defaultMessage }) => defaultMessage),
-  })),
+  history: {
+    location: {
+      pathname: '/events',
+      search: '?page=1',
+      hash: '',
+    },
+    replace: vi.fn(),
+  },
 }));
 
 describe('requestErrorConfig', () => {
@@ -23,248 +26,157 @@ describe('requestErrorConfig', () => {
   const errorThrower = errorConfig.errorConfig!.errorThrower!;
   // biome-ignore lint/style/noNonNullAssertion: config handlers are always defined
   const errorHandler = errorConfig.errorConfig!.errorHandler!;
+  // biome-ignore lint/style/noNonNullAssertion: interceptors are always defined
+  const requestInterceptor = errorConfig.requestInterceptors![0] as (config: {
+    headers?: Record<string, string>;
+  }) => { headers?: Record<string, string> };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearSession();
+    history.location.pathname = '/events';
+    history.location.search = '?page=1';
   });
 
   describe('errorThrower', () => {
-    it('should throw error when success is false', () => {
-      const response = {
-        success: false,
-        data: null,
-        errorCode: 400,
-        errorMessage: 'Bad Request',
-        showType: 2,
-      };
+    it('业务 code !== 0 时抛 BizError 并携带 info', () => {
+      const res = { code: 41005, message: '名额已满', data: null };
 
-      expect(() => {
-        errorThrower(response);
-      }).toThrow('Bad Request');
-    });
-
-    it('should not throw error when success is true', () => {
-      const response = {
-        success: true,
-        data: { id: 1 },
-      };
-
-      expect(() => {
-        errorThrower(response);
-      }).not.toThrow();
-    });
-
-    it('should throw BizError with correct info', () => {
-      const response = {
-        success: false,
-        data: { detail: 'more info' },
-        errorCode: 403,
-        errorMessage: 'Forbidden',
-        showType: 3,
-      };
-
-      expect.assertions(5);
       try {
-        errorThrower(response);
+        errorThrower(res);
+        expect.unreachable('should have thrown');
       } catch (error: any) {
         expect(error.name).toBe('BizError');
-        expect(error.info.errorCode).toBe(403);
-        expect(error.info.errorMessage).toBe('Forbidden');
-        expect(error.info.showType).toBe(3);
-        expect(error.info.data).toEqual({ detail: 'more info' });
+        expect(error.info).toEqual({ code: 41005, message: '名额已满', data: null });
       }
+    });
+
+    it('code === 0 时不抛错', () => {
+      expect(() => {
+        errorThrower({ code: 0, message: 'success', data: { id: 1 } });
+      }).not.toThrow();
     });
   });
 
   describe('errorHandler', () => {
-    it('should rethrow error when skipErrorHandler is true', () => {
-      const error = new Error('Test error');
-      const opts = { skipErrorHandler: true };
-
-      expect(() => {
-        errorHandler(error, opts);
-      }).toThrow('Test error');
+    it('skipErrorHandler 时原样抛出', () => {
+      const error = new Error('boom');
+      expect(() => errorHandler(error, { skipErrorHandler: true })).toThrow('boom');
     });
 
-    it('should handle SILENT showType', () => {
-      const error: any = new Error('Silent error');
+    it('BizError 40101 → 清理会话并跳转登录页', () => {
+      saveSession('stale-token', { id: 1 } as never);
+      const error: any = new Error('未登录或登录已过期');
       error.name = 'BizError';
-      error.info = {
-        errorCode: 1001,
-        errorMessage: 'Silent error',
-        showType: 0,
-      };
+      error.info = { code: 40101, message: '未登录或登录已过期' };
 
       errorHandler(error, {});
 
-      expect(message.warning).not.toHaveBeenCalled();
+      expect(history.replace).toHaveBeenCalledWith(
+        '/user/login?redirect=%2Fevents%3Fpage%3D1',
+      );
+      expect(localStorage.getItem('yw_admin_token')).toBeNull();
       expect(message.error).not.toHaveBeenCalled();
-      expect(notification.open).not.toHaveBeenCalled();
     });
 
-    it('should handle WARN_MESSAGE showType', () => {
-      const error: any = new Error('Warning');
+    it('BizError 其他业务码 → message.error 提示', () => {
+      const error: any = new Error('名额已满');
       error.name = 'BizError';
-      error.info = {
-        errorCode: 1002,
-        errorMessage: 'This is a warning',
-        showType: 1,
-      };
+      error.info = { code: 41005, message: '名额已满' };
 
       errorHandler(error, {});
 
-      expect(message.warning).toHaveBeenCalledWith('This is a warning');
+      expect(message.error).toHaveBeenCalledWith('名额已满');
+      expect(history.replace).not.toHaveBeenCalled();
     });
 
-    it('should handle ERROR_MESSAGE showType', () => {
-      const error: any = new Error('Error message');
-      error.name = 'BizError';
-      error.info = {
-        errorCode: 1003,
-        errorMessage: 'This is an error',
-        showType: 2,
-      };
-
-      errorHandler(error, {});
-
-      expect(message.error).toHaveBeenCalledWith('This is an error');
-    });
-
-    it('should handle NOTIFICATION showType', () => {
-      const error: any = new Error('Notification');
-      error.name = 'BizError';
-      error.info = {
-        errorCode: 1004,
-        errorMessage: 'This is a notification',
-        showType: 3,
-      };
-
-      errorHandler(error, {});
-
-      expect(notification.open).toHaveBeenCalledWith({
-        title: 1004,
-        description: 'This is a notification',
-      });
-    });
-
-    it('should handle REDIRECT showType', () => {
-      const error: any = new Error('Redirect');
-      error.name = 'BizError';
-      error.info = {
-        errorCode: 401,
-        errorMessage: 'Unauthorized',
-        showType: 9,
-      };
-
-      errorHandler(error, {});
-      // cancel the real navigation triggered by REDIRECT before it tears down the test page
-      window.stop();
-
-      // REDIRECT 分支不应触发任何消息/通知提示
-      expect(message.warning).not.toHaveBeenCalled();
-      expect(message.error).not.toHaveBeenCalled();
-      expect(notification.open).not.toHaveBeenCalled();
-    });
-
-    it('should handle default case for unknown showType', () => {
-      const error: any = new Error('Unknown type');
-      error.name = 'BizError';
-      error.info = {
-        errorCode: 1005,
-        errorMessage: 'Unknown error type',
-        showType: 99,
-      };
-
-      errorHandler(error, {});
-
-      expect(message.error).toHaveBeenCalledWith('Unknown error type');
-    });
-
-    it('should handle axios response error', () => {
-      const error: any = new Error('Axios error');
+    it('HTTP 401 + code 40101（token 失效）→ 清理会话并跳转登录页', () => {
+      saveSession('stale-token', { id: 1 } as never);
+      const error: any = new Error('Request failed with status code 401');
       error.response = {
-        status: 500,
-        data: {},
+        status: 401,
+        data: { code: 40101, message: '未登录或登录已过期', data: null },
       };
 
       errorHandler(error, {});
 
-      expect(message.error).toHaveBeenCalledWith('Response status:500');
+      expect(history.replace).toHaveBeenCalledWith(
+        '/user/login?redirect=%2Fevents%3Fpage%3D1',
+      );
+      expect(localStorage.getItem('yw_admin_token')).toBeNull();
+      expect(message.error).not.toHaveBeenCalled();
     });
 
-    it('should handle offline error', () => {
-      const error: any = new Error('Network error');
-      error.request = {};
-
-      const originalOnLine = navigator.onLine;
-      Object.defineProperty(navigator, 'onLine', {
-        writable: true,
-        value: false,
-      });
-
-      try {
-        errorHandler(error, {});
-
-        expect(message.error).toHaveBeenCalledWith(
-          'Network unavailable. Please check your connection and try again.',
-        );
-      } finally {
-        Object.defineProperty(navigator, 'onLine', {
-          writable: true,
-          value: originalOnLine,
-        });
-      }
-    });
-
-    it('should handle request error with no response', () => {
-      const error: any = new Error('Request error');
-      error.request = {};
+    it('已跳到登录页后并发 40101 → 不再重定向（避免登录后回跳登录页）', () => {
+      history.location.pathname = '/user/login';
+      history.location.search = '?redirect=%2Fevents';
+      const error: any = new Error('未登录或登录已过期');
+      error.response = {
+        status: 401,
+        data: { code: 40101, message: '未登录或登录已过期', data: null },
+      };
 
       errorHandler(error, {});
 
-      expect(message.error).toHaveBeenCalledWith(
-        'None response! Please retry.',
-      );
+      expect(history.replace).not.toHaveBeenCalled();
+      expect(message.error).not.toHaveBeenCalled();
     });
 
-    it('should handle generic error', () => {
-      const error: any = new Error('Generic error');
+    it('HTTP 401 + 登录失败业务码（40103 密码错误）→ 提示信息，不跳转', () => {
+      const error: any = new Error('Request failed with status code 401');
+      error.response = {
+        status: 401,
+        data: { code: 40103, message: '密码错误', data: null },
+      };
 
       errorHandler(error, {});
 
-      expect(message.error).toHaveBeenCalledWith(
-        'Request error, please retry.',
-      );
+      expect(message.error).toHaveBeenCalledWith('密码错误');
+      expect(history.replace).not.toHaveBeenCalled();
+    });
+
+    it('HTTP 403 + 40302（账号已停用）→ 提示后端信息，不跳转', () => {
+      const error: any = new Error('Request failed with status code 403');
+      error.response = {
+        status: 403,
+        data: { code: 40302, message: '账号已停用', data: null },
+      };
+
+      errorHandler(error, {});
+
+      expect(message.error).toHaveBeenCalledWith('账号已停用');
+      expect(history.replace).not.toHaveBeenCalled();
+    });
+
+    it('其他 HTTP 错误 → 提示状态码', () => {
+      const error: any = new Error('Request failed with status code 500');
+      error.response = { status: 500, data: null };
+
+      errorHandler(error, {});
+
+      expect(message.error).toHaveBeenCalledWith('请求失败：HTTP 500');
+    });
+
+    it('无 response（网络异常）→ 通用提示', () => {
+      errorHandler(new Error('Network Error'), {});
+
+      expect(message.error).toHaveBeenCalledWith('网络异常，请重试');
     });
   });
 
   describe('requestInterceptors', () => {
-    // The interceptor is registered as a plain function (not a tuple),
-    // so narrow the union type to a callable for the test.
-    const interceptor = errorConfig.requestInterceptors?.[0] as (config: {
-      url?: string;
-      method?: string;
-    }) => { url?: string };
+    it('有 token 时注入 Authorization 头', () => {
+      saveSession('abc-token', { id: 1 } as never);
 
-    it('should pass through config without modification', () => {
-      const config = {
-        url: 'https://api.example.com/users',
-        method: 'GET',
-      };
+      const result = requestInterceptor({});
 
-      const result = interceptor(config);
-
-      // Token attachment is intentionally commented out in the source;
-      // interceptor currently returns config as-is
-      expect(result.url).toBe('https://api.example.com/users');
+      expect(result.headers?.Authorization).toBe('Bearer abc-token');
     });
 
-    it('should handle URL without config', () => {
-      const config = {};
+    it('无 token 时不注入 Authorization 头', () => {
+      const result = requestInterceptor({});
 
-      const result = interceptor(config);
-
-      expect(result.url).toBeUndefined();
+      expect(result.headers?.Authorization).toBeUndefined();
     });
   });
 });
