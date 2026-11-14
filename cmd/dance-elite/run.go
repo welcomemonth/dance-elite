@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/meetmonth/dance-elite/internal/server"
 	"github.com/meetmonth/dance-elite/internal/service"
 	"github.com/meetmonth/dance-elite/internal/store"
+	"github.com/meetmonth/dance-elite/internal/web"
 )
 
 // run 是组合根：在这里装配数据库、种子、路由与 HTTP 服务，并随 ctx 优雅退出。
@@ -85,6 +87,17 @@ func run(ctx context.Context, cfg *config.Config) error {
 	contentService := service.NewContentService(stores)
 	audioReviewService := service.NewAudioReviewService(stores, cfg.PublicBaseURL)
 
+	// 前端构建产物在编译期嵌入；未构建时（只有 .gitkeep）跳过页面托管，
+	// 本地开发请使用 dance-admin 的 pnpm dev（代理到本服务）。
+	webAssets, err := web.Dist()
+	if err != nil {
+		return fmt.Errorf("读取内嵌前端资源: %w", err)
+	}
+	if _, err := fs.Stat(webAssets, "index.html"); err != nil {
+		logger.Log.Warn("前端构建产物未嵌入，后台页面不可用；发布前请在 dance-admin 执行 pnpm build")
+		webAssets = nil
+	}
+
 	engine := router.New(router.Deps{
 		Stores:          stores,
 		Auth:            authService,
@@ -113,6 +126,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		AudioReview:     audioReviewService,
 		Tokens:          tokens,
 		UploadDir:       cfg.UploadDir,
+		WebAssets:       webAssets,
 	})
 	srv := server.NewServer(":"+cfg.Port, engine)
 	if err := srv.Run(ctx); err != nil {

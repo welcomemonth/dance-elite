@@ -1,6 +1,7 @@
 package router
 
 import (
+	"io/fs"
 	"path/filepath"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +50,10 @@ type Deps struct {
 	// UploadDir 是上传文件物理根目录（配置 UPLOAD_DIR）。非空时把
 	// /static/materials、/static/avatars 映射到磁盘对应目录（T13）。
 	UploadDir string
+
+	// WebAssets 是内嵌的前端构建产物根目录（internal/web）。非空时在根路径
+	// 托管后台管理端与音频审核 H5，并对页面导航回退 index.html。
+	WebAssets fs.FS
 }
 
 // New 构建并返回一个已注册全局中间件的 gin.Engine。
@@ -170,6 +175,12 @@ func New(deps Deps) *gin.Engine {
 	// 音频审核 H5（免登录，URL token 鉴权，API 文档 7.1）。
 	if deps.AudioReview != nil {
 		registerAudioReviewH5Routes(engine.Group("/h5"), deps.AudioReview)
+	}
+
+	// 前端单页应用托管（T32）：后台管理端与音频审核 H5 同源，
+	// /api、/h5、/static 未命中时仍返回统一 JSON 404。
+	if deps.WebAssets != nil {
+		registerWebAssets(engine, deps.WebAssets)
 	}
 
 	// 健康检查
