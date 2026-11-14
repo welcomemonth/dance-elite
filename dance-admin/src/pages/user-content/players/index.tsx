@@ -48,7 +48,9 @@ function PlayerArchives() {
   const [detailId, setDetailId] = useState<number | null>(null);
 
   const { data: detail, loading: detailLoading } = useService(
-    () => getPlayer(detailId!),
+    // ready 只在 true→false 时拦截自动执行，refreshDeps 变化仍会触发 refresh，
+    // 因此关闭抽屉（detailId → null）时必须在闭包内兜底，否则会请求 /players/null。
+    () => (detailId === null ? Promise.resolve(null) : getPlayer(detailId)),
     { ready: detailId !== null, refreshDeps: [detailId] },
   );
   const { run: runMerge } = useService(mergePlayer, {
