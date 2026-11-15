@@ -20,32 +20,33 @@ import (
 //
 // 测试时构造 Deps 的 fake 实现即可用 httptest 对接口做测试。
 type Deps struct {
-	Stores          *store.Store
-	Auth            *service.AuthService
-	AdminAuth       *service.AdminAuthService
-	Seasons         *service.SeasonService
-	Events          *service.EventService
-	PublicEvents    *service.PublicEventService
-	Registrations   *service.RegistrationService
-	Materials       *service.MaterialService
-	Orders          *service.OrderService
-	Payments        *service.PaymentService
-	Refunds         *service.RefundService
-	AdminRefunds    *service.AdminRefundQueryService
-	Waitlists       *service.WaitlistService
-	CSTickets       *service.CSTicketService
-	ManualRegs      *service.ManualRegistrationService
-	Players         *service.PlayerService
-	AdminOrders     *service.AdminOrderQueryService
-	AdminRegs       *service.AdminRegistrationQueryService
-	MaterialMissing *service.MaterialCollectionService
-	Dashboard       *service.DashboardService
-	Accounts        *service.AdminAccountService
-	AdminLogs       *service.AdminLogQueryService
-	UserContents    *service.AdminUserQueryService
-	Contents        *service.ContentService
-	AudioReview     *service.AudioReviewService
-	Tokens          *token.Signer
+	Stores              *store.Store
+	Auth                *service.AuthService
+	AdminAuth           *service.AdminAuthService
+	Seasons             *service.SeasonService
+	Events              *service.EventService
+	PublicEvents        *service.PublicEventService
+	Registrations       *service.RegistrationService
+	RegistrationQueries *service.RegistrationQueryService
+	Materials           *service.MaterialService
+	Orders              *service.OrderService
+	Payments            *service.PaymentService
+	Refunds             *service.RefundService
+	AdminRefunds        *service.AdminRefundQueryService
+	Waitlists           *service.WaitlistService
+	CSTickets           *service.CSTicketService
+	ManualRegs          *service.ManualRegistrationService
+	Players             *service.PlayerService
+	AdminOrders         *service.AdminOrderQueryService
+	AdminRegs           *service.AdminRegistrationQueryService
+	MaterialMissing     *service.MaterialCollectionService
+	Dashboard           *service.DashboardService
+	Accounts            *service.AdminAccountService
+	AdminLogs           *service.AdminLogQueryService
+	UserContents        *service.AdminUserQueryService
+	Contents            *service.ContentService
+	AudioReview         *service.AudioReviewService
+	Tokens              *token.Signer
 
 	// UploadDir 是上传文件物理根目录（配置 UPLOAD_DIR）。非空时把
 	// /static/materials、/static/avatars 映射到磁盘对应目录（T13）。
@@ -83,6 +84,11 @@ func New(deps Deps) *gin.Engine {
 	// 小程序端报名下单（T9）：需登录，按用户限流 1 次/5 秒。
 	if deps.Tokens != nil && deps.Registrations != nil {
 		registerRegistrationRoutes(api, deps.Registrations, deps.Tokens)
+	}
+
+	// 小程序端「我的报名」列表/详情（T35）：需登录，仅本人可见。
+	if deps.Tokens != nil && deps.RegistrationQueries != nil {
+		registerRegistrationQueryRoutes(api, deps.RegistrationQueries, deps.Tokens)
 	}
 
 	// 小程序端参赛资料上传（T13）：需登录，仅本人有效报名可修改。

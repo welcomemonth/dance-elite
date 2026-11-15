@@ -59,6 +59,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 	publicEventService := service.NewPublicEventService(stores)
 	playerService := service.NewPlayerService(stores, cfg.IDCardHMACKey)
 	registrationService := service.NewRegistrationService(stores, playerService)
+	registrationQueryService := service.NewRegistrationQueryService(stores)
 	waitlistService := service.NewWaitlistService(stores, playerService)
 	fileStore, err := storage.New(cfg.UploadDir)
 	if err != nil {
@@ -99,34 +100,35 @@ func run(ctx context.Context, cfg *config.Config) error {
 	}
 
 	engine := router.New(router.Deps{
-		Stores:          stores,
-		Auth:            authService,
-		AdminAuth:       adminAuthService,
-		Seasons:         seasonService,
-		Events:          eventService,
-		PublicEvents:    publicEventService,
-		Registrations:   registrationService,
-		Materials:       materialService,
-		Orders:          orderService,
-		Payments:        paymentService,
-		Refunds:         refundService,
-		AdminRefunds:    adminRefundQueryService,
-		Waitlists:       waitlistService,
-		CSTickets:       csTicketService,
-		ManualRegs:      manualRegService,
-		Players:         playerService,
-		AdminOrders:     adminOrderQueryService,
-		AdminRegs:       adminRegistrationQueryService,
-		MaterialMissing: materialCollectionService,
-		Dashboard:       dashboardService,
-		Accounts:        accountService,
-		AdminLogs:       adminLogQueryService,
-		UserContents:    userContentQueryService,
-		Contents:        contentService,
-		AudioReview:     audioReviewService,
-		Tokens:          tokens,
-		UploadDir:       cfg.UploadDir,
-		WebAssets:       webAssets,
+		Stores:              stores,
+		Auth:                authService,
+		AdminAuth:           adminAuthService,
+		Seasons:             seasonService,
+		Events:              eventService,
+		PublicEvents:        publicEventService,
+		Registrations:       registrationService,
+		RegistrationQueries: registrationQueryService,
+		Materials:           materialService,
+		Orders:              orderService,
+		Payments:            paymentService,
+		Refunds:             refundService,
+		AdminRefunds:        adminRefundQueryService,
+		Waitlists:           waitlistService,
+		CSTickets:           csTicketService,
+		ManualRegs:          manualRegService,
+		Players:             playerService,
+		AdminOrders:         adminOrderQueryService,
+		AdminRegs:           adminRegistrationQueryService,
+		MaterialMissing:     materialCollectionService,
+		Dashboard:           dashboardService,
+		Accounts:            accountService,
+		AdminLogs:           adminLogQueryService,
+		UserContents:        userContentQueryService,
+		Contents:            contentService,
+		AudioReview:         audioReviewService,
+		Tokens:              tokens,
+		UploadDir:           cfg.UploadDir,
+		WebAssets:           webAssets,
 	})
 	srv := server.NewServer(":"+cfg.Port, engine)
 	if err := srv.Run(ctx); err != nil {

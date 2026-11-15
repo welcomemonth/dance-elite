@@ -197,6 +197,21 @@ func (s *RefundTicketStore) ListByOrder(ctx context.Context, orderID int64) ([]A
 	return list, nil
 }
 
+// LatestByOrder 返回订单最近一张退款工单（小程序报名详情展示退款信息用，T35）。
+// 无工单返回 ErrNotFound。
+func (s *RefundTicketStore) LatestByOrder(ctx context.Context, orderID int64) (*model.RefundTicket, error) {
+	ticket, err := scanRefundTicket(s.db.sql.QueryRowContext(ctx,
+		`SELECT `+refundTicketColumns+` FROM refund_tickets
+		 WHERE order_id = ? ORDER BY id DESC LIMIT 1`, orderID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query latest refund ticket of order %d: %w", orderID, err)
+	}
+	return ticket, nil
+}
+
 func scanRefundTicket(row rowScanner) (*model.RefundTicket, error) {
 	var t model.RefundTicket
 	if err := row.Scan(&t.ID, &t.TicketNo, &t.OrderID, &t.Reason, &t.Applicant, &t.Status,
