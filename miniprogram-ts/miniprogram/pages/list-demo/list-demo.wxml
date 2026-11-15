@@ -1,0 +1,26 @@
+<view class="page">
+  <view class="list-header">
+    <view class="list-header__title">下拉刷新 / 上拉加载</view>
+    <view class="list-header__meta">{{summary}}</view>
+  </view>
+
+  <view class="list-error" wx:if="{{listError}}">{{listError}}</view>
+
+  <view class="event" wx:for="{{rows}}" wx:key="id">
+    <view class="event__main">
+      <view class="event__name">{{item.name}}</view>
+      <view class="event__meta">{{item.city}} · {{item.dateText}}</view>
+    </view>
+    <view class="event__fee">{{item.feeText}}</view>
+  </view>
+
+  <view class="list-footer" wx:if="{{loading || (refreshing && list.length === 0)}}">加载中…</view>
+  <view class="list-footer" wx:elif="{{finished && list.length > 0}}">没有更多了</view>
+
+  <empty-state
+    wx:if="{{!loading && !refreshing && list.length === 0}}"
+    text="暂无数据"
+    show-retry="{{true}}"
+    bind:retry="emptyState_retry"
+  />
+</view>

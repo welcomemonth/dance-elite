@@ -1,6 +1,7 @@
 import { API_BASE_URL, REQUEST_TIMEOUT } from "../config/env";
 import { ERROR_CODE, type ApiEnvelope } from "../types/api";
 import { ApiError } from "./api-error";
+import { unwrapEnvelope } from "./api-response";
 import { readToken } from "./session";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
@@ -25,6 +26,11 @@ let unauthorizedHandler: (() => void) | null = null;
 /** 注册 40101 的统一处理（例如清理登录态并跳转登录页）。 */
 export function setUnauthorizedHandler(handler: (() => void) | null): void {
   unauthorizedHandler = handler;
+}
+
+/** 供 upload 等其他请求通道在检测到 40101 时复用统一处理。 */
+export function notifyUnauthorized(): void {
+  unauthorizedHandler?.();
 }
 
 function buildUrl(path: string, query?: QueryParams): string {
@@ -61,18 +67,14 @@ export function request<T>(path: string, config: RequestConfig = {}): Promise<T>
         ...header,
       },
       success(response) {
-        const payload = response.data;
-        if (payload && payload.code === ERROR_CODE.SUCCESS) {
-          resolve(payload.data);
-          return;
+        try {
+          resolve(unwrapEnvelope<T>(response.data, response.statusCode));
+        } catch (error) {
+          if (error instanceof ApiError && error.code === ERROR_CODE.UNAUTHORIZED) {
+            unauthorizedHandler?.();
+          }
+          reject(error);
         }
-
-        const code = typeof payload?.code === "number" ? payload.code : response.statusCode;
-        const message = payload?.message || `请求失败（HTTP ${response.statusCode}）`;
-        if (code === ERROR_CODE.UNAUTHORIZED) {
-          unauthorizedHandler?.();
-        }
-        reject(new ApiError(code, message, response.statusCode));
       },
       fail(error) {
         reject(new ApiError(-1, error.errMsg || "网络异常，请稍后重试"));

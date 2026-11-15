@@ -45,11 +45,12 @@ miniprogram-ts/
 │   ├── inject.ts                      # instanceConfig 全局注入 + IInjectInfo 类型增强
 │   ├── config/env.ts                  # 运行环境与 API 地址
 │   ├── types/                         # 响应包装、错误码、领域模型
-│   ├── utils/                         # request / session / toast / api-error
+│   ├── utils/                         # request / session / cache / paged-list / format / upload / media
 │   ├── api/                           # 按模块拆分的接口函数
 │   ├── store/                         # MobX 全局状态
 │   ├── components/empty-state/        # 自定义组件示例（props + customEvents）
-│   └── pages/home/                    # 页面示例（store / computed / 注入方法）
+│   ├── pages/home/                    # 页面示例（store / computed / 注入方法）
+│   └── pages/list-demo/               # 下拉刷新 + 上拉加载 + 格式化示例
 ├── typings/index.d.ts                 # IAppOption 等全局声明
 ├── scripts/patch-mobx.mjs             # postinstall 处理 mobx 的小程序兼容问题
 ├── project.config.json
@@ -81,6 +82,70 @@ miniprogram-ts/
 - `app.ts` 的 `onLaunch` 发起微信静默登录：`wx.login` → `POST /api/v1/auth/wx-login`
 - 页面用 `userStore.ensureLogin()`；并发调用会复用同一个 Promise
 - 登录态持久化在 storage（key：`dance_elite_session`），冷启动时直接恢复
+
+### 工具能力
+
+**缓存** `utils/cache.ts`（带过期时间，命名空间 `de_cache:`，不影响其他 storage）：
+
+```ts
+import { cacheSet, cacheGet, cacheGetOrSet, cacheClear } from "../../utils/cache";
+
+cacheSet("home:last-visit", Date.now(), 30 * 24 * 60 * 60); // 秒；0/省略表示永不过期
+const lastVisit = cacheGet<number>("home:last-visit");
+const data = await cacheGetOrSet("events:list", 60, () => http.get<PagedList<Event>>("/api/v1/events"));
+cacheClear(); // 只清理本模块写入的 key
+```
+
+**分页列表** `utils/paged-list.ts`：封装下拉刷新、上拉加载、防重复请求与请求竞态。
+
+```ts
+let unsubscribe: (() => void) | null = null;
+
+const list = new PagedListController<Event, { status?: string }>({
+  pageSize: 20,
+  fetcher: (params) => http.get<PagedList<Event>>("/api/v1/events", params),
+});
+
+pageLifetimes: {
+  onLoad() {
+    unsubscribe = list.subscribe((state) => this.setData(state));
+    void list.refresh();
+  },
+  onUnload() { unsubscribe?.(); },
+  onPullDownRefresh() { void list.refresh().finally(() => wx.stopPullDownRefresh()); },
+  onReachBottom() { void list.loadMore(); },
+}
+```
+
+页面 json 需要 `"enablePullDownRefresh": true`。完整示例见 `pages/list-demo/`（用本地 mock 数据，换成 `http.get` 即可）。
+
+**格式化** `utils/format.ts`：
+
+```ts
+formatMoney(98000);            // "¥980.00"（后端金额单位为分）
+formatMoney(98000, false);     // "980.00"
+formatDate("2027-01-02T10:20:30+08:00");       // "2027-01-02"
+formatDateTime(Date.now());                     // "2027-01-02 10:20"
+formatDate(value, "MM-DD HH:mm");               // 自定义格式
+formatPhone("13800138000");                     // "138****8000"
+formatDuration(270);                            // "04:30"
+```
+
+**上传** `utils/upload.ts`：与请求层一致地拼接 `API_BASE_URL`、携带 token、解包统一响应。
+
+```ts
+import { uploadFile } from "../../utils/upload";
+import { chooseImages } from "../../utils/media";
+
+const [filePath] = await chooseImages({ count: 1 });
+const result = await uploadFile<{ url: string }>({
+  path: "/api/v1/registrations/5001/id-card",
+  filePath,
+  formData: { kind: "id-card" },
+});
+```
+
+**图片** `utils/media.ts`：`chooseImages()`、`previewImages()`、`saveImageToPhotosAlbum()`。
 
 ### 全局注入
 

@@ -146,5 +146,5 @@ bash scripts/build.sh && bash scripts/push-aliyun.sh
 
 - v1 榜单（JSON 文件存储、原生 JS 音频页）代码已全部下线（2026-11-10），代码库为全新起点；原 `web/` 目录已删除，音频审核 H5 页以 React 形式落入 `dance-admin/src/pages/audio-review/`（路由 `/audio-review/:token`，数据接口 `GET /h5/audio-review/{token}`）。
 - 现有基础：SQLite 数据层（`store/db.go` WAL 单连接池、`migrate.go` 版本化迁移、`tx.go` 事务）、`pkg/httpx` 统一响应与错误码、`middleware`（RequestID/AccessLog/Recovery）、`server` 优雅关闭。测试基线：`go test ./...` 全绿。
-- 小程序工程模板位于 `miniprogram-ts/`（Annil + TypeScript + MobX）：TypeScript 由微信开发者工具的 `useCompilerPlugins` 编译，`pnpm typecheck` 做类型检查；已含统一请求层、登录态 store、全局注入与示例页面/组件。后续小程序页面在此基础上新增。
+- 小程序工程模板位于 `miniprogram-ts/`（Annil + TypeScript + MobX）：TypeScript 由微信开发者工具的 `useCompilerPlugins` 编译，`pnpm typecheck` 做类型检查；已含统一请求层、登录态 store、全局注入，以及缓存、分页列表（下拉刷新/上拉加载）、格式化、上传/图片工具与示例页面/组件。后续小程序页面在此基础上新增。
 - 业务代码（model/service/各端 handler）按开发计划 T2 起落地，模型以 `docs/数据库表结构设计.md` v3 为准。

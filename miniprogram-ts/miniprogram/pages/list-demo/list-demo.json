@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "列表示例",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
+  "onReachBottomDistance": 100,
+  "usingComponents": {
+    "empty-state": "/components/empty-state/empty-state"
+  }
+}

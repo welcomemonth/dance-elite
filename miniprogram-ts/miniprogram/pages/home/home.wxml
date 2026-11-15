@@ -34,6 +34,16 @@
   </view>
 
   <view class="card">
+    <view class="card__title">工具能力</view>
+    <view class="row">
+      <text class="row__label">上次访问</text>
+      <text class="row__value">{{lastVisitText || "首次访问"}}</text>
+    </view>
+    <button class="btn btn--ghost" bind:tap="onOpenListDemo">列表 / 下拉刷新示例</button>
+    <button class="btn btn--ghost" bind:tap="onChooseImageTap">选择并预览图片</button>
+  </view>
+
+  <view class="card">
     <view class="card__title">组件示例</view>
     <view class="card__desc">CustomComponent 的 props 与 customEvents 用法。</view>
     <empty-state text="还没有内容" show-retry="{{true}}" bind:retry="emptyState_retry" />
