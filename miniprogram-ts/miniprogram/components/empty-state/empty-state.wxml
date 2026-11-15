@@ -1,0 +1,12 @@
+<view class="empty">
+  <view class="empty__icon">◇</view>
+  <view class="empty__text">{{text}}</view>
+  <button
+    wx:if="{{showRetry}}"
+    class="empty__retry"
+    hover-class="empty__retry--hover"
+    bind:tap="onRetryTap"
+  >
+    {{retryText}}
+  </button>
+</view>

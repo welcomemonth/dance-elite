@@ -1,0 +1,43 @@
+<view class="page">
+  <view class="hero">
+    <view class="hero__badge">Annil · TypeScript</view>
+    <view class="hero__title">{{greeting}}</view>
+    <view class="hero__desc">微信原生小程序 · 类型安全组件模型</view>
+  </view>
+
+  <view class="card">
+    <view class="card__title">登录态</view>
+
+    <view class="row">
+      <text class="row__label">状态</text>
+      <text class="row__value">{{loggedIn ? "已登录" : "未登录"}}</text>
+    </view>
+    <view class="row" wx:if="{{loggedIn}}">
+      <text class="row__label">昵称</text>
+      <text class="row__value">{{user.nickname}}</text>
+    </view>
+    <view class="row" wx:if="{{loggedIn && user.player_no}}">
+      <text class="row__label">选手编号</text>
+      <text class="row__value row__value--mono">{{user.player_no}}</text>
+    </view>
+
+    <button
+      wx:if="{{!loggedIn}}"
+      class="btn btn--primary"
+      loading="{{loading}}"
+      disabled="{{loading}}"
+      bind:tap="onLoginTap"
+    >
+      微信静默登录
+    </button>
+    <button wx:else class="btn btn--ghost" bind:tap="onLogoutTap">退出登录</button>
+  </view>
+
+  <view class="card">
+    <view class="card__title">组件示例</view>
+    <view class="card__desc">CustomComponent 的 props 与 customEvents 用法。</view>
+    <empty-state text="还没有内容" show-retry="{{true}}" bind:retry="emptyState_retry" />
+  </view>
+
+  <view class="footer">{{appName}} v{{appVersion}} · {{envVersion}}</view>
+</view>

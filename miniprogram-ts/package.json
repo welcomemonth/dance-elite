@@ -1,0 +1,20 @@
+{
+  "name": "dance-elite-miniprogram",
+  "version": "0.1.0",
+  "private": true,
+  "description": "优舞盟小程序（Annil + TypeScript 模板）",
+  "scripts": {
+    "postinstall": "node scripts/patch-mobx.mjs",
+    "typecheck": "tsc --noEmit",
+    "watch": "tsc --noEmit --watch"
+  },
+  "dependencies": {
+    "annil": "^1.18.4",
+    "mobx": "^6.16.1"
+  },
+  "devDependencies": {
+    "hry-types": "^0.20.3",
+    "miniprogram-api-typings": "^5.3.1",
+    "typescript": "^6.0.3"
+  }
+}

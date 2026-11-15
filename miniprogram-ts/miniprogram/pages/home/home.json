@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "优舞盟",
+  "usingComponents": {
+    "empty-state": "/components/empty-state/empty-state"
+  }
+}

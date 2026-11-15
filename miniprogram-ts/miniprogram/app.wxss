@@ -1,0 +1,26 @@
+page {
+  --color-primary: #d6407b;
+  --color-primary-dark: #b32e65;
+  --color-text: #1f2430;
+  --color-text-secondary: #8a8492;
+  --color-bg: #f6f4f7;
+  --color-card: #ffffff;
+  --color-border: #f4eff3;
+
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", sans-serif;
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+
+view,
+text,
+button {
+  box-sizing: border-box;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 0 32rpx;
+}

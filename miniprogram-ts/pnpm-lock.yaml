@@ -1,0 +1,63 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      annil:
+        specifier: ^1.18.4
+        version: 1.18.4(hry-types@0.20.3)(miniprogram-api-typings@5.3.1)
+      mobx:
+        specifier: ^6.16.1
+        version: 6.16.1
+    devDependencies:
+      hry-types:
+        specifier: ^0.20.3
+        version: 0.20.3
+      miniprogram-api-typings:
+        specifier: ^5.3.1
+        version: 5.3.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+packages:
+
+  annil@1.18.4:
+    resolution: {integrity: sha512-hEQT+7MzbbhNg4LlKbXZnJ10XLLy5klXs1r7g3y8lv7ImGEUcbkf1rgr/ZGXwRQ5yWo0pChSIxoZWY95T+Mfiw==}
+    peerDependencies:
+      hry-types: ^0.20.3
+      miniprogram-api-typings: ^5.2.1
+
+  hry-types@0.20.3:
+    resolution: {integrity: sha512-aRt3LDaBqlzplQhiHIzgo1g+14xEeFmMsYX1lbYoSXXdhIp32tors22XiOZNxtg+LqBvaFq+/2kjmwGYKSAEFw==}
+
+  miniprogram-api-typings@5.3.1:
+    resolution: {integrity: sha512-2CirO+C1z5RmKXDqTUSNbuyouHf5d0/KJTt+Qqi1EsiQYs8jlYhq7yWjp6EdTcJpvZzjuefZQCcDixYbrgIqow==}
+
+  mobx@6.16.1:
+    resolution: {integrity: sha512-syNcDdX3KT+Jq3je6eGjBhuc24Z68td2VG0zNFqRswaE433D9SNH5VRy/xrGbJsUixfppLLccXhAW9JSf6n+SQ==}
+
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+snapshots:
+
+  annil@1.18.4(hry-types@0.20.3)(miniprogram-api-typings@5.3.1):
+    dependencies:
+      hry-types: 0.20.3
+      miniprogram-api-typings: 5.3.1
+
+  hry-types@0.20.3: {}
+
+  miniprogram-api-typings@5.3.1: {}
+
+  mobx@6.16.1: {}
+
+  typescript@6.0.3: {}
