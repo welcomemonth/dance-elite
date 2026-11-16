@@ -187,6 +187,35 @@ func (s *EventStore) List(ctx context.Context, f EventFilter) ([]model.Event, in
 	return list, total, nil
 }
 
+// ListAutoCandidates 返回参与自动状态流转的赛事（registering / reg_closed / ongoing）。
+// draft/unpublished/offline 不参与自动流转，不会被自动发布。
+func (s *EventStore) ListAutoCandidates(ctx context.Context, limit int) ([]model.Event, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.sql.QueryContext(ctx, `
+		SELECT `+eventColumns+` FROM events
+		WHERE status IN ('registering', 'reg_closed', 'ongoing')
+		ORDER BY id LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query auto-transition events: %w", err)
+	}
+	defer rows.Close()
+
+	var list []model.Event
+	for rows.Next() {
+		event, err := scanEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan auto-transition event: %w", err)
+		}
+		list = append(list, *event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate auto-transition events: %w", err)
+	}
+	return list, nil
+}
+
 // Insert 在事务内创建赛事，返回新 id。
 func (s *EventStore) Insert(ctx context.Context, tx *sql.Tx, p EventParams) (int64, error) {
 	res, err := tx.ExecContext(ctx, `

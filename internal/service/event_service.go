@@ -37,11 +37,12 @@ const (
 //     进入且为终止态。全部流转写 admin_logs。
 type EventService struct {
 	stores *store.Store
+	now    func() time.Time
 }
 
 // NewEventService 构造赛事服务。
 func NewEventService(stores *store.Store) *EventService {
-	return &EventService{stores: stores}
+	return &EventService{stores: stores, now: time.Now}
 }
 
 // groupQuotaChange 是一次名额调整计划（编辑赛事/调名额接口共用校验）。
@@ -74,8 +75,12 @@ func (s *EventService) List(ctx context.Context, q model.AdminEventListQuery) (*
 	}
 
 	items := make([]model.AdminEventItem, 0, len(events))
+	now := s.now()
 	for i := range events {
-		items = append(items, model.NewAdminEventItem(events[i], groupProgress(groupsByEvent[events[i].ID])))
+		// 读路径兜底：定时器尚未落库时也按时间线展示最新状态（只前进）。
+		event := events[i]
+		event.Status = dueEventStatus(&event, now)
+		items = append(items, model.NewAdminEventItem(event, groupProgress(groupsByEvent[event.ID])))
 	}
 
 	page := q.Page
@@ -108,6 +113,7 @@ func (s *EventService) Get(ctx context.Context, id int64) (*model.AdminEventItem
 		return nil, httpx.ErrInternal(err, "查询赛事失败，请稍后重试")
 	}
 	item := model.NewAdminEventItem(*event, groupProgress(groups))
+	item.Status = dueEventStatus(event, s.now())
 	return &item, nil
 }
 

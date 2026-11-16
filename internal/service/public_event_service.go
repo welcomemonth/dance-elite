@@ -10,7 +10,6 @@ import (
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
 	"github.com/meetmonth/dance-elite/internal/store"
-	"github.com/meetmonth/dance-elite/internal/utils"
 )
 
 // 小程序赛事列表缓存：名额热度为近似值（API 文档 2.1 注意事项允许），
@@ -202,26 +201,6 @@ func (s *PublicEventService) Detail(ctx context.Context, id int64, userID *int64
 		ProcessDesc:       event.ProcessDesc,
 		HonorDesc:         event.HonorDesc,
 	}, nil
-}
-
-// deriveMiniappStatus 推导小程序端展示状态（见类型注释）。
-func deriveMiniappStatus(e *model.Event, now time.Time) string {
-	if e.Status == model.EventStatusFinished {
-		return model.MiniappStatusFinished
-	}
-	regStart := deref(e.RegStartAt)
-	regEnd := deref(e.RegEndAt)
-	if regStart != "" {
-		if t, err := utils.ParseISO(regStart); err == nil && now.Before(t) {
-			return model.MiniappStatusUpcoming
-		}
-	}
-	if regEnd != "" {
-		if t, err := utils.ParseISO(regEnd); err == nil && !now.Before(t) {
-			return model.MiniappStatusRegClosed
-		}
-	}
-	return model.MiniappStatusRegistering
 }
 
 // isPublishedVisible 返回赛事是否对小程序端可见（draft/unpublished/offline 不可见）。
