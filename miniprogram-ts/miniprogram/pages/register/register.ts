@@ -16,7 +16,7 @@ import {
   groupLevelText,
 } from "../../utils/event";
 import { createIdempotencyKey } from "../../utils/id";
-import { payRegistration } from "../../utils/payment";
+import { payRegistration, PaymentError } from "../../utils/payment";
 import type { $RegisterSuccess } from "../register-success/register-success";
 
 interface DanceOptionView {
@@ -186,6 +186,16 @@ const rootComponent = RootComponent()({
       }
     },
     handleSubmitError(error: unknown): void {
+      // 支付拉起失败：弹出微信返回的原始错误，便于用户反馈与联调定位。
+      if (error instanceof PaymentError) {
+        wx.showModal({
+          title: "无法发起微信支付",
+          content: `${error.errMsg || "未知错误"}\n\n请在真机重试；若仍失败，请截图联系客服。`,
+          showCancel: false,
+          confirmText: "我知道了",
+        });
+        return;
+      }
       if (!isApiError(error)) {
         this.showError(error);
         return;
@@ -228,6 +238,15 @@ const rootComponent = RootComponent()({
             title: "登录已过期",
             content: "请返回页面重新进入后再试",
             showCancel: false,
+          });
+          break;
+        case ERROR_CODE.SERVER_ERROR:
+          // 预下单/支付链路失败（如微信统一下单被拒）：用弹窗展示，避免 toast 一闪而过。
+          wx.showModal({
+            title: "支付未完成",
+            content: `${error.message}\n\n如反复出现，请截图联系客服并提供操作时间。`,
+            showCancel: false,
+            confirmText: "我知道了",
           });
           break;
         default:

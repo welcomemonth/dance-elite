@@ -43,12 +43,18 @@ services:
       # DB_PATH / UPLOAD_DIR 决定（当前 .env：dance-elite.db + uploads/），
       # 挂载宿主目录即完成 SQLite 与上传文件的持久化
       - ${ELITE_DATA_DIR:-./data}:/opt/dance-elite
-      # 支付证书 / 商户私钥两种放法（与 PEM 文本二选一，同时设置会启动失败）：
-      # 1) 直接放进 ${ELITE_DATA_DIR}，沿用 .env 里现成的
-      #    WECHAT_PAY_CERT_FILE=/opt/dance-elite/apiclient_cert.pem
+      # 微信支付证书两种放法（与 PEM 文本二选一，同时设置会启动失败）：
+      # 注意区分两种证书：
+      #   apiclient_key.pem         商户 API 私钥（WECHAT_PAY_PRIVATE_KEY_FILE）
+      #   apiclient_cert.pem        商户 API 证书，序列号填 WECHAT_MCH_SERIAL_NO，
+      #                             不能当作 WECHAT_PAY_CERT 使用
+      #   wechatpay_*.pem           微信支付平台证书（商户平台 → API 安全 → 平台证书），
+      #                             才是 WECHAT_PAY_CERT_FILE 需要的内容（回调验签）
+      # 1) 直接放进 ${ELITE_DATA_DIR}：
+      #    WECHAT_PAY_CERT_FILE=/opt/dance-elite/wechatpay_platform_cert.pem
       #    WECHAT_PAY_PRIVATE_KEY_FILE=/opt/dance-elite/apiclient_key.pem
       # 2) 单独存到 secrets 目录、只读挂载到 /run/secrets，并把 .env 改成：
-      #    WECHAT_PAY_CERT_FILE=/run/secrets/apiclient_cert.pem
+      #    WECHAT_PAY_CERT_FILE=/run/secrets/wechatpay_platform_cert.pem
       #    WECHAT_PAY_PRIVATE_KEY_FILE=/run/secrets/apiclient_key.pem
       #    注意不要挂到 /opt/dance-elite 下：entrypoint 会 chown -R 该目录，
       #    遇到只读文件会失败退出。

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	config "github.com/meetmonth/dance-elite/internal/configs"
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 	"github.com/meetmonth/dance-elite/internal/pkg/wxpay"
 )
 
@@ -12,8 +13,14 @@ import (
 // 解析失败在启动时 fail-fast，敏感配置只经环境变量注入，见 T3）。
 func newPayGateway(cfg *config.Config) (wxpay.Provider, error) {
 	if cfg.PayMock {
+		logger.Log.Warn("支付通道为 mock（PAY_MOCK=true）：小程序不会拉起真实微信支付")
 		return wxpay.NewMockGateway(), nil
 	}
+	logger.Log.Infow("支付通道为微信支付 V3",
+		"appid", cfg.WechatAppID,
+		"mchid", cfg.WechatMchID,
+		"notify_url", cfg.WechatNotifyURL,
+	)
 	client, err := wxpay.NewClient(wxpay.ClientOptions{
 		AppID:           cfg.WechatAppID,
 		MchID:           cfg.WechatMchID,

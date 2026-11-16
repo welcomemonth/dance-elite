@@ -14,6 +14,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 )
 
 // 全局错误码，与 API 文档 0.4/0.5 一致；41012 见下方报名域定义（API 文档 0.5）。
@@ -265,6 +266,16 @@ func HandleErrors() gin.HandlerFunc {
 			return
 		}
 		biz := Wrap(c.Errors[0].Err)
+		// Cause 只进日志：微信支付/数据库等底层细节不返回前端（API 文档 0.4），
+		// 排障时须能从服务端日志看到真实原因（如微信支付返回的 code/message）。
+		if biz.Cause != nil {
+			logger.FromCtx(c.Request.Context()).Errorw("请求处理失败",
+				"method", c.Request.Method,
+				"path", c.Request.URL.Path,
+				"code", biz.Code,
+				"cause", biz.Cause,
+			)
+		}
 		c.JSON(biz.Status, Response{Code: biz.Code, Message: biz.Message, Data: biz.Data})
 	}
 }

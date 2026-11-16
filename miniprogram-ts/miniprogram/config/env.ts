@@ -8,11 +8,11 @@ interface EnvConfig {
 const ENV_CONFIG: Record<EnvVersion, EnvConfig> = {
   // 本地联调：微信开发者工具需勾选「不校验合法域名」。
   develop: {
-    apiBaseUrl: "http://localhost:8080",
+    apiBaseUrl: "https://dance-test.meetmonth.top",
     requestTimeout: 15000,
   },
   trial: {
-    apiBaseUrl: "https://dance.meetmonth.top",
+    apiBaseUrl: "https://dance-test.meetmonth.top",
     requestTimeout: 15000,
   },
   release: {
