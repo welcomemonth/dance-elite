@@ -96,6 +96,19 @@ type uploadFile struct {
 func putMultipart(t *testing.T, engine *gin.Engine, target string,
 	fields map[string]string, files map[string]uploadFile, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
+	return multipartRequest(t, engine, http.MethodPut, target, fields, files, headers)
+}
+
+// postMultipart 发送 multipart POST 请求（模拟小程序 wx.uploadFile）。
+func postMultipart(t *testing.T, engine *gin.Engine, target string,
+	fields map[string]string, files map[string]uploadFile, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	return multipartRequest(t, engine, http.MethodPost, target, fields, files, headers)
+}
+
+func multipartRequest(t *testing.T, engine *gin.Engine, method, target string,
+	fields map[string]string, files map[string]uploadFile, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
 	for k, v := range fields {
@@ -116,7 +129,7 @@ func putMultipart(t *testing.T, engine *gin.Engine, target string,
 		t.Fatalf("close multipart: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPut, target, &body)
+	req := httptest.NewRequest(method, target, &body)
 	req.Header.Set("Content-Type", w.FormDataContentType())
 	for k, v := range headers {
 		req.Header.Set(k, v)

@@ -733,6 +733,7 @@ curl "https://api.example.com/api/v1/registrations/5001" -H "Authorization: Bear
 | status | string | paid / refunding / refunded |
 | status_desc | string | 状态说明文案 |
 | material_readonly | bool | 超过核对舞蹈音频时间后为 true，资料整体只读 |
+| material_status | object | 资料完成度：`{"total":8,"completed":3,"missing":["photo","audio","program_name"]}` |
 | event / level_group / dance_type / player_name / player_no / institution | — | 报名信息 |
 | order_no / amount / paid_at | — | 支付信息 |
 | refund | object \| null | 退款信息：`{"ticket_no":"...","status":"processing","reason":"..."}` |
@@ -745,6 +746,7 @@ curl "https://api.example.com/api/v1/registrations/5001" -H "Authorization: Bear
     "status": "paid",
     "status_desc": "请在 2027 年 3 月 1 日前上传资料；不上传不影响参赛",
     "material_readonly": false,
+    "material_status": {"total": 8, "completed": 3, "missing": ["audio", "program_name", "express_address", "work_intro", "special_req"]},
     "event": {"id": 12, "name": "2027 上海甲级赛", "level": "grade_a", "event_date": "2027-03-15"},
     "level_group": "U13", "dance_type": "classical",
     "player_name": "张小雨", "player_no": "a8K2mP9x", "institution": "小天鹅舞蹈工作室",
@@ -992,7 +994,7 @@ curl -X PUT https://api.example.com/api/v1/registrations/5001/materials \
 |---|---|
 | 接口名称 | 上传/替换证件照 |
 | 功能说明 | 选择照片后立即上传，失败当场返回原因；重复上传覆盖旧照片（不提供删除接口） |
-| 请求方法 + URL | `PUT /api/v1/registrations/{registration_id}/materials/photo` |
+| 请求方法 + URL | `PUT / POST /api/v1/registrations/{registration_id}/materials/photo`（POST 供小程序 `wx.uploadFile` 使用，行为一致） |
 | 鉴权 | 是（仅本人，且报名为有效状态） |
 | 请求体 | `multipart/form-data` |
 
@@ -1024,6 +1026,7 @@ curl -X PUT https://api.example.com/api/v1/registrations/5001/materials/photo \
 **注意事项**
 
 - 扩展名与实际图片内容同时校验（解码格式必须一致）；限制 4000 万像素，防止解压炸弹。
+- 微信 `wx.uploadFile` 只支持 POST，因此本接口同时接受 PUT（规范方法）与 POST（小程序上传通道），两者共用同一 handler 与限流配额。
 - 上传成功后同步生成最长边 512px 的 JPEG 头像副本到 `uploads/avatars/{player_no}/` 并更新 `players.avatar_path`；旧照片与旧头像在事务提交后清理。
 - 先落临时文件、校验通过后才替换，失败不影响已有照片。
 
@@ -1037,7 +1040,7 @@ curl -X PUT https://api.example.com/api/v1/registrations/5001/materials/photo \
 |---|---|
 | 接口名称 | 上传/替换舞蹈音频 |
 | 功能说明 | 选择音频后立即上传，失败当场返回原因；重复上传覆盖旧音频（不提供删除接口） |
-| 请求方法 + URL | `PUT /api/v1/registrations/{registration_id}/materials/audio` |
+| 请求方法 + URL | `PUT / POST /api/v1/registrations/{registration_id}/materials/audio`（POST 供小程序 `wx.uploadFile` 使用，行为一致） |
 | 鉴权 | 是（仅本人，且报名为有效状态） |
 | 请求体 | `multipart/form-data` |
 
@@ -1070,6 +1073,7 @@ curl -X PUT https://api.example.com/api/v1/registrations/5001/materials/audio \
 
 - 服务端解析 MPEG 帧头计算时长，无法解析的音频直接拒绝（需重新导出为有效 mp3 后上传，不做转码）。
 - 替换成功后才清理旧音频文件；失败不影响已有音频。
+- 微信 `wx.uploadFile` 只支持 POST，因此本接口同时接受 PUT 与 POST，两者共用同一 handler 与限流配额。
 
 ---
 
@@ -1168,7 +1172,7 @@ curl "https://api.example.com/api/v1/waitlists" -H "Authorization: Bearer <token
 | list[].event_id / event_name | — | 赛事 |
 | list[].level / dance_type | string | 组别 / 舞种 |
 | list[].position_no | int | 队列序号 |
-| list[].status | string | waiting / notified / converted / given_up |
+| list[].status | string | waiting / notified / converted / given_up / removed（后两者为留档记录，不可再取消） |
 | list[].created_at | string | 提交时间 |
 
 ```json

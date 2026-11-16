@@ -55,6 +55,7 @@ type MiniappRegistrationDetail struct {
 	Status           string                     `json:"status"`
 	StatusDesc       string                     `json:"status_desc"`
 	MaterialReadonly bool                       `json:"material_readonly"`
+	MaterialStatus   MaterialStatus             `json:"material_status"`
 	Event            MiniappRegistrationEvent   `json:"event"`
 	LevelGroup       string                     `json:"level_group"`
 	DanceType        string                     `json:"dance_type"`

@@ -161,6 +161,31 @@ func TestMaterialAudioUpload(t *testing.T) {
 	}
 }
 
+func TestMaterialUploadAcceptsPostAlias(t *testing.T) {
+	engine, signer, db, _ := newMaterialTestEngine(t)
+	_, regID, _, userToken := materialTestSetup(t, engine, signer, db)
+	auth := map[string]string{"Authorization": "Bearer " + userToken}
+	base := fmt.Sprintf("/api/v1/registrations/%d/materials", regID)
+
+	// wx.uploadFile 只能发 POST：文件接口必须同时接受 POST（与 PUT 共用 handler）。
+	w := postMultipart(t, engine, base+"/photo", nil,
+		map[string]uploadFile{"photo": {name: "id_photo.jpg", data: testRouterJPEG(t, 120, 160)}}, auth)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST photo status = %d, body = %s", w.Code, w.Body)
+	}
+	w = postMultipart(t, engine, base+"/audio", nil,
+		map[string]uploadFile{"audio": {name: "dance.mp3", data: testRouterMP3(100)}}, auth)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST audio status = %d, body = %s", w.Code, w.Body)
+	}
+
+	// 文本资料仍只接受 PUT，避免 POST 掩盖 JSON 更新入口。
+	w = postMultipart(t, engine, base, nil, nil, auth)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("POST text status = %d, want 404", w.Code)
+	}
+}
+
 func TestMaterialUpdateRejectsNonOwnerAndInactive(t *testing.T) {
 	engine, signer, db, _ := newMaterialTestEngine(t)
 	_, regID, _, _ := materialTestSetup(t, engine, signer, db)

@@ -168,7 +168,7 @@ func TestRegistrationQueryRoutes(t *testing.T) {
 	}
 	assertSnakeCaseKeys(t, "my registration detail", detailRaw.Data)
 	assertObjectKeys(t, "my registration detail", detailRaw.Data,
-		"status", "status_desc", "material_readonly", "event", "level_group",
+		"status", "status_desc", "material_readonly", "material_status", "event", "level_group",
 		"dance_type", "player_name", "player_no", "institution", "order_no",
 		"amount", "paid_at", "refund", "materials")
 	event, ok := detailRaw.Data["event"].(map[string]any)

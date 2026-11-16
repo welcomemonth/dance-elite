@@ -67,6 +67,7 @@ func (s *RegistrationQueryService) Detail(ctx context.Context, userID, registrat
 		Status:           status,
 		StatusDesc:       miniappRegistrationStatusDesc(status, materialStatus, row.MaterialCheckAt, now),
 		MaterialReadonly: materialReadonly(row.MaterialCheckAt, now),
+		MaterialStatus:   materialStatus,
 		Event: model.MiniappRegistrationEvent{
 			ID:        row.Registration.EventID,
 			Name:      row.EventName,

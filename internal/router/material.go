@@ -21,15 +21,21 @@ type materialHandler struct {
 
 // registerMaterialRoutes 注册文本、证件照、音频三个独立更新接口。
 // 均需用户登录并按 user_id 限流：文本 30 次/分钟，证件照 20 次/分钟，音频 10 次/分钟。
+//
+// 微信 wx.uploadFile 只支持 POST，无法发送 PUT，因此文件上传接口同时接受
+// PUT（API 契约）与 POST（小程序实际上传通道），二者共用同一 handler 与限流。
 func registerMaterialRoutes(group *gin.RouterGroup, svc *service.MaterialService, signer *token.Signer) {
 	h := &materialHandler{svc: svc}
 	auth := middleware.UserAuth(signer)
-	group.PUT("/registrations/:registration_id/materials",
-		auth, middleware.RateLimitKeyed(30, time.Minute, userRateKey), h.updateText)
-	group.PUT("/registrations/:registration_id/materials/photo",
-		auth, middleware.RateLimitKeyed(20, time.Minute, userRateKey), h.updatePhoto)
-	group.PUT("/registrations/:registration_id/materials/audio",
-		auth, middleware.RateLimitKeyed(10, time.Minute, userRateKey), h.updateAudio)
+	textLimit := middleware.RateLimitKeyed(30, time.Minute, userRateKey)
+	photoLimit := middleware.RateLimitKeyed(20, time.Minute, userRateKey)
+	audioLimit := middleware.RateLimitKeyed(10, time.Minute, userRateKey)
+
+	group.PUT("/registrations/:registration_id/materials", auth, textLimit, h.updateText)
+	group.PUT("/registrations/:registration_id/materials/photo", auth, photoLimit, h.updatePhoto)
+	group.POST("/registrations/:registration_id/materials/photo", auth, photoLimit, h.updatePhoto)
+	group.PUT("/registrations/:registration_id/materials/audio", auth, audioLimit, h.updateAudio)
+	group.POST("/registrations/:registration_id/materials/audio", auth, audioLimit, h.updateAudio)
 }
 
 // materialTextRequest 是文本资料更新请求体（nil = 未提交，不修改；空串 = 清空）。
