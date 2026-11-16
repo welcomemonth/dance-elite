@@ -1,0 +1,73 @@
+# =============================================================================
+# dance-elite 生产部署编排
+#
+# 用法：
+#   docker compose -f scripts/docker-compose.yml up -d
+#   docker compose -f scripts/docker-compose.yml logs -f
+#   docker compose -f scripts/docker-compose.yml down
+#
+# 配置全部来自环境变量文件（模板见仓库根 .env.example，密钥不入库）：
+#   默认读取 ../.env；服务器上可复制到别处并用 ELITE_ENV_FILE 指定绝对路径。
+#
+# 常用覆盖（写在 shell 环境或同目录 .env 中）：
+#   HOST_PORT=18080       宿主机端口（默认 18080，容器内固定 8090）
+#   ELITE_DATA_DIR=/data/dance-elite   持久化目录（默认 ./data，相对本文件）
+#   ELITE_IMAGE_TAG=1.0.0 镜像版本（默认 latest）
+# =============================================================================
+
+name: dance-elite
+
+services:
+  app:
+    image: ${ELITE_IMAGE_REPO:-crpi-npw0av7ozhtwtzou.cn-hangzhou.personal.cr.aliyuncs.com/memos_meetmonth/dance-elite-json}:${ELITE_IMAGE_TAG:-latest}
+    container_name: dance-elite
+    restart: unless-stopped
+
+    ports:
+      # 镜像内 PORT=8090，只映射宿主机端口，避免容器内端口与健康检查不一致
+      - "${HOST_PORT:-18080}:8090"
+
+    environment:
+      # 全库时间字符串与赛事状态自动流转按 Asia/Shanghai 计算
+      # （internal/utils/time.go:15），镜像默认 TZ=UTC，必须覆盖
+      TZ: Asia/Shanghai
+      PORT: "8090"
+
+    env_file:
+      # JWT_SECRET / ID_CARD_HMAC_KEY / WECHAT_* / ADMIN_INIT_PASSWORD 等
+      # 缺失时容器启动即 fail-fast，日志一次性列出缺失项
+      - ${ELITE_ENV_FILE:-../.env}
+
+    volumes:
+      # WORKDIR 与 VOLUME 均为 /opt/dance-elite，卷内路径由 .env 的
+      # DB_PATH / UPLOAD_DIR 决定（当前 .env：dance-elite.db + uploads/），
+      # 挂载宿主目录即完成 SQLite 与上传文件的持久化
+      - ${ELITE_DATA_DIR:-./data}:/opt/dance-elite
+      # 支付证书 / 商户私钥两种放法（与 PEM 文本二选一，同时设置会启动失败）：
+      # 1) 直接放进 ${ELITE_DATA_DIR}，沿用 .env 里现成的
+      #    WECHAT_PAY_CERT_FILE=/opt/dance-elite/apiclient_cert.pem
+      #    WECHAT_PAY_PRIVATE_KEY_FILE=/opt/dance-elite/apiclient_key.pem
+      # 2) 单独存到 secrets 目录、只读挂载到 /run/secrets，并把 .env 改成：
+      #    WECHAT_PAY_CERT_FILE=/run/secrets/apiclient_cert.pem
+      #    WECHAT_PAY_PRIVATE_KEY_FILE=/run/secrets/apiclient_key.pem
+      #    注意不要挂到 /opt/dance-elite 下：entrypoint 会 chown -R 该目录，
+      #    遇到只读文件会失败退出。
+      # - ${ELITE_SECRETS_DIR:-./secrets}/apiclient_cert.pem:/run/secrets/apiclient_cert.pem:ro
+      # - ${ELITE_SECRETS_DIR:-./secrets}/apiclient_key.pem:/run/secrets/apiclient_key.pem:ro
+
+    healthcheck:
+      # $$ 转义为容器内 shell 变量，PORT 被覆盖时也成立
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:$${PORT:-8090}/api/v1/ping >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    # server.Run 用 context 驱动优雅关闭，留足在途请求时间
+    stop_grace_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

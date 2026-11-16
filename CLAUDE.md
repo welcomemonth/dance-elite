@@ -11,6 +11,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 - `docs/数据库表结构设计.md` — ER 关系与设计决策（先读第 0 节）
 - `docs/优舞盟报名功能.md` — 报名流程与状态机、已确认的关键业务决策
 - `docs/小程序页面/优舞盟小程序页面与功能设计.md`、`docs/后台管理/优舞盟后台管理页面与功能设计.md`
+- `docs/部署说明.md` — Docker 部署（`scripts/docker-compose.yml`）：容器内路径、必设环境变量、升级与备份
 
 ## Tech Stack
 
@@ -46,6 +47,7 @@ gofmt -w .
 
 # Docker 部署（Aliyun）
 bash scripts/build.sh && bash scripts/push-aliyun.sh
+docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容器 8090，见 docs/部署说明.md
 ```
 
 配置：无 YAML、无命令行参数。全部配置来自环境变量：本地开发由 godotenv 读取 `.env`（可选，已存在的环境变量优先），生产由容器运行时注入；必需项缺失直接 fail-fast。复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）。

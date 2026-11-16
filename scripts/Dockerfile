@@ -10,20 +10,34 @@ FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
 
 WORKDIR /src
 
-# 先只复制依赖文件，最大化利用缓存
+# 使用国内源（可选但推荐）
+RUN npm config set registry https://registry.npmmirror.com
+
+# 安装 pnpm（避开 corepack 可能的问题）
+RUN npm install -g pnpm@latest
+
+# 只复制依赖文件，利用缓存
 COPY dance-admin/package.json dance-admin/pnpm-lock.yaml* ./dance-admin/
 
-RUN corepack enable && \
-    cd dance-admin && \
-    pnpm install --frozen-lockfile
-
-# 复制前端源码 + 后端 web 目录（因为 build 脚本会写到 ../internal/web/dist）
-COPY dance-admin/ ./dance-admin/
-COPY internal/web/ ./internal/web/
-
 WORKDIR /src/dance-admin
+
+# 关键：允许依赖执行构建脚本（解决 ERR_PNPM_IGNORED_BUILDS）
+RUN printf '%s\n' \
+  'allowBuilds:' \
+  '  esbuild: true' \
+  '  "@scarf/scarf": false' \
+  '  core-js: false' \
+  '  core-js-pure: false' \
+  '  es5-ext: false' \
+  > pnpm-workspace.yaml
+
+RUN pnpm install --frozen-lockfile
+
+# 复制源码并构建
+COPY dance-admin/ ./
+COPY internal/web/ /src/internal/web/
+
 RUN pnpm run build
-# 此时产物已在 /src/internal/web/dist
 
 
 # ---------- 2. Go 后端构建阶段 ----------
