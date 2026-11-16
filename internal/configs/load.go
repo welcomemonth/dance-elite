@@ -25,6 +25,15 @@ func Load() (*Config, error) {
 	if cfg.JWTExpireSeconds <= 0 {
 		return nil, fmt.Errorf("环境变量 JWT_EXPIRE_SECONDS=%d 必须为正整数（秒）", cfg.JWTExpireSeconds)
 	}
+	if cfg.StatusTickSeconds <= 0 {
+		return nil, fmt.Errorf("环境变量 STATUS_TICK_SECONDS=%d 必须为正整数（秒）", cfg.StatusTickSeconds)
+	}
+	if cfg.OrderExpireMinutes <= 0 {
+		return nil, fmt.Errorf("环境变量 ORDER_EXPIRE_MINUTES=%d 必须为正整数（分钟）", cfg.OrderExpireMinutes)
+	}
+	if cfg.RefundWatchdogMinutes <= 0 {
+		return nil, fmt.Errorf("环境变量 REFUND_WATCHDOG_MINUTES=%d 必须为正整数（分钟）", cfg.RefundWatchdogMinutes)
+	}
 	return cfg, nil
 }
 
@@ -43,6 +52,18 @@ func read() (*Config, error) {
 		return nil, err
 	}
 	jwtExpire, err := envInt("JWT_EXPIRE_SECONDS", 7200)
+	if err != nil {
+		return nil, err
+	}
+	statusTick, err := envInt("STATUS_TICK_SECONDS", 60)
+	if err != nil {
+		return nil, err
+	}
+	orderExpire, err := envInt("ORDER_EXPIRE_MINUTES", 15)
+	if err != nil {
+		return nil, err
+	}
+	refundWatchdog, err := envInt("REFUND_WATCHDOG_MINUTES", 10)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +104,10 @@ func read() (*Config, error) {
 
 		AdminInitUsername: envOr("ADMIN_INIT_USERNAME", "admin"),
 		AdminInitPassword: os.Getenv("ADMIN_INIT_PASSWORD"),
+
+		StatusTickSeconds:     statusTick,
+		OrderExpireMinutes:    orderExpire,
+		RefundWatchdogMinutes: refundWatchdog,
 	}, nil
 }
 

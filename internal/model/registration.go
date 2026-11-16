@@ -82,6 +82,7 @@ type Order struct {
 	CancelReason   *string
 	CreatedAt      string
 	UpdatedAt      string
+	ExpireAt       *string // 待支付超时时刻（T34，缺失时按 created_at + 超时分钟兜底）
 }
 
 // SubmitRegistrationRequest 是提交报名（POST /api/v1/events/{event_id}/registrations，

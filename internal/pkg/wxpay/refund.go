@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // refundPath 是微信支付 V3 申请退款接口。
@@ -41,6 +42,11 @@ type RefundResult struct {
 // Refunder 是退款申请能力（真实通道与 mock 均实现）。
 type Refunder interface {
 	Refund(ctx context.Context, req RefundRequest) (*RefundResult, error)
+}
+
+// RefundQuerier 是主动查询退款单能力（T34 退款看门狗：回调丢失时兜底）。
+type RefundQuerier interface {
+	QueryRefund(ctx context.Context, outRefundNo string) (*RefundNotifyResult, error)
 }
 
 // RefundNotifyResult 是退款结果回调解密后的结果。
@@ -150,6 +156,63 @@ func (c *Client) doRefund(ctx context.Context, req RefundRequest) (*RefundResult
 		OutTradeNo:  ok.OutTradeNo,
 		Status:      ok.Status,
 	}, nil
+}
+
+// QueryRefund 主动查询退款单（T34 退款看门狗）：按商户退款单号 GET 微信退款接口。
+func (c *Client) QueryRefund(ctx context.Context, outRefundNo string) (*RefundNotifyResult, error) {
+	if outRefundNo == "" {
+		return nil, errors.New("wxpay refund query: out_refund_no 不能为空")
+	}
+	path := refundPath + "/" + url.PathEscape(outRefundNo)
+	timestamp, nonce, signature, err := c.signRequest(http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build refund query request: %w", err)
+	}
+	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("Authorization", c.authorizationHeader(timestamp, nonce, signature))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("query refund %q: %w", outRefundNo, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return nil, fmt.Errorf("read refund query response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, parseWechatError(resp.StatusCode, respBody)
+	}
+
+	var payload refundNotifyPayload
+	if err := json.Unmarshal(respBody, &payload); err != nil {
+		return nil, fmt.Errorf("parse refund query response: %w", err)
+	}
+	if payload.OutRefundNo == "" || payload.RefundStatus == "" {
+		return nil, errors.New("parse refund query response: 缺少 out_refund_no/refund_status")
+	}
+	return &RefundNotifyResult{
+		MchID:         payload.MchID,
+		OutTradeNo:    payload.OutTradeNo,
+		TransactionID: payload.TransactionID,
+		OutRefundNo:   payload.OutRefundNo,
+		RefundID:      payload.RefundID,
+		RefundStatus:  payload.RefundStatus,
+		SuccessTime:   payload.SuccessTime,
+		RefundAmount:  payload.Amount.Refund,
+		TotalAmount:   payload.Amount.Total,
+	}, nil
+}
+
+// QueryRefund 是 mock 通道的退款查询：恒返回处理中（mock 无真实退款单，
+// 看门狗在 PAY_MOCK=true 时整体跳过）。
+func (m *MockGateway) QueryRefund(_ context.Context, outRefundNo string) (*RefundNotifyResult, error) {
+	return &RefundNotifyResult{OutRefundNo: outRefundNo, RefundStatus: RefundStatusProcessing}, nil
 }
 
 // ParseRefundNotify 验签并解密微信退款结果回调。

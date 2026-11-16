@@ -46,6 +46,7 @@ type PrepayRequest struct {
 	OutTradeNo  string // 商户订单号（全局唯一，不可推测，T9 生成规则）
 	Description string // 商品描述（展示在用户支付记录中）
 	AmountFen   int64  // 金额（分）
+	TimeExpire  string // 支付过期时刻（RFC3339，空则用微信默认）；T34 与订单 expire_at 对齐
 }
 
 // PayParams 是小程序 wx.requestPayment 所需参数（API 文档 3.1b pay_params）。
@@ -162,7 +163,7 @@ func (c *Client) Prepay(ctx context.Context, req PrepayRequest) (string, error) 
 
 // doPrepay 执行一次下单请求并解析响应。
 func (c *Client) doPrepay(ctx context.Context, req PrepayRequest) (string, error) {
-	body, err := json.Marshal(map[string]any{
+	payload := map[string]any{
 		"appid":        c.appID,
 		"mchid":        c.mchID,
 		"description":  req.Description,
@@ -175,7 +176,11 @@ func (c *Client) doPrepay(ctx context.Context, req PrepayRequest) (string, error
 		"payer": map[string]any{
 			"openid": req.OpenID,
 		},
-	})
+	}
+	if req.TimeExpire != "" {
+		payload["time_expire"] = req.TimeExpire
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return "", fmt.Errorf("marshal jsapi body: %w", err)
 	}

@@ -88,6 +88,7 @@ type Provider interface {
 	Notifier
 	OrderQuerier
 	Refunder
+	RefundQuerier
 	RefundNotifier
 }
 

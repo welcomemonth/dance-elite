@@ -43,6 +43,11 @@ type Config struct {
 	// 后台初始超管（仅首次启动建档，已存在账号不覆盖）
 	AdminInitUsername string
 	AdminInitPassword string
+
+	// 定时任务（T34）：调度器轮询间隔、待支付订单超时、退款卡死判定窗口（分钟）
+	StatusTickSeconds     int
+	OrderExpireMinutes    int
+	RefundWatchdogMinutes int
 }
 
 // requirement 是一个必需配置项及其当前值。

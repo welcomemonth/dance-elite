@@ -71,3 +71,6 @@ $RECYCLE.BIN/
 node_modules/
 mini-template/
 /miniprogram/
+
+# 临时草稿（如 T34 实施计划），不入库
+tmp/

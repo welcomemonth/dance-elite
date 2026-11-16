@@ -184,7 +184,7 @@ func scanAdminOrderDetail(row rowScanner) (*AdminOrderDetailRow, error) {
 	reg := &out.Registration
 	if err := row.Scan(&o.ID, &o.OrderNo, &o.RegistrationID, &o.UserID, &o.Amount, &o.Status,
 		&o.Source, &o.RequestID, &o.PrepayID, &o.PaidAt, &o.CanceledAt, &o.CancelReason,
-		&o.CreatedAt, &o.UpdatedAt, &out.TransactionID,
+		&o.CreatedAt, &o.UpdatedAt, &o.ExpireAt, &out.TransactionID,
 		&reg.ID, &reg.EventID, &reg.GroupID, &reg.PlayerID, &reg.UserID,
 		&reg.DanceType, &reg.Institution, &reg.Status, &reg.Source, &reg.CSTicketID,
 		&reg.PhotoPath, &reg.AudioPath, &reg.ProgramName, &reg.TeacherName,

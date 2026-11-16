@@ -18,7 +18,8 @@ func NewOrderStore(db *DB) *OrderStore { return &OrderStore{db: db} }
 // orderQualifiedColumns 是订单查询的限定列名（orders 表含 id/created_at/updated_at
 // 等通用列，JOIN 时必须加 o. 前缀避免歧义）。
 const orderQualifiedColumns = `o.id, o.order_no, o.registration_id, o.user_id, o.amount, o.status,
-	o.source, o.request_id, o.prepay_id, o.paid_at, o.canceled_at, o.cancel_reason, o.created_at, o.updated_at`
+	o.source, o.request_id, o.prepay_id, o.paid_at, o.canceled_at, o.cancel_reason, o.created_at, o.updated_at,
+	o.expire_at`
 
 // Get 按 id 查询订单。不存在返回 ErrNotFound。
 func (s *OrderStore) Get(ctx context.Context, id int64) (*model.Order, error) {
@@ -255,7 +256,7 @@ func scanOrder(row rowScanner) (*model.Order, error) {
 	var o model.Order
 	if err := row.Scan(&o.ID, &o.OrderNo, &o.RegistrationID, &o.UserID, &o.Amount, &o.Status,
 		&o.Source, &o.RequestID, &o.PrepayID, &o.PaidAt, &o.CanceledAt, &o.CancelReason,
-		&o.CreatedAt, &o.UpdatedAt); err != nil {
+		&o.CreatedAt, &o.UpdatedAt, &o.ExpireAt); err != nil {
 		return nil, err
 	}
 	return &o, nil
@@ -271,6 +272,7 @@ type OrderParams struct {
 	Source         string // 空字符串按 miniapp（model.OrderSourceXxx）
 	RequestID      *string
 	PaidAt         *string // 人工报名直接置已支付时写入
+	ExpireAt       *string // 待支付超时时刻（T34）
 }
 
 // CreateTx 在事务内创建订单，返回新 id。
@@ -278,9 +280,9 @@ type OrderParams struct {
 // 由 service 层映射（正常路径已被幂等查重拦截，此处为兜底）。
 func (s *OrderStore) CreateTx(ctx context.Context, tx *sql.Tx, p OrderParams) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO orders (order_no, registration_id, user_id, amount, status, source, request_id, paid_at)
-		VALUES (?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), 'miniapp'), ?, ?)`,
-		p.OrderNo, p.RegistrationID, p.UserID, p.Amount, p.Status, p.Source, p.RequestID, p.PaidAt)
+		INSERT INTO orders (order_no, registration_id, user_id, amount, status, source, request_id, paid_at, expire_at)
+		VALUES (?, ?, ?, ?, ?, COALESCE(NULLIF(?, ''), 'miniapp'), ?, ?, ?)`,
+		p.OrderNo, p.RegistrationID, p.UserID, p.Amount, p.Status, p.Source, p.RequestID, p.PaidAt, p.ExpireAt)
 	if err != nil {
 		return 0, fmt.Errorf("insert order %q: %w", p.OrderNo, err)
 	}
@@ -289,6 +291,35 @@ func (s *OrderStore) CreateTx(ctx context.Context, tx *sql.Tx, p OrderParams) (i
 		return 0, fmt.Errorf("last insert id of order %q: %w", p.OrderNo, err)
 	}
 	return id, nil
+}
+
+// ListExpiredPending 返回已到期的待支付订单（按 COALESCE(expire_at, created_at) 判定）。
+// cutoff 为全库统一 ISO8601 时间字符串；历史订单 expire_at 为空时按创建时间兜底。
+func (s *OrderStore) ListExpiredPending(ctx context.Context, cutoff string, limit int) ([]model.Order, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.sql.QueryContext(ctx, `
+		SELECT `+orderQualifiedColumns+` FROM orders o
+		WHERE o.status = 'pending_payment' AND COALESCE(o.expire_at, o.created_at) <= ?
+		ORDER BY o.id LIMIT ?`, cutoff, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query expired pending orders: %w", err)
+	}
+	defer rows.Close()
+
+	var list []model.Order
+	for rows.Next() {
+		order, err := scanOrder(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan expired pending order: %w", err)
+		}
+		list = append(list, *order)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate expired pending orders: %w", err)
+	}
+	return list, nil
 }
 
 // OrderWithContext 是订单及其关联报名单元/赛事信息，供幂等查重直接
@@ -327,7 +358,7 @@ func scanOrderWithContext(row rowScanner) (*OrderWithContext, error) {
 	)
 	if err := row.Scan(&o.ID, &o.OrderNo, &o.RegistrationID, &o.UserID, &o.Amount, &o.Status,
 		&o.Source, &o.RequestID, &o.PrepayID, &o.PaidAt, &o.CanceledAt, &o.CancelReason,
-		&o.CreatedAt, &o.UpdatedAt,
+		&o.CreatedAt, &o.UpdatedAt, &o.ExpireAt,
 		&out.Level, &out.DanceType, &out.MaterialCheckAt); err != nil {
 		return nil, err
 	}
