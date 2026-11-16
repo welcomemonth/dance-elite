@@ -3,20 +3,21 @@
 
   <view class="follow-body">
     <view class="follow-qr">
-      <view class="follow-qr__grid">
-        <view
-          wx:for="{{cells}}"
-          wx:key="index"
-          class="follow-qr__cell {{item.dark ? 'follow-qr__cell--dark' : ''}}"
-        ></view>
+      <view class="follow-qr__box">
+        <image
+          class="follow-qr__img"
+          src="{{QR_PATH}}"
+          mode="aspectFill"
+          show-menu-by-longpress
+        />
       </view>
-      <view class="follow-qr__tip">公众号二维码配置后展示</view>
+      <view class="follow-qr__tip">长按识别二维码关注公众号</view>
     </view>
 
     <view class="app-section-kicker follow-kicker">YOU WU MENG</view>
     <view class="follow-title">关注「优舞盟」公众号</view>
     <view class="follow-desc">
-      获取赛事资讯与成绩通知。二维码上线后可在小程序内长按识别。
+      获取赛事资讯与成绩通知。长按上方二维码即可识别关注。
     </view>
     <view class="follow-cta">也可通过「我的 - 联系我们」咨询赛事与客服</view>
   </view>

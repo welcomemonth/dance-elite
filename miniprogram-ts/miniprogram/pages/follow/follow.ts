@@ -1,15 +1,12 @@
 import { DefineComponent, RootComponent } from "annil";
 
-/** 二维码占位图案：正式公众号二维码配置后可替换为图片。 */
-const QR_CELLS = Array.from({ length: 81 }, (_, index) => ({
-  index,
-  dark: (index * 7 + Math.floor(index / 9) * 3) % 5 < 2,
-}));
+/** 公众号二维码图片。 */
+const QR_PATH = "/assets/images/gzh.jpg";
 
 const rootComponent = RootComponent()({
   isPage: true,
   data: {
-    cells: QR_CELLS,
+    QR_PATH: QR_PATH,
   },
 });
 
