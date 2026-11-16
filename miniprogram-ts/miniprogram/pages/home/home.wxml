@@ -30,7 +30,7 @@
     >
       微信静默登录
     </button>
-    <button wx:else class="btn btn--ghost" bind:tap="onLogoutTap">退出登录</button>
+    <!-- <button wx:else class="btn btn--ghost" bind:tap="onLogoutTap">退出登录</button> -->
   </view>
 
   <view class="card">
