@@ -30,6 +30,7 @@ func AdminAuth(signer *token.Signer) gin.HandlerFunc {
 		}
 		c.Set(adminIDKey, claims.AdminID)
 		c.Set(adminRoleKey, claims.Role)
+		attachLogFields(c, "admin_id", claims.AdminID, "admin_role", claims.Role)
 		c.Next()
 	}
 }

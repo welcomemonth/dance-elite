@@ -29,6 +29,7 @@ func UserAuth(signer *token.Signer) gin.HandlerFunc {
 		}
 		c.Set(userIDKey, claims.UserID)
 		c.Set(openIDKey, claims.OpenID)
+		attachLogFields(c, "user_id", claims.UserID)
 		c.Next()
 	}
 }
@@ -50,6 +51,7 @@ func OptionalUserAuth(signer *token.Signer) gin.HandlerFunc {
 		}
 		c.Set(userIDKey, claims.UserID)
 		c.Set(openIDKey, claims.OpenID)
+		attachLogFields(c, "user_id", claims.UserID)
 		c.Next()
 	}
 }

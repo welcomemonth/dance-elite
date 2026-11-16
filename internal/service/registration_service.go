@@ -12,6 +12,7 @@ import (
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 	"github.com/meetmonth/dance-elite/internal/store"
 	"github.com/meetmonth/dance-elite/internal/utils"
 )
@@ -139,6 +140,7 @@ func (s *RegistrationService) Submit(ctx context.Context, userID, eventID int64,
 
 	// 5. 事务（BEGIN IMMEDIATE）：复核赛事 → 幂等查重 → 建档 → 判重 → 抢名额 → 写单。
 	var resp *model.SubmitRegistrationResponse
+	created := false
 	err = s.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		// 5a. 事务内复核赛事仍在报名期：防"校验后、写单前"被后台关闭报名。
 		ev, err := s.stores.Events.GetForRegistrationTx(ctx, tx, eventID)
@@ -245,10 +247,27 @@ func (s *RegistrationService) Submit(ctx context.Context, userID, eventID int64,
 		}
 
 		resp = submitResponse(target.Level, target.DanceType, ev.MaterialCheckAt, orderID, orderNo, regID, ev.Fee)
+		created = true
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	// 请求内只注入字段，由访问日志输出一行；幂等重放不重复记"创建"事件。
+	if resp != nil {
+		logger.Add(ctx, "event_id", eventID,
+			"registration_id", resp.RegistrationID,
+			"order_no", resp.OrderNo,
+			"dance_type", resp.DanceType)
+	}
+	if created {
+		logger.Event(ctx, "registration.created", "报名已创建",
+			"event_id", eventID,
+			"registration_id", resp.RegistrationID,
+			"order_no", resp.OrderNo,
+			"dance_type", resp.DanceType,
+			"user_id", userID,
+		)
 	}
 	return resp, nil
 }

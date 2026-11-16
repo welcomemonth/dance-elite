@@ -10,6 +10,7 @@ import (
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 	"github.com/meetmonth/dance-elite/internal/pkg/wxpay"
 	"github.com/meetmonth/dance-elite/internal/store"
 )
@@ -81,6 +82,7 @@ func (s *OrderService) Prepay(ctx context.Context, userID int64, openid string, 
 	if order.Status != model.OrderStatusPendingPayment {
 		return nil, httpx.ErrConflict("订单已支付或已取消，无需重复支付")
 	}
+	logger.Add(ctx, "order_no", order.OrderNo)
 
 	// T34：已过期订单先向微信查单——SUCCESS 补结账；确认未支付才系统取消并引导重报。
 	if orderExpired(order, s.now(), s.expireMinutes) {

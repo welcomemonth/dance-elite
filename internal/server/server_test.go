@@ -7,12 +7,14 @@ import (
 	"os"
 	"testing"
 
+	"go.uber.org/zap/zapcore"
+
 	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 )
 
 func TestMain(m *testing.M) {
 	// Run() 内部会调用包级 logger，测试前先初始化，避免 nil 指针。
-	if err := logger.Init(false); err != nil {
+	if err := logger.Init(logger.Options{Level: zapcore.InfoLevel, Format: "json"}); err != nil {
 		panic(err)
 	}
 	os.Exit(m.Run())

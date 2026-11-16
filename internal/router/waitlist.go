@@ -38,7 +38,7 @@ func (h *waitlistHandler) submit(c *gin.Context) {
 	}
 	var req model.SubmitWaitlistRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：group_id/name/phone 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：group_id/name/phone 为必填项").WithCause(err))
 		return
 	}
 	userID, ok := middleware.GetUserID(c)

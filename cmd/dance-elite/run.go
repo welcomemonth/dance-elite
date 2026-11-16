@@ -128,6 +128,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		AudioReview:         audioReviewService,
 		Tokens:              tokens,
 		UploadDir:           cfg.UploadDir,
+		SlowRequestMS:       cfg.SlowRequestMS,
 		WebAssets:           webAssets,
 	})
 	// 定时任务（T34）：应用级单调度器串行执行，ctx 取消后随 HTTP 服务一起退出。

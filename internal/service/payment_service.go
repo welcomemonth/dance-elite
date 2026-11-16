@@ -9,6 +9,7 @@ import (
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 	"github.com/meetmonth/dance-elite/internal/pkg/wxpay"
 	"github.com/meetmonth/dance-elite/internal/store"
 	"github.com/meetmonth/dance-elite/internal/utils"
@@ -137,7 +138,10 @@ func (s *PaymentService) settle(ctx context.Context, tx *wxpay.Transaction, rawC
 	if tx.TransactionID == "" || tx.OutTradeNo == "" {
 		return fmt.Errorf("%w: 交易号或商户订单号缺失", wxpay.ErrInvalidNotify)
 	}
-	return s.stores.WithTx(ctx, func(sqlTx *sql.Tx) error {
+	// applied 表示本次调用真正推进了状态（新入账）；幂等重复回调不产生事件日志。
+	applied := false
+	var registrationID, settledAmount int64
+	err := s.stores.WithTx(ctx, func(sqlTx *sql.Tx) error {
 		// 幂等：同一 transaction_id 已入账则直接确认（重复回调/重推）。
 		existing, err := s.stores.Payments.GetByTransactionIDTx(ctx, sqlTx, tx.TransactionID)
 		if err != nil {
@@ -196,8 +200,30 @@ func (s *PaymentService) settle(ctx context.Context, tx *wxpay.Transaction, rawC
 		if err := s.stores.Registrations.ActivateTx(ctx, sqlTx, order.RegistrationID); err != nil {
 			return fmt.Errorf("报名单 %d 置为有效失败: %w", order.RegistrationID, err)
 		}
+		applied = true
+		registrationID = order.RegistrationID
+		settledAmount = tx.AmountTotal
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	// 事务提交后再记业务事件，避免回滚留下假日志。
+	// 请求内（回调/查单）由访问日志统一输出一行；后台任务直接输出事件行。
+	if applied {
+		source := "query"
+		if rawCallback != nil {
+			source = "notify"
+		}
+		logger.Event(ctx, "payment.settled", "支付成功已结账",
+			"order_no", tx.OutTradeNo,
+			"transaction_id", tx.TransactionID,
+			"amount", settledAmount,
+			"registration_id", registrationID,
+			"source", source,
+		)
+	}
+	return nil
 }
 
 // paidAtOf 取支付时间：优先微信 success_time（归一化到全库时区格式），

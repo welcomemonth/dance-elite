@@ -77,6 +77,13 @@ func (e *BizError) Error() string { return e.Message }
 // Unwrap 暴露底层错误，供 errors.Is/As 与日志链使用。
 func (e *BizError) Unwrap() error { return e.Cause }
 
+// WithCause 附加内部原因：只进日志（访问日志的 cause 字段），不返回前端。
+// 适用于参数绑定失败等"用户可见文案固定、但排障需要细节"的场景。
+func (e *BizError) WithCause(cause error) *BizError {
+	e.Cause = cause
+	return e
+}
+
 func newBiz(status, code int, msg string, cause error) *BizError {
 	return &BizError{Code: code, Message: msg, Status: status, Cause: cause}
 }
@@ -266,15 +273,12 @@ func HandleErrors() gin.HandlerFunc {
 			return
 		}
 		biz := Wrap(c.Errors[0].Err)
-		// Cause 只进日志：微信支付/数据库等底层细节不返回前端（API 文档 0.4），
-		// 排障时须能从服务端日志看到真实原因（如微信支付返回的 code/message）。
+		// 错误只记一次：把错误码/用户文案/内部原因注入请求字段，
+		// 由 AccessLog 按 HTTP 状态分级输出唯一一行（4xx=WARN，5xx=ERROR）。
+		// Cause 只进日志：微信支付/数据库等底层细节不返回前端（API 文档 0.4）。
+		logger.Add(c.Request.Context(), "error_code", biz.Code, "error", biz.Message)
 		if biz.Cause != nil {
-			logger.FromCtx(c.Request.Context()).Errorw("请求处理失败",
-				"method", c.Request.Method,
-				"path", c.Request.URL.Path,
-				"code", biz.Code,
-				"cause", biz.Cause,
-			)
+			logger.Add(c.Request.Context(), "cause", logger.RedactText(biz.Cause.Error()))
 		}
 		c.JSON(biz.Status, Response{Code: biz.Code, Message: biz.Message, Data: biz.Data})
 	}

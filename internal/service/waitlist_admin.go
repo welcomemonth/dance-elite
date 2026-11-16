@@ -10,6 +10,7 @@ import (
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 	"github.com/meetmonth/dance-elite/internal/store"
 	"github.com/meetmonth/dance-elite/internal/utils"
 )
@@ -156,6 +157,8 @@ func (s *WaitlistService) AdminConvert(ctx context.Context, adminID, waitlistID 
 	}
 	handledAt := utils.FormatISO(s.now())
 	var resp *model.AdminWaitlistActionResponse
+	converted := false
+	var waitlistEventID, waitlistGroupID int64
 	err := s.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		w, err := s.stores.Waitlists.GetTx(ctx, tx, waitlistID)
 		if err != nil {
@@ -205,10 +208,18 @@ func (s *WaitlistService) AdminConvert(ctx context.Context, adminID, waitlistID 
 			return httpx.ErrInternal(err, "记录操作日志失败，请稍后重试")
 		}
 		resp = &model.AdminWaitlistActionResponse{WaitlistID: waitlistID, Status: model.WaitlistStatusConverted}
+		converted = true
+		waitlistEventID = w.EventID
+		waitlistGroupID = w.GroupID
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if converted {
+		logger.Event(ctx, "waitlist.converted", "候补已确认转报名",
+			"waitlist_id", waitlistID, "order_no", orderNo,
+			"event_id", waitlistEventID, "group_id", waitlistGroupID)
 	}
 	return resp, nil
 }

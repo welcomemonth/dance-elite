@@ -64,11 +64,12 @@ func (s *StatusScheduler) RunOnce(ctx context.Context) {
 		cancel()
 		if err != nil {
 			if ctx.Err() == nil {
-				log.Warnw("定时任务执行失败", "job", job.Name(), "error", err,
+				logger.WarnEvent(ctx, "job.failed", "定时任务执行失败",
+					"job", job.Name(), "error", err,
 					"elapsed_ms", time.Since(start).Milliseconds())
 			}
 			continue
 		}
-		log.Debugw("定时任务执行完成", "job", job.Name(), "elapsed_ms", time.Since(start).Milliseconds())
+		log.Debugw("job.completed", "job", job.Name(), "elapsed_ms", time.Since(start).Milliseconds())
 	}
 }

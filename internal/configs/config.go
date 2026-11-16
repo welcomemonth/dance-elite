@@ -14,6 +14,11 @@ type Config struct {
 	DBPath    string
 	UploadDir string
 	PayMock   bool
+	// 日志（T36）：级别 debug/info/warn/error、格式 json/console；
+	// 未显式配置时随 DEBUG 推导（debug → debug+console，否则 info+json）。
+	LogLevel      string
+	LogFormat     string
+	SlowRequestMS int // 慢请求阈值（毫秒），超过时访问日志升为 WARN；0 表示关闭
 	// PublicBaseURL 是对外可访问的服务地址（如 https://api.example.com），
 	// 用于拼接音频审核等外链；为空时接口返回相对路径。
 	PublicBaseURL string

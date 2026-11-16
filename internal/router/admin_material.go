@@ -61,7 +61,7 @@ func (h *adminMaterialHandler) contacted(c *gin.Context) {
 	}
 	var req model.MarkMaterialContactedRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：note 不能超过 200 字"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：note 不能超过 200 字").WithCause(err))
 		return
 	}
 	resp, err := h.svc.MarkContacted(c.Request.Context(), adminID, registrationID, req.Note)

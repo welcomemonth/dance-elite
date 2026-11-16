@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 	"github.com/meetmonth/dance-elite/internal/store"
 )
 
@@ -59,7 +60,7 @@ func (j *EventStatusAdvancer) RunOnce(ctx context.Context) error {
 
 // advance 在单事务内按 CAS 更新赛事状态并写审计日志。
 func (j *EventStatusAdvancer) advance(ctx context.Context, eventID int64, from, to string) error {
-	return j.stores.WithTx(ctx, func(tx *sql.Tx) error {
+	err := j.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := j.stores.Events.TransitionStatus(ctx, tx, eventID, []string{from}, to); err != nil {
 			return err
 		}
@@ -67,4 +68,10 @@ func (j *EventStatusAdvancer) advance(ctx context.Context, eventID int64, from, 
 		return adminLog(ctx, j.stores, tx, nil, adminActionEventAutoTransition, &targetType, &eventID,
 			map[string]any{"from": from, "to": to})
 	})
+	if err != nil {
+		return err
+	}
+	logger.Event(ctx, "event.status.advanced", "赛事状态已自动流转",
+		"event_id", eventID, "from", from, "to", to)
+	return nil
 }

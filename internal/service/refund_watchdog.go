@@ -53,32 +53,35 @@ func (j *RefundWatchdog) RunOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log := logger.FromCtx(ctx)
 	settled, failed := 0, 0
 	for i := range tickets {
 		ticket := tickets[i]
 		result, err := j.query.QueryRefund(ctx, ticket.TicketNo)
 		if err != nil {
-			log.Warnw("退款单查询失败，本轮跳过", "ticket_no", ticket.TicketNo, "error", err)
+			logger.WarnEvent(ctx, "refund.query_failed", "退款单查询失败，本轮跳过",
+				"ticket_no", ticket.TicketNo, "error", err)
 			continue
 		}
 		switch result.RefundStatus {
 		case wxpay.RefundStatusSuccess:
 			if err := j.refunds.settleRefund(ctx, result, ""); err != nil {
-				log.Warnw("退款查单补结账失败", "ticket_no", ticket.TicketNo, "error", err)
+				logger.WarnEvent(ctx, "refund.settle_failed", "退款查单补结账失败",
+					"ticket_no", ticket.TicketNo, "error", err)
 				continue
 			}
 			settled++
 		case wxpay.RefundStatusClosed, wxpay.RefundStatusAbnormal:
 			if err := j.refunds.settleRefundFailure(ctx, result); err != nil {
-				log.Warnw("退款查单失败态落库失败", "ticket_no", ticket.TicketNo, "error", err)
+				logger.WarnEvent(ctx, "refund.record_failed", "退款查单失败态落库失败",
+					"ticket_no", ticket.TicketNo, "error", err)
 				continue
 			}
 			failed++
 		}
 	}
 	if len(tickets) > 0 {
-		log.Infow("退款看门狗巡检完成", "checked", len(tickets), "refunded", settled, "failed", failed)
+		logger.Event(ctx, "refund_watchdog.swept", "退款看门狗巡检完成",
+			"checked", len(tickets), "refunded", settled, "failed", failed)
 	}
 	return nil
 }

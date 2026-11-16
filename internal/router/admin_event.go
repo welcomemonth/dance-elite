@@ -41,7 +41,7 @@ func (h *adminSeasonHandler) list(c *gin.Context) {
 func (h *adminSeasonHandler) create(c *gin.Context) {
 	var req model.AdminSeasonRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：name 不能为空"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：name 不能为空").WithCause(err))
 		return
 	}
 	adminID, ok := middleware.GetAdminID(c)
@@ -66,7 +66,7 @@ func (h *adminSeasonHandler) update(c *gin.Context) {
 	}
 	var req model.AdminSeasonRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：name 不能为空"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：name 不能为空").WithCause(err))
 		return
 	}
 	adminID, ok := middleware.GetAdminID(c)
@@ -140,7 +140,7 @@ func (h *adminEventHandler) get(c *gin.Context) {
 func (h *adminEventHandler) create(c *gin.Context) {
 	var req model.AdminCreateEventRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：name/season_id/level/venue/event_date/fee/timeline/groups 必填"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：name/season_id/level/venue/event_date/fee/timeline/groups 必填").WithCause(err))
 		return
 	}
 	adminID, ok := middleware.GetAdminID(c)
@@ -164,7 +164,7 @@ func (h *adminEventHandler) update(c *gin.Context) {
 	}
 	var req model.AdminUpdateEventRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：name/level/venue/event_date/fee/timeline/groups 必填"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：name/level/venue/event_date/fee/timeline/groups 必填").WithCause(err))
 		return
 	}
 	adminID, ok := middleware.GetAdminID(c)
@@ -222,7 +222,7 @@ func (h *adminEventHandler) adjustQuota(c *gin.Context) {
 	}
 	var req model.AdminGroupQuotaRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Quota <= 0 {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：quota 必须为正整数"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：quota 必须为正整数").WithCause(err))
 		return
 	}
 	adminID, ok := middleware.GetAdminID(c)

@@ -103,6 +103,47 @@ func TestInvalidBoolEnvReturnsError(t *testing.T) {
 	}
 }
 
+// TestLogDefaultsFollowDebug 验证日志级别/格式未配置时随 DEBUG 推导。
+func TestLogDefaultsFollowDebug(t *testing.T) {
+	clearEnv(t, "DEBUG", "LOG_LEVEL", "LOG_FORMAT")
+
+	cfg, err := read()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if cfg.LogLevel != "info" || cfg.LogFormat != "json" {
+		t.Fatalf("prod defaults = %s/%s, want info/json", cfg.LogLevel, cfg.LogFormat)
+	}
+
+	t.Setenv("DEBUG", "true")
+	cfg, err = read()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if cfg.LogLevel != "debug" || cfg.LogFormat != "console" {
+		t.Fatalf("debug defaults = %s/%s, want debug/console", cfg.LogLevel, cfg.LogFormat)
+	}
+}
+
+// TestInvalidLogEnvRejected 验证非法日志配置启动即失败。
+func TestInvalidLogEnvRejected(t *testing.T) {
+	for _, key := range []string{"LOG_LEVEL", "LOG_FORMAT"} {
+		t.Run(key, func(t *testing.T) {
+			for k, v := range map[string]string{
+				"JWT_SECRET": "jwt", "ID_CARD_HMAC_KEY": "hmac",
+				"WECHAT_APPID": "wx", "WECHAT_SECRET": "secret", "ADMIN_INIT_PASSWORD": "pass",
+				"PAY_MOCK": "true", key: "invalid-value",
+			} {
+				t.Setenv(k, v)
+			}
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), key) {
+				t.Fatalf("Load error = %v, want invalid %s error", err, key)
+			}
+		})
+	}
+}
+
 func TestInvalidIntEnvReturnsError(t *testing.T) {
 	t.Setenv("JWT_EXPIRE_SECONDS", "two-hours")
 

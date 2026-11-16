@@ -19,7 +19,11 @@ func main() {
 		log.Fatalf("加载配置失败: %v", err)
 	}
 
-	if err := logger.Init(cfg.Debug); err != nil {
+	level, err := logger.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		log.Fatalf("解析日志级别失败: %v", err)
+	}
+	if err := logger.Init(logger.Options{Level: level, Format: cfg.LogFormat}); err != nil {
 		log.Fatalf("初始化日志失败: %v", err)
 	}
 	if !cfg.Debug {

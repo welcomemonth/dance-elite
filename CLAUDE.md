@@ -10,6 +10,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 - `docs/API接口设计.md` — 接口规范、错误码、三类端（小程序 `/api/v1`、后台 `/api/v1/admin`、H5 `/h5`）
 - `docs/数据库表结构设计.md` — ER 关系与设计决策（先读第 0 节）
 - `docs/优舞盟报名功能.md` — 报名流程与状态机、已确认的关键业务决策
+- `docs/日志规范.md` — 日志字段字典、错误分级、业务事件与脱敏规则（新增日志前必读）
 - `docs/小程序页面/优舞盟小程序页面与功能设计.md`、`docs/后台管理/优舞盟后台管理页面与功能设计.md`
 
 ## Tech Stack
@@ -49,7 +50,7 @@ bash scripts/build.sh && bash scripts/push-aliyun.sh
 docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容器 8090
 ```
 
-配置：无 YAML、无命令行参数。全部配置来自环境变量：本地开发由 godotenv 读取 `.env`（可选，已存在的环境变量优先），生产由容器运行时注入；必需项缺失直接 fail-fast。复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）。定时任务相关：`STATUS_TICK_SECONDS`（默认 60）、`ORDER_EXPIRE_MINUTES`（默认 15）、`REFUND_WATCHDOG_MINUTES`（默认 10），均须为正整数。
+配置：无 YAML、无命令行参数。全部配置来自环境变量：本地开发由 godotenv 读取 `.env`（可选，已存在的环境变量优先），生产由容器运行时注入；必需项缺失直接 fail-fast。复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）。定时任务相关：`STATUS_TICK_SECONDS`（默认 60）、`ORDER_EXPIRE_MINUTES`（默认 15）、`REFUND_WATCHDOG_MINUTES`（默认 10），均须为正整数。日志相关：`LOG_LEVEL`（debug/info/warn/error）、`LOG_FORMAT`（json/console），未设置时随 `DEBUG` 推导；`SLOW_REQUEST_MS`（默认 500，0 关闭慢请求告警）。
 
 ## Directory Structure
 
@@ -110,6 +111,7 @@ docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容�
 - 业务逻辑放 `internal/service/`，数据访问放 `internal/store/`；router/service/store 全部通过构造函数注入依赖，便于 httptest 与 fake 测试（参考 `internal/pkg/httpx/httpx_test.go`、`internal/store/migrate_test.go` 模式）。
 - 所有需要取消/超时控制的工作必须接受 `context.Context`；`server.Run` 用 ctx 驱动优雅关闭。
 - 错误用 `fmt.Errorf("...: %w", err)` 包装；用户可见错误信息清晰，细节用 zap 记录。业务代码不 panic。
+- 日志遵循 `docs/日志规范.md`：一次请求一行（`http.access`），错误经 `httpx.HandleErrors` 注入请求字段随访问日志输出；业务状态变更用 `logger.Event`（事务提交后），异常用 `WarnEvent`/`ErrorEvent`；请求内优先 `logger.Add` 注入字段，不逐函数打日志。
 - 使用 `gofmt`；代码注释与标识符用英文，用户可见文案可用中文。
 
 ## Development Mode（文件拆分与提交）

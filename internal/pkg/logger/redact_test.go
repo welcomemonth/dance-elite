@@ -28,6 +28,21 @@ func TestRedactText(t *testing.T) {
 			in:   "普通错误信息没有证件号",
 			want: "普通错误信息没有证件号",
 		},
+		{
+			name: "phone_embedded",
+			in:   "手机号 13812345678 无法接收验证码",
+			want: "手机号 138****5678 无法接收验证码",
+		},
+		{
+			name: "adjacent_phones",
+			in:   "13812345678,13912345678",
+			want: "138****5678,139****5678",
+		},
+		{
+			name: "order_no_not_treated_as_phone",
+			in:   "订单 202611162131598412345678 支付失败",
+			want: "订单 202611162131598412345678 支付失败",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

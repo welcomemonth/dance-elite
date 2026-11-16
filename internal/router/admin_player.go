@@ -37,7 +37,7 @@ func (h *adminPlayerHandler) merge(c *gin.Context) {
 	}
 	var req model.MergePlayerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：target_player_id 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：target_player_id 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Merge(c.Request.Context(), adminID, playerID, req.TargetPlayerID)

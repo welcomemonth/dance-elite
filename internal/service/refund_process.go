@@ -96,6 +96,12 @@ func (s *RefundService) Approve(ctx context.Context, adminID, ticketID int64, re
 	if err != nil {
 		return nil, err
 	}
+	logger.Event(ctx, "refund.initiated", "退款已受理",
+		"ticket_no", ticket.TicketNo,
+		"order_no", order.OrderNo,
+		"refund_id", result.RefundID,
+		"amount", amount,
+	)
 	return &model.ApproveRefundTicketResponse{
 		TicketNo:    ticket.TicketNo,
 		Status:      ticketStatus,
@@ -239,7 +245,7 @@ func (s *RefundService) recordRefundFailure(ctx context.Context, ticketID int64,
 			})
 	})
 	if err != nil {
-		logger.FromCtx(ctx).Errorw("退款失败状态回退落库失败，需人工核查",
+		logger.ErrorEvent(ctx, "refund.rollback_failed", "退款失败状态回退落库失败，需人工核查",
 			"ticket_id", ticketID, "error", err)
 	}
 }

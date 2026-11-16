@@ -34,6 +34,19 @@ func Load() (*Config, error) {
 	if cfg.RefundWatchdogMinutes <= 0 {
 		return nil, fmt.Errorf("环境变量 REFUND_WATCHDOG_MINUTES=%d 必须为正整数（分钟）", cfg.RefundWatchdogMinutes)
 	}
+	switch cfg.LogLevel {
+	case "debug", "info", "warn", "error":
+	default:
+		return nil, fmt.Errorf("环境变量 LOG_LEVEL=%q 不合法（可用 debug/info/warn/error）", cfg.LogLevel)
+	}
+	switch cfg.LogFormat {
+	case "json", "console":
+	default:
+		return nil, fmt.Errorf("环境变量 LOG_FORMAT=%q 不合法（可用 json/console）", cfg.LogFormat)
+	}
+	if cfg.SlowRequestMS < 0 {
+		return nil, fmt.Errorf("环境变量 SLOW_REQUEST_MS=%d 不能为负数（0 表示关闭慢请求告警）", cfg.SlowRequestMS)
+	}
 	return cfg, nil
 }
 
@@ -67,6 +80,25 @@ func read() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	slowRequestMS, err := envInt("SLOW_REQUEST_MS", 500)
+	if err != nil {
+		return nil, err
+	}
+	// 日志级别/格式未显式配置时随 DEBUG 推导，保持本地开发体验不变。
+	logLevel := strings.ToLower(strings.TrimSpace(envOr("LOG_LEVEL", "")))
+	if logLevel == "" {
+		logLevel = "info"
+		if debug {
+			logLevel = "debug"
+		}
+	}
+	logFormat := strings.ToLower(strings.TrimSpace(envOr("LOG_FORMAT", "")))
+	if logFormat == "" {
+		logFormat = "json"
+		if debug {
+			logFormat = "console"
+		}
+	}
 	wechatPayCert, wechatPayCertFile, err := secretValue("WECHAT_PAY_CERT", "WECHAT_PAY_CERT_FILE")
 	if err != nil {
 		return nil, err
@@ -82,6 +114,10 @@ func read() (*Config, error) {
 		DBPath:    envOr("DB_PATH", "data/dance-elite.db"),
 		UploadDir: envOr("UPLOAD_DIR", "uploads"),
 		PayMock:   payMock,
+
+		LogLevel:      logLevel,
+		LogFormat:     logFormat,
+		SlowRequestMS: slowRequestMS,
 
 		PublicBaseURL: os.Getenv("PUBLIC_BASE_URL"),
 

@@ -60,10 +60,10 @@ func (h *materialHandler) updateText(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			httpx.AbortError(c, httpx.ErrBadRequest("请求体过大"))
+			httpx.AbortError(c, httpx.ErrBadRequest("请求体过大").WithCause(err))
 			return
 		}
-		httpx.AbortError(c, httpx.ErrBadRequest("请求体格式错误：需为 JSON"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求体格式错误：需为 JSON").WithCause(err))
 		return
 	}
 

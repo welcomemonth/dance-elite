@@ -197,7 +197,7 @@ func (s *AdminAuthService) logLoginLocked(ctx context.Context, username string) 
 	})
 	if err != nil {
 		// 锁定日志是旁路审计，失败不阻断登录响应，但必须有迹可查。
-		logger.FromCtx(ctx).Warnw("write admin login_locked log", "error", err)
+		logger.WarnEvent(ctx, "admin.log_failed", "写管理员锁定审计日志失败", "error", err)
 	}
 }
 

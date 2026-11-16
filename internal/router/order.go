@@ -90,7 +90,7 @@ func (h *orderHandler) cancel(c *gin.Context) {
 	var req model.CancelOrderRequest
 	// 允许空请求体（小程序关闭收银台时可直接 POST 取消）。
 	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：reason 取值不合法"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：reason 取值不合法").WithCause(err))
 		return
 	}
 

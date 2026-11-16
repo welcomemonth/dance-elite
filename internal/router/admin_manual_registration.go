@@ -30,7 +30,7 @@ func (h *adminManualRegistrationHandler) create(c *gin.Context) {
 	}
 	var req model.ManualRegistrationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：event_id、group_id、player_name、id_card_no、contact_phone、charge_type 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：event_id、group_id、player_name、id_card_no、contact_phone、charge_type 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Create(c.Request.Context(), adminID, req)

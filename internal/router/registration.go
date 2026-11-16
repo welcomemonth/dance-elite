@@ -42,7 +42,7 @@ func (h *registrationHandler) submit(c *gin.Context) {
 
 	var req model.SubmitRegistrationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：player_name/id_card_no/dance_type/idempotency_key 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：player_name/id_card_no/dance_type/idempotency_key 为必填项").WithCause(err))
 		return
 	}
 

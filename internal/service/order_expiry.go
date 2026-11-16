@@ -78,13 +78,13 @@ func (j *OrderExpirySweeper) RunOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("查询超时待支付订单: %w", err)
 	}
-	log := logger.FromCtx(ctx)
 	canceled := 0
 	for i := range orders {
 		order := orders[i]
 		applied, err := j.payments.QueryAndApply(ctx, &order)
 		if err != nil {
-			log.Warnw("超时订单查单失败，本轮跳过", "order_no", order.OrderNo, "error", err)
+			logger.WarnEvent(ctx, "order.expire_check_failed", "超时订单查单失败，本轮跳过",
+				"order_no", order.OrderNo, "error", err)
 			continue
 		}
 		if applied {
@@ -92,14 +92,16 @@ func (j *OrderExpirySweeper) RunOnce(ctx context.Context) error {
 		}
 		if _, err := j.cancel.cancelPending(ctx, order.ID, model.OrderCancelReasonSystem); err != nil {
 			if !errors.Is(err, errOrderNotCancelable) {
-				log.Warnw("超时订单取消失败", "order_no", order.OrderNo, "error", err)
+				logger.WarnEvent(ctx, "order.cancel_failed", "超时订单取消失败",
+					"order_no", order.OrderNo, "error", err)
 			}
 			continue
 		}
 		canceled++
 	}
 	if len(orders) > 0 {
-		log.Infow("待支付订单超时回收完成", "checked", len(orders), "canceled", canceled)
+		logger.Event(ctx, "order_expiry.swept", "待支付订单超时回收完成",
+			"checked", len(orders), "canceled", canceled)
 	}
 	return nil
 }

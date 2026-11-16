@@ -27,6 +27,9 @@ func RequestID() gin.HandlerFunc {
 		// 经 logger.FromCtx 取出的日志自动带 request_id，无需手动传字段。
 		ctx := logger.Ctx(c.Request.Context(),
 			logger.FromCtx(c.Request.Context()).With("request_id", id))
+		// 请求级字段累加器：认证/路由/service 用 logger.Add 补充 user_id、
+		// order_no 等上下文，AccessLog 统一输出成一行。
+		ctx = logger.WithRequestFields(ctx)
 		c.Request = c.Request.WithContext(ctx)
 
 		c.Next()

@@ -29,7 +29,7 @@ func registerAuthRoutes(group *gin.RouterGroup, svc *service.AuthService, signer
 func (h *authHandler) wxLogin(c *gin.Context) {
 	var req model.WxLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：code 不能为空"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：code 不能为空").WithCause(err))
 		return
 	}
 	resp, err := h.svc.WxLogin(c.Request.Context(), req)
@@ -43,7 +43,7 @@ func (h *authHandler) wxLogin(c *gin.Context) {
 func (h *authHandler) bindPhone(c *gin.Context) {
 	var req model.BindPhoneRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：phone_code 不能为空"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：phone_code 不能为空").WithCause(err))
 		return
 	}
 	userID, ok := middleware.GetUserID(c)

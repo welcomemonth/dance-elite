@@ -53,7 +53,7 @@ func (h *adminCSTicketHandler) create(c *gin.Context) {
 	}
 	var req model.CreateCSTicketRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：type、phone、content 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：type、phone、content 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Create(c.Request.Context(), adminID, req)
@@ -77,7 +77,7 @@ func (h *adminCSTicketHandler) update(c *gin.Context) {
 	}
 	var req model.UpdateCSTicketRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：status 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：status 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Update(c.Request.Context(), adminID, ticketID, req)

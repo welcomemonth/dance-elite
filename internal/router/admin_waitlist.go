@@ -57,7 +57,7 @@ func (h *adminWaitlistHandler) notify(c *gin.Context) {
 	}
 	var req model.AdminWaitlistNotifyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：note 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：note 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.AdminNotify(c.Request.Context(), adminID, waitlistID, req.Note)
@@ -76,7 +76,7 @@ func (h *adminWaitlistHandler) remove(c *gin.Context) {
 	}
 	var req model.AdminWaitlistRemoveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：reason 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：reason 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.AdminRemove(c.Request.Context(), adminID, waitlistID, req.Reason)
@@ -95,7 +95,7 @@ func (h *adminWaitlistHandler) convert(c *gin.Context) {
 	}
 	var req model.AdminWaitlistConvertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：order_no 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：order_no 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.AdminConvert(c.Request.Context(), adminID, waitlistID, req.OrderNo)

@@ -31,7 +31,7 @@ func (s *RefundService) HandleRefundNotify(ctx context.Context, headers wxpay.No
 	case wxpay.RefundStatusClosed, wxpay.RefundStatusAbnormal:
 		return s.settleRefundFailure(ctx, result)
 	default:
-		logger.FromCtx(ctx).Warnw("未知的微信退款状态，已忽略",
+		logger.WarnEvent(ctx, "refund.status_unknown", "未知的微信退款状态，已忽略",
 			"refund_id", result.RefundID, "status", result.RefundStatus)
 		return nil
 	}
@@ -42,7 +42,9 @@ func (s *RefundService) settleRefund(ctx context.Context, result *wxpay.RefundNo
 	if result.RefundID == "" || result.OutRefundNo == "" {
 		return fmt.Errorf("退款回调缺少 refund_id/out_refund_no")
 	}
-	return s.stores.WithTx(ctx, func(tx *sql.Tx) error {
+	applied := false
+	var orderNo string
+	err := s.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		ticket, err := s.stores.RefundTickets.GetByTicketNoTx(ctx, tx, result.OutRefundNo)
 		if errors.Is(err, store.ErrNotFound) {
 			return fmt.Errorf("退款回调对应的工单不存在（out_refund_no=%s）", result.OutRefundNo)
@@ -97,6 +99,8 @@ func (s *RefundService) settleRefund(ctx context.Context, result *wxpay.RefundNo
 		if err := s.completeRefundPaymentTx(ctx, tx, order.ID, result, raw, notifiedAt); err != nil {
 			return err
 		}
+		applied = true
+		orderNo = order.OrderNo
 		return adminLog(ctx, s.stores, tx, nil, adminActionRefundNotify,
 			strPtr("refund_ticket"), &ticket.ID, map[string]any{
 				"ticket_no":    ticket.TicketNo,
@@ -106,6 +110,19 @@ func (s *RefundService) settleRefund(ctx context.Context, result *wxpay.RefundNo
 				"order_status": model.OrderStatusRefunded,
 			})
 	})
+	if err != nil {
+		return err
+	}
+	// 事务提交后再记事件；请求内并入访问日志，看门狗补结账时单独成行。
+	if applied {
+		logger.Event(ctx, "refund.settled", "退款已完成",
+			"ticket_no", result.OutRefundNo,
+			"order_no", orderNo,
+			"refund_id", result.RefundID,
+			"amount", result.RefundAmount,
+		)
+	}
+	return nil
 }
 
 // completeRefundPaymentTx 写入/补齐退款流水（按 refund_id 幂等）。
@@ -133,10 +150,12 @@ func (s *RefundService) completeRefundPaymentTx(ctx context.Context, tx *sql.Tx,
 // settleRefundFailure 处理退款关闭/异常回调：工单 refund_failed、订单回退 paid，
 // 流水标记失败，供管理员重试或人工核查。
 func (s *RefundService) settleRefundFailure(ctx context.Context, result *wxpay.RefundNotifyResult) error {
-	return s.stores.WithTx(ctx, func(tx *sql.Tx) error {
+	applied := false
+	var ticketNo, orderNo string
+	err := s.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		ticket, err := s.stores.RefundTickets.GetByTicketNoTx(ctx, tx, result.OutRefundNo)
 		if errors.Is(err, store.ErrNotFound) {
-			logger.FromCtx(ctx).Warnw("退款失败回调对应的工单不存在，已忽略",
+			logger.WarnEvent(ctx, "refund.ticket_missing", "退款失败回调对应的工单不存在，已忽略",
 				"out_refund_no", result.OutRefundNo)
 			return nil
 		}
@@ -172,6 +191,9 @@ func (s *RefundService) settleRefundFailure(ctx context.Context, result *wxpay.R
 				}
 			}
 		}
+		applied = true
+		ticketNo = ticket.TicketNo
+		orderNo = order.OrderNo
 		return adminLog(ctx, s.stores, tx, nil, adminActionRefundFailed,
 			strPtr("refund_ticket"), &ticket.ID, map[string]any{
 				"ticket_no": ticket.TicketNo,
@@ -180,6 +202,18 @@ func (s *RefundService) settleRefundFailure(ctx context.Context, result *wxpay.R
 				"status":    result.RefundStatus,
 			})
 	})
+	if err != nil {
+		return err
+	}
+	if applied {
+		logger.Event(ctx, "refund.failed", "退款失败",
+			"ticket_no", ticketNo,
+			"order_no", orderNo,
+			"refund_id", result.RefundID,
+			"status", result.RefundStatus,
+		)
+	}
+	return nil
 }
 
 // isRefundSettleable 判断工单是否可被成功回调完成。

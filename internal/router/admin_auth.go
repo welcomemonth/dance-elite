@@ -30,7 +30,7 @@ func registerAdminAuthRoutes(group *gin.RouterGroup, svc *service.AdminAuthServi
 func (h *adminAuthHandler) login(c *gin.Context) {
 	var req model.AdminLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：username 和 password 不能为空"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：username 和 password 不能为空").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Login(c.Request.Context(), req)
@@ -44,7 +44,7 @@ func (h *adminAuthHandler) login(c *gin.Context) {
 func (h *adminAuthHandler) changePassword(c *gin.Context) {
 	var req model.AdminChangePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：old_password/new_password 必填且新密码至少 8 位"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：old_password/new_password 必填且新密码至少 8 位").WithCause(err))
 		return
 	}
 	adminID, ok := middleware.GetAdminID(c)

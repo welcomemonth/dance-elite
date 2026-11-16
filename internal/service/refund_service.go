@@ -12,6 +12,7 @@ import (
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 	"github.com/meetmonth/dance-elite/internal/pkg/wxpay"
 	"github.com/meetmonth/dance-elite/internal/store"
 	"github.com/meetmonth/dance-elite/internal/utils"
@@ -68,6 +69,7 @@ func (s *RefundService) CreateTicket(ctx context.Context, adminID int64, req mod
 	}
 
 	var resp *model.CreateRefundTicketResponse
+	var amount int64
 	err := s.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		order, err := s.stores.Orders.GetByOrderNoTx(ctx, tx, orderNo)
 		if errors.Is(err, store.ErrNotFound) {
@@ -121,11 +123,17 @@ func (s *RefundService) CreateTicket(ctx context.Context, adminID int64, req mod
 			TicketNo: ticketNo,
 			Status:   model.RefundTicketStatusPending,
 		}
+		amount = order.Amount
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	logger.Event(ctx, "refund.requested", "退款工单已登记",
+		"ticket_no", resp.TicketNo,
+		"order_no", orderNo,
+		"amount", amount,
+	)
 	return resp, nil
 }
 

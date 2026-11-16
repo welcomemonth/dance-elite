@@ -91,7 +91,7 @@ func (h *adminUserContentHandler) putContent(c *gin.Context) {
 		Value map[string]any `json:"value" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：value 为必填 JSON 对象"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：value 为必填 JSON 对象").WithCause(err))
 		return
 	}
 	resp, err := h.contents.Put(c.Request.Context(), actorID, c.Param("key"), req.Value)

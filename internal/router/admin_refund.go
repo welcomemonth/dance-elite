@@ -91,7 +91,7 @@ func (h *adminRefundHandler) create(c *gin.Context) {
 	}
 	var req model.CreateRefundTicketRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：order_no 与 reason 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：order_no 与 reason 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.CreateTicket(c.Request.Context(), adminID, req)
@@ -110,7 +110,7 @@ func (h *adminRefundHandler) approve(c *gin.Context) {
 	}
 	var req model.ApproveRefundTicketRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：amount 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：amount 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Approve(c.Request.Context(), adminID, ticketID, req)
@@ -129,7 +129,7 @@ func (h *adminRefundHandler) reject(c *gin.Context) {
 	}
 	var req model.RejectRefundTicketRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：reject_reason 为必填项"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：reject_reason 为必填项").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Reject(c.Request.Context(), adminID, ticketID, req)

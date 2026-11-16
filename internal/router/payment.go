@@ -62,13 +62,15 @@ func (h *refundNotifyHandler) wechatRefundNotify(c *gin.Context) {
 		Serial:    c.GetHeader("Wechatpay-Serial"),
 	}
 	if err := h.svc.HandleRefundNotify(c.Request.Context(), headers, body); err != nil {
-		l := logger.FromCtx(c.Request.Context())
+		ctx := c.Request.Context()
 		if errors.Is(err, wxpay.ErrInvalidNotify) {
-			l.Warnw("微信退款回调验签失败", "err", err)
+			logger.Add(ctx, "error_code", httpx.CodeUnauthorized)
+			logger.WarnEvent(ctx, "refund.notify_rejected", "微信退款回调验签失败", "error", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"code": "FAIL", "message": "签名验证失败"})
 			return
 		}
-		l.Errorw("微信退款回调处理失败", "err", err)
+		logger.Add(ctx, "error_code", httpx.CodeInternal)
+		logger.ErrorEvent(ctx, "refund.notify_failed", "微信退款回调处理失败", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"code": "FAIL", "message": "处理失败"})
 		return
 	}
@@ -92,17 +94,20 @@ func (h *paymentHandler) wechatNotify(c *gin.Context) {
 	}
 
 	if err := h.svc.HandleNotify(c.Request.Context(), headers, body); err != nil {
-		l := logger.FromCtx(c.Request.Context())
+		ctx := c.Request.Context()
 		if errors.Is(err, wxpay.ErrInvalidNotify) {
-			l.Warnw("微信支付回调验签失败", "err", err)
+			logger.Add(ctx, "error_code", httpx.CodeUnauthorized)
+			logger.WarnEvent(ctx, "payment.notify_rejected", "微信支付回调验签失败", "error", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"code": "FAIL", "message": "签名验证失败"})
 			return
 		}
 		if errors.Is(err, service.ErrPaymentAmountMismatch) {
 			// 金额不一致属于高风险事件：拒绝并告警，人工核查。
-			l.Errorw("微信支付回调金额不一致，已拒绝", "err", err)
+			logger.Add(ctx, "error_code", httpx.CodeInternal)
+			logger.ErrorEvent(ctx, "payment.amount_mismatch", "微信支付回调金额不一致，已拒绝", "error", err)
 		} else {
-			l.Errorw("微信支付回调处理失败", "err", err)
+			logger.Add(ctx, "error_code", httpx.CodeInternal)
+			logger.ErrorEvent(ctx, "payment.notify_failed", "微信支付回调处理失败", "error", err)
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"code": "FAIL", "message": "处理失败"})
 		return

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/meetmonth/dance-elite/internal/model"
+	"github.com/meetmonth/dance-elite/internal/pkg/logger"
 	"github.com/meetmonth/dance-elite/internal/store"
 	"github.com/meetmonth/dance-elite/internal/utils"
 )
@@ -37,6 +38,9 @@ func newOrderCanceler(stores *store.Store) *orderCanceler {
 // 报名单或名额计数不一致属数据异常，整事务回滚。
 func (c *orderCanceler) cancelPending(ctx context.Context, orderID int64, reason string) (*model.Order, error) {
 	var out *model.Order
+	// canceled 仅在本次真正推进状态时为 true；幂等重复取消不重复记事件。
+	canceled := false
+	var registrationID, eventID int64
 	err := c.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		order, err := c.stores.Orders.GetTx(ctx, tx, orderID)
 		if err != nil {
@@ -87,10 +91,23 @@ func (c *orderCanceler) cancelPending(ctx context.Context, orderID int64, reason
 		order.CancelReason = &reason
 		order.CanceledAt = &canceledAt
 		out = order
+		canceled = true
+		registrationID = registration.ID
+		eventID = registration.EventID
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	if canceled {
+		// 事务提交后再记事件：请求内并入访问日志，后台任务（超时回收）单独成行。
+		logger.Event(ctx, "order.canceled", "订单已取消并释放名额",
+			"order_no", out.OrderNo,
+			"reason", reason,
+			"amount", out.Amount,
+			"registration_id", registrationID,
+			"event_id", eventID,
+		)
 	}
 	return out, nil
 }

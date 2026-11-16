@@ -52,6 +52,9 @@ type Deps struct {
 	// /static/materials、/static/avatars 映射到磁盘对应目录（T13）。
 	UploadDir string
 
+	// SlowRequestMS 是慢请求阈值（毫秒），超过时访问日志升为 WARN；0 用默认值。
+	SlowRequestMS int
+
 	// WebAssets 是内嵌的前端构建产物根目录（internal/web）。非空时在根路径
 	// 托管后台管理端与音频审核 H5，并对页面导航回退 index.html。
 	WebAssets fs.FS
@@ -69,7 +72,9 @@ func New(deps Deps) *gin.Engine {
 	engine := gin.New()
 
 	// 全局中间件：Recovery -> RequestID -> AccessLog -> 统一错误渲染
-	engine.Use(middleware.Recovery(), middleware.RequestID(), middleware.AccessLog(), httpx.HandleErrors())
+	engine.Use(middleware.Recovery(), middleware.RequestID(),
+		middleware.AccessLog(middleware.AccessLogOptions{SlowRequestMS: deps.SlowRequestMS}),
+		httpx.HandleErrors())
 
 	api := engine.Group("/api/v1")
 

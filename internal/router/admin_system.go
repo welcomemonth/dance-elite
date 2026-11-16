@@ -51,7 +51,7 @@ func (h *adminSystemHandler) createAccount(c *gin.Context) {
 	}
 	var req model.CreateAdminRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：username/password/role/name 均为必填"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：username/password/role/name 均为必填").WithCause(err))
 		return
 	}
 	resp, err := h.accounts.Create(c.Request.Context(), actorID, req)
@@ -76,7 +76,7 @@ func (h *adminSystemHandler) updateAccount(c *gin.Context) {
 	}
 	var req model.UpdateAdminRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误"))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误").WithCause(err))
 		return
 	}
 	resp, err := h.accounts.Update(c.Request.Context(), actorID, adminID, req)
