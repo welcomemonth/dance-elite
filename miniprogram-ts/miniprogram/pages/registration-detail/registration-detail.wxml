@@ -1,0 +1,108 @@
+<view class="app-page detail-page">
+  <nav-bar title="报名详情" bg="#fffdf8" />
+
+  <view wx:if="{{loading && !detail}}" class="app-loading">正在加载报名详情…</view>
+
+  <empty-state
+    wx:if="{{!loading && !detail}}"
+    text="{{loadError || '报名不存在或无权查看'}}"
+    show-retry="{{true}}"
+    bind:retry="emptyState_retry"
+  />
+
+  <block wx:if="{{detail}}">
+    <view class="status-card {{statusClass}}">
+      <view class="app-tag app-tag--{{statusTone}}">{{statusLabel}}</view>
+      <view class="status-card__desc">{{detail.status_desc}}</view>
+      <view wx:if="{{detail.refund}}" class="status-card__refund">
+        退款工单 {{detail.refund.ticket_no}} · {{detail.refund.reason || '已登记'}}
+      </view>
+      <view wx:if="{{editable && missingCount > 0}}" class="status-card__action">
+        <button class="app-btn" bind:tap="onUploadTap">去上传资料</button>
+      </view>
+    </view>
+
+    <view class="detail-section">
+      <view class="detail-section__title">报名信息</view>
+      <view class="info-list">
+        <view class="info-row">
+          <text class="info-row__label">赛事</text>
+          <text class="info-row__value">{{detail.event.name}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-row__label">组别 / 舞种</text>
+          <text class="info-row__value">{{detail.level_group}} / {{danceText}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-row__label">比赛日期</text>
+          <text class="info-row__value">{{dateText}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-row__label">选手姓名</text>
+          <text class="info-row__value">{{detail.player_name}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-row__label">机构</text>
+          <text class="info-row__value">{{institutionText}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-row__label">订单号</text>
+          <text class="info-row__value info-row__value--mono">{{detail.order_no}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-row__label">支付金额</text>
+          <text class="info-row__value">{{amountText}}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-row__label">支付时间</text>
+          <text class="info-row__value">{{paidAtText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="detail-section detail-section--materials">
+      <view class="detail-note">
+        资料请在截止前上传；不上传不影响参赛。截止后资料整体只读，无法再修改。
+      </view>
+
+      <view class="section-heading">
+        <text class="section-heading__title">参赛资料</text>
+        <text class="section-heading__summary">{{materialSummaryText}}</text>
+      </view>
+
+      <view class="material-list">
+        <view
+          wx:for="{{materialRows}}"
+          wx:key="key"
+          class="material-row"
+          bind:tap="onMaterialTap"
+        >
+          <view class="material-check {{item.uploaded ? 'material-check--done' : ''}}">
+            <image
+              wx:if="{{item.uploaded}}"
+              class="material-check__icon"
+              src="/assets/icons/check-dark.svg"
+            />
+          </view>
+          <view class="material-body">
+            <view class="material-body__label">{{item.label}}</view>
+            <view class="material-body__value">{{item.value || '未上传'}}</view>
+          </view>
+          <text wx:if="{{editable}}" class="material-row__action">
+            {{item.uploaded ? '修改' : '上传'}}
+          </text>
+        </view>
+      </view>
+
+      <view wx:if="{{editable}}" class="materials-actions">
+        <button class="app-btn app-btn--primary" bind:tap="onUploadTap">上传 / 修改资料</button>
+      </view>
+      <view class="materials-actions">
+        <button class="app-btn" open-type="contact">
+          <image class="app-btn__icon" src="/assets/icons/phone.svg" />
+          联系客服
+        </button>
+      </view>
+    </view>
+  </block>
+</view>

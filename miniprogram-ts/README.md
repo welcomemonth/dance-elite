@@ -45,10 +45,11 @@ miniprogram-ts/
 │   ├── inject.ts                      # instanceConfig 全局注入 + IInjectInfo 类型增强
 │   ├── config/env.ts                  # 运行环境与 API 地址
 │   ├── types/                         # 响应包装、错误码、领域模型
-│   ├── utils/                         # request / session / cache / paged-list / format / upload / media
-│   ├── api/                           # 按模块拆分的接口函数（auth / events / registrations / orders）
+│   ├── utils/                         # request / session / cache / paged-list / format / upload / media / registration
+│   ├── api/                           # 按模块拆分的接口函数（auth / events / registrations / orders / waitlists）
 │   ├── store/                         # MobX 全局状态
 │   ├── assets/icons/                  # 导航与 tabBar SVG 图标
+│   ├── assets/avatar/avatar.png       # 无微信头像时的默认头像
 │   ├── components/nav-bar/            # 自定义导航栏（状态栏 + 胶囊避让）
 │   ├── custom-tab-bar/                # 3 Tab 自定义 tabBar（中间排行榜大入口）
 │   ├── components/empty-state/        # 自定义组件示例（props + customEvents）
@@ -57,8 +58,14 @@ miniprogram-ts/
 │       ├── event-detail/              # 赛事详情 + 时间线 + 组别名额
 │       ├── register/                  # 报名表单 + 支付
 │       ├── register-success/          # 报名成功
-│       ├── ranking/                   # Tab2：榜单占位（T30 前）
-│       ├── mine/                      # Tab3：我的（登录态 + 菜单）
+│       ├── ranking/                   # Tab2：榜单占位（T30 前）+ 规则入口
+│       ├── mine/                      # Tab3：我的（用户信息 / 资料提醒 / 菜单）
+│       ├── registrations/             # 我的报名列表（全部 / 进行中 / 退款记录）
+│       ├── registration-detail/       # 报名详情 + 资料清单
+│       ├── materials/                 # 参赛资料编辑（证件照 / 音频 / 文本）
+│       ├── waitlists/                 # 我的候补
+│       ├── follow/                    # 关注公众号
+│       ├── rules/                     # 积分与赛事规则
 │       ├── home/                      # 模板能力示例
 │       └── list-demo/                 # 下拉刷新 + 上拉加载示例
 ├── typings/index.d.ts                 # IAppOption 等全局声明
@@ -169,8 +176,14 @@ const result = await uploadFile<{ url: string }>({
 | 赛事详情 | `pages/event-detail/event-detail` | 时间线、组别名额、费用规则、荣誉奖金 |
 | 报名表单 | `pages/register/register` | 真实提交报名 → 预下单 → 微信支付（mock 通道见下） |
 | 报名成功 | `pages/register-success/register-success` | 订单号、组别、金额、资料截止 |
-| 排行榜 | `pages/ranking/ranking` | Tab2；T30 前占位，不接旧 JSON |
-| 我的 | `pages/mine/mine` | Tab3；登录态与菜单骨架 |
+| 排行榜 | `pages/ranking/ranking` | Tab2；T30 前占位，不接旧 JSON；底部「积分与赛事规则说明」入口 |
+| 我的 | `pages/mine/mine` | Tab3；用户信息 / 手机号绑定 / 资料待办提醒 / 菜单角标（真实接口） |
+| 我的报名 | `pages/registrations/registrations` | 全部 / 进行中 / 退款记录筛选，状态标签与资料完成度 |
+| 报名详情 | `pages/registration-detail/registration-detail` | 状态卡、报名与支付信息、退款信息、8 项资料清单 |
+| 资料编辑 | `pages/materials/materials` | 证件照 / 音频即时上传，文本分次保存，截止后只读 |
+| 我的候补 | `pages/waitlists/waitlists` | 候补状态与排队位置，排队中可自助取消 |
+| 关注公众号 | `pages/follow/follow` | 二维码占位与关注说明 |
+| 积分与赛事规则 | `pages/rules/rules` | 我的 / 排行榜入口共用 |
 
 导航：`app.json` 使用 `custom: true` 的 tabBar，组件位于 `miniprogram/custom-tab-bar/`；页面使用 `navigationStyle: "custom"` + `components/nav-bar`。
 

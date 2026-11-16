@@ -1,0 +1,19 @@
+<view class="app-page rules-page">
+  <nav-bar title="积分与赛事规则" bg="#fffdf8" />
+
+  <view class="rules-hero">
+    <view class="rules-hero__kicker">RULE BOOK</view>
+    <view class="rules-hero__title">让规则清晰，</view>
+    <view class="rules-hero__title">让每一分都有依据。</view>
+  </view>
+
+  <view class="rules-body">
+    <view wx:for="{{sections}}" wx:key="title" class="rule-section">
+      <view class="rule-section__index">0{{index + 1}}</view>
+      <view class="rule-section__content">
+        <view class="rule-section__title">{{item.title}}</view>
+        <view class="rule-section__text">{{item.text}}</view>
+      </view>
+    </view>
+  </view>
+</view>

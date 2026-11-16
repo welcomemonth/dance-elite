@@ -1,0 +1,56 @@
+<view class="app-page list-page">
+  <nav-bar title="我的报名" bg="#fffdf8" />
+
+  <view class="filter-bar">
+    <view
+      wx:for="{{filters}}"
+      wx:key="value"
+      class="filter-bar__item {{item.value === filter ? 'filter-bar__item--active' : ''}}"
+      data-value="{{item.value}}"
+      bind:tap="onFilterTap"
+    >
+      {{item.label}}
+    </view>
+  </view>
+
+  <view class="reg-list">
+    <view
+      wx:for="{{rows}}"
+      wx:key="registration_id"
+      class="reg-card"
+      data-id="{{item.registration_id}}"
+      bind:tap="onOpen"
+      hover-class="reg-card--hover"
+    >
+      <view class="reg-card__top">
+        <view class="app-tag">{{item.levelText}}</view>
+        <view class="app-tag app-tag--{{item.statusTone}}">{{item.statusLabel}}</view>
+      </view>
+
+      <view class="reg-card__title">{{item.event_name}}</view>
+      <view class="reg-card__meta">{{item.dateText}} · {{item.level_group}} {{item.danceText}}</view>
+
+      <view class="reg-card__bottom">
+        <text class="reg-card__player">选手：<text class="reg-card__strong">{{item.player_name}}</text></text>
+        <text class="reg-card__material {{item.materialText === '资料已齐' ? 'reg-card__material--done' : ''}}">
+          {{item.materialText}}
+        </text>
+      </view>
+    </view>
+
+    <view wx:if="{{loadError}}" class="app-error">{{loadError}}</view>
+
+    <view wx:if="{{loading && rows.length === 0}}" class="app-loading">正在加载报名…</view>
+
+    <empty-state
+      wx:if="{{isEmpty}}"
+      text="{{loadError ? '报名加载失败，请重试' : '暂无报名记录，去赛事列表挑一场吧'}}"
+      show-retry="{{!!loadError}}"
+      bind:retry="emptyState_retry"
+    />
+  </view>
+
+  <view class="list-note">
+    小程序端无自助退款按钮。如需退款，请在「我的 - 联系我们」中联系客服登记。
+  </view>
+</view>

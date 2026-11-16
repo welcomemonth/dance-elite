@@ -6,6 +6,12 @@
     "pages/event-detail/event-detail",
     "pages/register/register",
     "pages/register-success/register-success",
+    "pages/registrations/registrations",
+    "pages/registration-detail/registration-detail",
+    "pages/materials/materials",
+    "pages/waitlists/waitlists",
+    "pages/follow/follow",
+    "pages/rules/rules",
     "pages/home/home",
     "pages/list-demo/list-demo"
   ],

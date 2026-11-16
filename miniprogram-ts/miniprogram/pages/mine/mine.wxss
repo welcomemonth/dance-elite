@@ -2,30 +2,33 @@
   padding-bottom: calc(220rpx + env(safe-area-inset-bottom));
 }
 
-.mine-hero {
-  padding: 40rpx 32rpx 24rpx;
+.mine-kicker {
+  color: #121217;
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
 }
 
-.mine-card {
-  display: flex;
-  align-items: center;
-  gap: 24rpx;
-  padding: 32rpx;
-  border: 2rpx solid #121217;
+.mine-hero {
+  padding: 40rpx 48rpx 48rpx;
+  border-bottom: 2rpx solid #121217;
   background: #ffc233;
 }
 
-.mine-avatar {
+.mine-hero__row {
   display: flex;
-  flex-shrink: 0;
   align-items: center;
-  justify-content: center;
-  width: 104rpx;
-  height: 104rpx;
+  gap: 32rpx;
+  margin-top: 48rpx;
+}
+
+.mine-avatar {
+  flex-shrink: 0;
+  width: 88rpx;
+  height: 88rpx;
   border: 2rpx solid #121217;
-  background: #ffffff;
-  font-size: 44rpx;
-  font-weight: 700;
+  border-radius: 50%;
+  background: #eadfff;
 }
 
 .mine-info {
@@ -35,73 +38,201 @@
 
 .mine-name {
   overflow: hidden;
-  font-size: 36rpx;
+  font-size: 48rpx;
   font-weight: 700;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.mine-player-no {
-  margin-top: 6rpx;
-  font-size: 22rpx;
+.mine-phone {
+  display: inline-block;
+  width: auto !important;
+  margin: 8rpx 0 0 !important;
+  padding: 0 !important;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 6rpx;
 }
 
-.mine-login {
-  flex-shrink: 0;
-  min-width: 120rpx;
-  height: 64rpx;
-  padding: 0 20rpx;
-  border: 2rpx solid #121217;
-  background: #121217;
+.mine-info button.mine-phone {
+  width: auto !important;
+  margin: 8rpx 0 0 !important;
+  padding: 0 !important;
+}
+
+.mine-phone::after {
+  border: none;
+}
+
+.reminder {
+  display: flex;
+  align-items: center;
+  gap: 32rpx;
+  padding: 40rpx;
+  border-bottom: 2rpx solid #121217;
+  background: #5423e7;
   color: #ffffff;
-  font-size: 24rpx;
+}
+
+.reminder--hover {
+  opacity: 0.92;
+}
+
+.reminder__icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  border: 2rpx solid #ffffff;
+  background: #ffc233;
+}
+
+.reminder__icon-image {
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.reminder__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.reminder__title {
+  font-size: 32rpx;
   font-weight: 700;
-  line-height: 60rpx;
+  line-height: 1.4;
 }
 
-.mine-logout {
-  margin-top: 16rpx;
-  color: #6c6c89;
-  font-size: 22rpx;
-  text-align: right;
+.reminder__hint {
+  margin-top: 8rpx;
+  overflow: hidden;
+  font-size: 24rpx;
+  opacity: 0.75;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.mine-menu {
-  margin: 24rpx 32rpx 0;
-  border: 2rpx solid #121217;
-  background: #fffdf8;
+.reminder__action {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.mine-body {
+  padding: 40rpx;
+}
+
+.mine-body__kicker {
+  margin-top: 64rpx;
+}
+
+.menu {
+  margin-top: 24rpx;
+  border-top: 2rpx solid #121217;
+  border-bottom: 2rpx solid #121217;
 }
 
 .menu-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 30rpx 28rpx;
-  border-bottom: 2rpx solid rgba(18, 18, 23, 0.12);
-  font-size: 28rpx;
-}
-
-.menu-row:last-child {
-  border-bottom: none;
-}
-
-.menu-row--button {
+  gap: 24rpx;
   width: 100%;
+  padding: 32rpx 0;
+  border-bottom: 2rpx solid rgba(18, 18, 23, 0.15);
   text-align: left;
 }
 
+.menu > .menu-row:last-child {
+  border-bottom: none;
+}
+
+.menu-row__icon {
+  flex-shrink: 0;
+  width: 40rpx;
+  height: 40rpx;
+}
+
 .menu-row__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 32rpx;
   font-weight: 700;
 }
 
-.menu-row__arrow {
-  width: 32rpx;
-  height: 32rpx;
+.menu-row__badge {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 48rpx;
+  height: 40rpx;
+  padding: 0 8rpx;
+  background: #ffc233;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1;
 }
 
-.mine-footer {
-  margin-top: 48rpx;
+.menu-row__arrow {
+  flex-shrink: 0;
+  width: 34rpx;
+  height: 34rpx;
+}
+
+/* open-type="contact" 必须用 button，外层按钮只做透明容器。
+   微信 style:v2 的 button:not([size='mini']) 自带 width:184px + margin:auto，
+   优先级高于普通类选择器，因此这里用更高优先级 + !important 覆盖。 */
+.menu button.menu-button {
+  display: block;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  overflow: visible;
+}
+
+.menu button.menu-button::after {
+  border: none !important;
+}
+
+.brand-card {
+  margin-top: 64rpx;
+  padding: 40rpx;
+  border: 2rpx solid #121217;
+  background: #fffdf8;
+}
+
+.brand-card__title {
+  font-size: 24rpx;
+  font-weight: 700;
+  letter-spacing: 3rpx;
+}
+
+.brand-card__desc {
+  margin-top: 24rpx;
   color: #6c6c89;
-  font-size: 22rpx;
-  text-align: center;
+  font-size: 28rpx;
+  line-height: 1.7;
+}
+
+.brand-card__version {
+  margin-top: 40rpx;
+  color: #6c6c89;
+  font-size: 24rpx;
 }

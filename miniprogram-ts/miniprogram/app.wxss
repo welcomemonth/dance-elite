@@ -37,6 +37,17 @@ button::after {
   border: none;
 }
 
+/*
+ * 微信 style:v2 内置样式：`button:not([size='mini']) { width:184px; margin:0 auto; }`
+ * 其优先级高于普通类选择器，会导致页面自定义宽度（如 100%）失效、按钮被缩窄居中。
+ * 这里用同等优先级统一复位，再让各按钮类按需设置宽度。
+ */
+button:not([size="mini"]) {
+  width: auto;
+  margin-left: 0;
+  margin-right: 0;
+}
+
 .app-page {
   min-height: 100vh;
   padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
@@ -79,7 +90,12 @@ button::after {
   color: var(--color-muted);
 }
 
-.app-btn {
+.app-tag--success {
+  background: #d9f99d;
+}
+
+.app-btn,
+button.app-btn {
   display: flex;
   align-items: center;
   justify-content: center;

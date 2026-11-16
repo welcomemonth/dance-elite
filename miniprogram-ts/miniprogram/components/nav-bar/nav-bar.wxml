@@ -4,7 +4,9 @@
 >
   <view wx:if="{{!bare}}" class="nav__bar" style="height: {{navHeight}}px;">
     <view class="nav__side" bind:tap="onBackTap" hover-class="nav__side--hover">
-      <view wx:if="{{showBack}}" class="nav__back">‹</view>
+      <view wx:if="{{showBack}}" class="nav__back">
+        <image class="nav__back-icon" src="/assets/icons/back.svg" />
+      </view>
     </view>
     <view class="nav__title">{{title}}</view>
     <view class="nav__side"></view>

@@ -1,0 +1,64 @@
+.rules-page {
+  padding-bottom: calc(56rpx + env(safe-area-inset-bottom));
+}
+
+.rules-hero {
+  padding: 56rpx 40rpx 64rpx;
+  border-bottom: 2rpx solid #121217;
+  background: #5423e7;
+  color: #ffffff;
+}
+
+.rules-hero__kicker {
+  color: #ffc233;
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 4rpx;
+}
+
+.rules-hero__title {
+  margin-top: 18rpx;
+  font-size: 54rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.rules-body {
+  padding: 0 40rpx;
+}
+
+.rule-section {
+  display: flex;
+  gap: 28rpx;
+  padding: 44rpx 0;
+  border-bottom: 2rpx solid #121217;
+}
+
+.rule-section:last-child {
+  border-bottom: none;
+}
+
+.rule-section__index {
+  flex-shrink: 0;
+  color: #5423e7;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.rule-section__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.rule-section__title {
+  font-size: 36rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.rule-section__text {
+  margin-top: 16rpx;
+  color: #6c6c89;
+  font-size: 24rpx;
+  line-height: 1.9;
+}

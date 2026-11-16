@@ -15,6 +15,10 @@
       <view class="ranking-placeholder__text">
         成绩发布后，这里将展示各年龄组与舞种的直通榜、积分榜和机构年度榜。
       </view>
+      <view class="ranking-placeholder__link" bind:tap="onRulesTap">
+        查看积分与赛事规则说明
+        <text class="ranking-placeholder__link-arrow">›</text>
+      </view>
     </view>
   </view>
 </view>

@@ -1,0 +1,77 @@
+.waitlist-page {
+  padding-bottom: calc(56rpx + env(safe-area-inset-bottom));
+}
+
+.waitlist-note {
+  padding: 24rpx 40rpx;
+  border-bottom: 2rpx solid #121217;
+  background: #fff4d6;
+  font-size: 22rpx;
+  line-height: 1.7;
+}
+
+.waitlist-list {
+  padding: 32rpx;
+}
+
+.wait-card {
+  padding: 36rpx;
+  border: 2rpx solid #121217;
+  background: #fffdf8;
+}
+
+.wait-card + .wait-card {
+  margin-top: 28rpx;
+}
+
+.wait-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.wait-card__position {
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.wait-card__title {
+  margin-top: 28rpx;
+  font-size: 36rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.wait-card__meta {
+  margin-top: 10rpx;
+  color: #6c6c89;
+  font-size: 23rpx;
+  line-height: 1.6;
+}
+
+button.wait-card__cancel {
+  width: 100%;
+  height: 80rpx;
+  margin-top: 28rpx;
+  padding: 0;
+  border: 2rpx solid #121217;
+  background: #ffffff;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 76rpx;
+  text-align: center;
+}
+
+.wait-card__cancel::after {
+  border: none;
+}
+
+.wait-card__hint {
+  margin-top: 24rpx;
+  padding-top: 20rpx;
+  border-top: 2rpx solid rgba(18, 18, 23, 0.15);
+  color: #6c6c89;
+  font-size: 22rpx;
+  line-height: 1.6;
+}

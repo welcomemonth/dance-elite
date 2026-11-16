@@ -1,0 +1,46 @@
+<view class="app-page waitlist-page">
+  <nav-bar title="我的候补" bg="#fffdf8" />
+
+  <view class="waitlist-note">
+    候补不收费。有名额释放时，工作人员会按顺序电话联系；确认后需重新完成报名支付。
+  </view>
+
+  <view class="waitlist-list">
+    <view wx:for="{{rows}}" wx:key="waitlist_id" class="wait-card">
+      <view class="wait-card__top">
+        <view class="app-tag app-tag--{{item.statusTone}}">{{item.statusLabel}}</view>
+        <text class="wait-card__position">当前第 {{item.position_no}} 位</text>
+      </view>
+
+      <view class="wait-card__title">{{item.event_name}}</view>
+      <view class="wait-card__meta">
+        {{item.level}} · {{item.danceText}} · 提交于 {{item.createdText}}
+      </view>
+
+      <button
+        wx:if="{{item.canCancel}}"
+        class="wait-card__cancel"
+        data-id="{{item.waitlist_id}}"
+        bind:tap="onCancelTap"
+      >
+        取消候补
+      </button>
+      <view wx:elif="{{item.status === 'notified'}}" class="wait-card__hint">
+        已通知且名额保留中，如需取消请联系客服。
+      </view>
+      <view wx:elif="{{item.status === 'converted'}}" class="wait-card__hint">
+        已转为正式报名，可在「我的报名」查看。
+      </view>
+    </view>
+
+    <view wx:if="{{loadError}}" class="app-error">{{loadError}}</view>
+    <view wx:if="{{loading && rows.length === 0}}" class="app-loading">正在加载候补…</view>
+
+    <empty-state
+      wx:if="{{isEmpty}}"
+      text="{{loadError ? '候补加载失败，请重试' : '暂无候补记录，名额满时可在报名流程中提交候补'}}"
+      show-retry="{{!!loadError}}"
+      bind:retry="emptyState_retry"
+    />
+  </view>
+</view>

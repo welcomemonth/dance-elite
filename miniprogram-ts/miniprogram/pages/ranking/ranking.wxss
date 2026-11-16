@@ -64,3 +64,16 @@
   font-size: 24rpx;
   line-height: 1.7;
 }
+
+.ranking-placeholder__link {
+  display: inline-block;
+  margin-top: 32rpx;
+  padding-bottom: 4rpx;
+  border-bottom: 2rpx solid currentColor;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.ranking-placeholder__link-arrow {
+  margin-left: 4rpx;
+}

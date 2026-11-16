@@ -1,0 +1,172 @@
+<view class="app-page materials-page {{readonly ? 'materials-page--readonly' : ''}}">
+  <nav-bar title="编辑参赛资料" bg="#fffdf8" />
+
+  <view wx:if="{{loading && !detail}}" class="app-loading">正在加载参赛资料…</view>
+
+  <view wx:if="{{!loading && !detail}}" class="materials-load-error">
+    <view class="app-error">{{loadError || '报名不存在或无权查看'}}</view>
+    <button class="app-btn" bind:tap="onRetry">重新加载</button>
+  </view>
+
+  <block wx:if="{{detail}}">
+    <view class="materials-note">
+      {{readonly ? '资料上传已截止或当前报名状态不可修改，仅可查看。' : '支持分次保存，截止前可反复修改且不限次数。新上传内容会直接覆盖旧内容。'}}
+    </view>
+
+    <view class="materials-section">
+      <view class="materials-section__title">文件资料</view>
+
+      <view class="upload-box">
+        <view class="upload-box__head">
+          <view>
+            <view class="upload-box__title">证件照</view>
+            <view class="upload-box__hint">PNG / JPG，≤10MB</view>
+          </view>
+          <view wx:if="{{photoUrl}}" class="app-tag app-tag--success">已上传</view>
+        </view>
+
+        <image
+          wx:if="{{photoUrl}}"
+          class="upload-box__photo"
+          src="{{photoUrl}}"
+          mode="aspectFill"
+          bind:tap="onPreviewPhoto"
+        />
+        <view wx:else class="upload-box__placeholder">尚未上传</view>
+
+        <button
+          wx:if="{{!readonly}}"
+          class="upload-box__action"
+          loading="{{uploadingPhoto}}"
+          disabled="{{uploadingPhoto}}"
+          bind:tap="onChoosePhoto"
+        >
+          {{photoUrl ? '重新选择' : '选择图片'}}
+        </button>
+      </view>
+
+      <view class="upload-box">
+        <view class="upload-box__head">
+          <view>
+            <view class="upload-box__title">舞蹈音频</view>
+            <view class="upload-box__hint">MP3，≤100MB，时长 ≤4 分钟</view>
+          </view>
+          <view wx:if="{{hasAudio}}" class="app-tag app-tag--success">已上传</view>
+        </view>
+
+        <view wx:if="{{hasAudio}}" class="upload-box__audio">
+          <button class="upload-box__play" bind:tap="onToggleAudio">
+            <image class="upload-box__play-icon" src="/assets/icons/play.svg" />
+          </button>
+          <text class="upload-box__filename">{{audioFilename}}</text>
+          <text class="upload-box__play-state">{{playing ? '播放中' : '试听'}}</text>
+        </view>
+        <view wx:else class="upload-box__placeholder">尚未选择文件</view>
+
+        <button
+          wx:if="{{!readonly}}"
+          class="upload-box__action"
+          loading="{{uploadingAudio}}"
+          disabled="{{uploadingAudio}}"
+          bind:tap="onChooseAudio"
+        >
+          {{hasAudio ? '重新选择' : '选择音频'}}
+        </button>
+      </view>
+    </view>
+
+    <view class="materials-section">
+      <view class="materials-section__title">文字资料</view>
+
+      <view class="app-field">
+        <text class="app-field__label">节目名称</text>
+        <input
+          class="app-field__input"
+          value="{{programName}}"
+          data-field="programName"
+          maxlength="50"
+          disabled="{{readonly}}"
+          placeholder="请输入节目名称"
+          bind:input="onFieldInput"
+        />
+      </view>
+
+      <view class="app-field materials-field">
+        <text class="app-field__label">指导教师</text>
+        <input
+          class="app-field__input"
+          value="{{teacherName}}"
+          data-field="teacherName"
+          maxlength="30"
+          disabled="{{readonly}}"
+          placeholder="选填"
+          bind:input="onFieldInput"
+        />
+      </view>
+
+      <view class="app-field materials-field">
+        <text class="app-field__label">联系电话</text>
+        <input
+          class="app-field__input"
+          value="{{contactPhone}}"
+          data-field="contactPhone"
+          maxlength="11"
+          type="number"
+          disabled="{{readonly}}"
+          placeholder="11 位手机号"
+          bind:input="onFieldInput"
+        />
+      </view>
+
+      <view class="app-field materials-field">
+        <text class="app-field__label">快递地址</text>
+        <input
+          class="app-field__input"
+          value="{{expressAddress}}"
+          data-field="expressAddress"
+          maxlength="120"
+          disabled="{{readonly}}"
+          placeholder="证书 / 奖牌邮寄地址，选填"
+          bind:input="onFieldInput"
+        />
+      </view>
+
+      <view class="app-field materials-field">
+        <text class="app-field__label">作品说明</text>
+        <textarea
+          class="materials-textarea"
+          value="{{workIntro}}"
+          data-field="workIntro"
+          maxlength="500"
+          disabled="{{readonly}}"
+          placeholder="选填"
+          bind:input="onFieldInput"
+        />
+      </view>
+
+      <view class="app-field materials-field">
+        <text class="app-field__label">特殊要求</text>
+        <textarea
+          class="materials-textarea"
+          value="{{specialReq}}"
+          data-field="specialReq"
+          maxlength="200"
+          disabled="{{readonly}}"
+          placeholder="如道具需求，选填"
+          bind:input="onFieldInput"
+        />
+      </view>
+    </view>
+  </block>
+
+  <view wx:if="{{detail && !readonly}}" class="app-fixed-bottom">
+    <button
+      class="app-btn app-btn--primary"
+      loading="{{submitting}}"
+      disabled="{{submitting}}"
+      bind:tap="onSave"
+    >
+      保存资料
+    </button>
+  </view>
+</view>

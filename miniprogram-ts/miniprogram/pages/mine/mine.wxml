@@ -1,43 +1,92 @@
 <view class="app-page mine-page">
-  <nav-bar bare="{{true}}" bg="#f4f1e8" />
+  <nav-bar bare="{{true}}" bg="#ffc233" />
 
   <view class="mine-hero">
-    <view class="mine-card">
-      <view class="mine-avatar">{{avatarText}}</view>
+    <view class="mine-kicker">MY ACCOUNT</view>
+    <view class="mine-hero__row">
+      <image class="mine-avatar" src="{{avatarUrl}}" mode="aspectFill" />
       <view class="mine-info">
         <view class="mine-name">{{displayName}}</view>
-        <view wx:if="{{playerNoText}}" class="mine-player-no">选手编号：{{playerNoText}}</view>
-        <view wx:else class="mine-player-no">完成一次报名后生成选手编号</view>
+        <button
+          wx:if="{{!loggedIn}}"
+          class="mine-phone"
+          loading="{{loading}}"
+          bind:tap="onLoginTap"
+        >
+          登录后同步报名 ›
+        </button>
+        <button
+          wx:else
+          class="mine-phone"
+          open-type="getPhoneNumber"
+          bindgetphonenumber="onGetPhoneNumber"
+        >
+          {{phoneText}} ›
+        </button>
       </view>
-      <button wx:if="{{!loggedIn}}" class="mine-login" loading="{{loading}}" bind:tap="onLoginTap">
-        登录
+    </view>
+  </view>
+
+  <view
+    wx:if="{{incompleteCount > 0}}"
+    class="reminder"
+    hover-class="reminder--hover"
+    bind:tap="onReminderTap"
+  >
+    <view class="reminder__icon">
+      <image class="reminder__icon-image" src="/assets/icons/upload.svg" />
+    </view>
+    <view class="reminder__body">
+      <view class="reminder__title">您有 {{incompleteCount}} 条报名资料未传齐</view>
+      <view class="reminder__hint">{{incompleteHint}}</view>
+    </view>
+    <view class="reminder__action">去上传</view>
+  </view>
+
+  <view class="mine-body">
+    <view wx:if="{{loadError}}" class="app-error">{{loadError}}</view>
+
+    <view class="mine-kicker">我的赛事</view>
+    <view class="menu">
+      <view class="menu-row" data-target="registrations" bind:tap="onMenuTap">
+        <image class="menu-row__icon" src="/assets/icons/ticket.svg" />
+        <text class="menu-row__label">我的报名</text>
+        <view wx:if="{{registrationCount > 0}}" class="menu-row__badge">{{registrationCount}}</view>
+        <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+      </view>
+      <view class="menu-row" data-target="waitlists" bind:tap="onMenuTap">
+        <image class="menu-row__icon" src="/assets/icons/clock.svg" />
+        <text class="menu-row__label">我的候补</text>
+        <view wx:if="{{waitlistCount > 0}}" class="menu-row__badge">{{waitlistCount}}</view>
+        <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+      </view>
+    </view>
+
+    <view class="mine-kicker mine-body__kicker">其他</view>
+    <view class="menu">
+      <view class="menu-row" data-target="follow" bind:tap="onMenuTap">
+        <image class="menu-row__icon" src="/assets/icons/trophy.svg" />
+        <text class="menu-row__label">关注公众号</text>
+        <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+      </view>
+      <button class="menu-button" open-type="contact">
+        <view class="menu-row">
+          <image class="menu-row__icon" src="/assets/icons/phone.svg" />
+          <text class="menu-row__label">联系我们</text>
+          <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+        </view>
       </button>
+      <view class="menu-row" data-target="rules" bind:tap="onMenuTap">
+        <image class="menu-row__icon" src="/assets/icons/info.svg" />
+        <text class="menu-row__label">关于优舞盟 / 赛事规则说明</text>
+        <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+      </view>
     </view>
-    <view wx:if="{{loggedIn}}" class="mine-logout" bind:tap="onLogoutTap">退出登录</view>
-  </view>
 
-  <view class="mine-menu">
-    <view class="menu-row" data-label="我的报名" bind:tap="onMenuTap">
-      <text class="menu-row__label">我的报名</text>
-      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
-    </view>
-    <view class="menu-row" data-label="历史订单" bind:tap="onMenuTap">
-      <text class="menu-row__label">历史订单</text>
-      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
-    </view>
-    <view class="menu-row" data-label="我的候补" bind:tap="onMenuTap">
-      <text class="menu-row__label">我的候补</text>
-      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
-    </view>
-    <button class="menu-row menu-row--button" open-type="contact">
-      <text class="menu-row__label">联系客服</text>
-      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
-    </button>
-    <view class="menu-row" data-label="关于与规则" bind:tap="onMenuTap">
-      <text class="menu-row__label">关于与规则</text>
-      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+    <view class="brand-card">
+      <view class="brand-card__title">优舞盟 YOU WU MENG</view>
+      <view class="brand-card__desc">专注青少年独舞赛事，以专业赛制记录每一次成长。</view>
+      <view class="brand-card__version">当前版本 1.0.0</view>
     </view>
   </view>
-
-  <view class="mine-footer">优舞盟 · 青少年独舞赛事</view>
 </view>

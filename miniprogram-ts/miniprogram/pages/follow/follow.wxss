@@ -1,0 +1,66 @@
+.follow-page {
+  padding-bottom: calc(56rpx + env(safe-area-inset-bottom));
+}
+
+.follow-body {
+  padding: 96rpx 48rpx 48rpx;
+  text-align: center;
+}
+
+.follow-qr {
+  display: inline-block;
+  padding: 28rpx;
+  border: 2rpx solid #121217;
+  background: #ffffff;
+}
+
+.follow-qr__grid {
+  display: grid;
+  grid-template-columns: repeat(9, 36rpx);
+  grid-template-rows: repeat(9, 36rpx);
+  gap: 4rpx;
+  padding: 12rpx;
+  background: #ffffff;
+}
+
+.follow-qr__cell {
+  background: #ffffff;
+}
+
+.follow-qr__cell--dark {
+  background: #121217;
+}
+
+.follow-qr__tip {
+  margin-top: 20rpx;
+  color: #6c6c89;
+  font-size: 20rpx;
+}
+
+.follow-kicker {
+  margin-top: 72rpx;
+}
+
+.follow-title {
+  margin-top: 12rpx;
+  font-size: 44rpx;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.follow-desc {
+  margin-top: 24rpx;
+  color: #6c6c89;
+  font-size: 24rpx;
+  line-height: 1.8;
+}
+
+.follow-cta {
+  margin-top: 48rpx;
+  padding: 24rpx;
+  border: 2rpx solid #121217;
+  background: #ffc233;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 1.6;
+}
