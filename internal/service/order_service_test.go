@@ -50,7 +50,13 @@ func newOrderFixture(t *testing.T) *orderFixture {
 	t.Helper()
 	f := newRegFixture(t)
 	gateway := &fakeGateway{}
-	return &orderFixture{regFixture: f, gateway: gateway, svc: NewOrderService(f.stores, gateway)}
+	mockPay := wxpay.NewMockGateway()
+	payments := NewPaymentService(f.stores, mockPay, mockPay)
+	return &orderFixture{
+		regFixture: f,
+		gateway:    gateway,
+		svc:        NewOrderService(f.stores, gateway, payments, 15),
+	}
 }
 
 // mustSubmitOrder 走 T9 提交报名产生一个待支付订单，返回订单 ID。

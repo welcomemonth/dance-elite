@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
@@ -20,22 +21,32 @@ import (
 // 同一订单的预下单在进程内按订单串行化：真实通道下并发重复下单会被微信
 // 以 out_trade_no 重复拒绝，单机部署内用按订单锁规避。
 type OrderService struct {
-	stores  *store.Store
-	gateway wxpay.Gateway
-	cancel  *orderCanceler
+	stores        *store.Store
+	gateway       wxpay.Gateway
+	payments      *PaymentService
+	cancel        *orderCanceler
+	expireMinutes int
+	now           func() time.Time
 
 	mu    sync.Mutex
 	locks map[int64]*sync.Mutex // 按订单的预下单串行锁（惰创建）
 }
 
 // NewOrderService 构造订单支付服务；gateway 为 wxpay.Client（真实）或
-// wxpay.MockGateway（PAY_MOCK=true）。
-func NewOrderService(stores *store.Store, gateway wxpay.Gateway) *OrderService {
+// wxpay.MockGateway（PAY_MOCK=true）；payments 用于过期订单的查单兜底，
+// expireMinutes 为待支付超时分钟数（T34）。
+func NewOrderService(stores *store.Store, gateway wxpay.Gateway, payments *PaymentService, expireMinutes int) *OrderService {
+	if expireMinutes <= 0 {
+		expireMinutes = 15
+	}
 	return &OrderService{
-		stores:  stores,
-		gateway: gateway,
-		cancel:  newOrderCanceler(stores),
-		locks:   make(map[int64]*sync.Mutex),
+		stores:        stores,
+		gateway:       gateway,
+		payments:      payments,
+		cancel:        newOrderCanceler(stores),
+		expireMinutes: expireMinutes,
+		now:           time.Now,
+		locks:         make(map[int64]*sync.Mutex),
 	}
 }
 
@@ -71,6 +82,11 @@ func (s *OrderService) Prepay(ctx context.Context, userID int64, openid string, 
 		return nil, httpx.ErrConflict("订单已支付或已取消，无需重复支付")
 	}
 
+	// T34：已过期订单先向微信查单——SUCCESS 补结账；确认未支付才系统取消并引导重报。
+	if orderExpired(order, s.now(), s.expireMinutes) {
+		return nil, s.handleExpiredPrepay(ctx, order)
+	}
+
 	// 幂等：已换取过 prepay_id 的订单直接复用（网络重试/用户重复点击安全）。
 	prepayID := derefString(order.PrepayID)
 	if prepayID == "" {
@@ -93,6 +109,32 @@ func (s *OrderService) Prepay(ctx context.Context, userID int64, openid string, 
 	}, nil
 }
 
+// handleExpiredPrepay 处理过期订单的预下单请求（T34）：
+// 先查单确认资金事实——SUCCESS 补结账；失败终态按回调路径取消；
+// 确认未支付才系统取消并释放名额；查询失败不取消，返回 50001 待下轮重试。
+func (s *OrderService) handleExpiredPrepay(ctx context.Context, order *model.Order) error {
+	applied, err := s.payments.QueryAndApply(ctx, order)
+	if err != nil {
+		return httpx.ErrInternal(err, "查询支付状态失败，请稍后重试")
+	}
+	if applied {
+		if latest, getErr := s.stores.Orders.Get(ctx, order.ID); getErr == nil {
+			switch latest.Status {
+			case model.OrderStatusPaid:
+				return httpx.ErrConflict("订单已支付，无需重复支付")
+			case model.OrderStatusRefunding, model.OrderStatusRefunded:
+				return httpx.ErrConflict("订单已进入退款流程，无需重复支付")
+			}
+		}
+		return httpx.ErrConflict("订单已取消，请重新报名")
+	}
+	if _, err := s.cancel.cancelPending(ctx, order.ID, model.OrderCancelReasonSystem); err != nil &&
+		!errors.Is(err, errOrderNotCancelable) {
+		return httpx.ErrInternal(err, "关闭超时订单失败，请稍后重试")
+	}
+	return httpx.ErrConflict("订单已超时取消，请重新报名")
+}
+
 // placePrepay 调支付网关统一下单；微信业务错误与网络错误统一映射为
 // 50001（细节含在 Cause 里进日志，用户文案固定，避免泄露微信侧细节）。
 func (s *OrderService) placePrepay(ctx context.Context, order *model.Order, openid string) (string, error) {
@@ -105,6 +147,7 @@ func (s *OrderService) placePrepay(ctx context.Context, order *model.Order, open
 		OutTradeNo:  order.OrderNo,
 		Description: description,
 		AmountFen:   order.Amount,
+		TimeExpire:  orderExpireAt(order, s.expireMinutes),
 	})
 	if err != nil {
 		return "", httpx.ErrInternal(err, "拉起支付失败，请稍后重试")

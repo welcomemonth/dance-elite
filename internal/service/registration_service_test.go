@@ -64,7 +64,7 @@ func newRegFixture(t *testing.T) *regFixture {
 		stores:   stores,
 		db:       db,
 		eventSvc: eventSvc,
-		regSvc:   NewRegistrationService(stores, players),
+		regSvc:   NewRegistrationService(stores, players, 15),
 		seasonID: season.ID,
 	}
 }

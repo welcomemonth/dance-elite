@@ -35,14 +35,19 @@ const maxOrderNoRetries = 3
 // 安全约定：身份证明文只存在于请求参数与本函数栈内（PrepareIdentity 立即哈希），
 // 不落库、不进日志、不进错误信息。
 type RegistrationService struct {
-	stores  *store.Store
-	players *PlayerService
-	now     func() time.Time
+	stores        *store.Store
+	players       *PlayerService
+	now           func() time.Time
+	expireMinutes int
 }
 
-// NewRegistrationService 构造报名下单服务；players 为 T8 选手建档服务。
-func NewRegistrationService(stores *store.Store, players *PlayerService) *RegistrationService {
-	return &RegistrationService{stores: stores, players: players, now: time.Now}
+// NewRegistrationService 构造报名下单服务；players 为 T8 选手建档服务，
+// expireMinutes 为待支付订单超时分钟数（T34，写入 orders.expire_at）。
+func NewRegistrationService(stores *store.Store, players *PlayerService, expireMinutes int) *RegistrationService {
+	if expireMinutes <= 0 {
+		expireMinutes = 15
+	}
+	return &RegistrationService{stores: stores, players: players, now: time.Now, expireMinutes: expireMinutes}
 }
 
 // Submit 提交报名（API 文档 3.1）。返回的响应不含 pay_params——
@@ -278,6 +283,7 @@ func (s *RegistrationService) createOrderWithRetry(ctx context.Context, tx *sql.
 			Amount:         amount,
 			Status:         model.OrderStatusPendingPayment,
 			RequestID:      &requestID,
+			ExpireAt:       strPtr(utils.FormatISO(s.now().Add(time.Duration(s.expireMinutes) * time.Minute))),
 		})
 		if err == nil {
 			return orderID, orderNo, nil

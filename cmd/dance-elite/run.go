@@ -58,7 +58,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 	eventService := service.NewEventService(stores)
 	publicEventService := service.NewPublicEventService(stores)
 	playerService := service.NewPlayerService(stores, cfg.IDCardHMACKey)
-	registrationService := service.NewRegistrationService(stores, playerService)
+	registrationService := service.NewRegistrationService(stores, playerService, cfg.OrderExpireMinutes)
 	registrationQueryService := service.NewRegistrationQueryService(stores)
 	waitlistService := service.NewWaitlistService(stores, playerService)
 	fileStore, err := storage.New(cfg.UploadDir)
@@ -72,9 +72,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
-	orderService := service.NewOrderService(stores, payGateway)
 	paymentService := service.NewPaymentService(stores, payGateway, payGateway)
 	refundService := service.NewRefundService(stores, payGateway, payGateway)
+	orderService := service.NewOrderService(stores, payGateway, paymentService, cfg.OrderExpireMinutes)
 	adminRefundQueryService := service.NewAdminRefundQueryService(stores)
 	csTicketService := service.NewCSTicketService(stores)
 	manualRegService := service.NewManualRegistrationService(stores, playerService)
@@ -130,9 +130,31 @@ func run(ctx context.Context, cfg *config.Config) error {
 		UploadDir:           cfg.UploadDir,
 		WebAssets:           webAssets,
 	})
+	// 定时任务（T34）：应用级单调度器串行执行，ctx 取消后随 HTTP 服务一起退出。
+	scheduler := service.NewStatusScheduler(
+		time.Duration(cfg.StatusTickSeconds)*time.Second,
+		service.NewEventStatusAdvancer(stores),
+		service.NewOrderExpirySweeper(stores, paymentService, cfg.OrderExpireMinutes),
+		service.NewRefundWatchdog(stores, refundService, payGateway, cfg.RefundWatchdogMinutes, cfg.PayMock),
+	)
+	schedulerCtx, stopScheduler := context.WithCancel(ctx)
+	schedulerDone := make(chan struct{})
+	go func() {
+		defer close(schedulerDone)
+		scheduler.Run(schedulerCtx)
+	}()
+
 	srv := server.NewServer(":"+cfg.Port, engine)
-	if err := srv.Run(ctx); err != nil {
-		return fmt.Errorf("HTTP 服务: %w", err)
+	runErr := srv.Run(ctx)
+	// 等在途一轮定时任务结束（最多 5 秒），避免退出瞬间留下半轮写入。
+	stopScheduler()
+	select {
+	case <-schedulerDone:
+	case <-time.After(5 * time.Second):
+		logger.Log.Warn("定时任务未在 5 秒内退出，进程即将结束")
+	}
+	if runErr != nil {
+		return fmt.Errorf("HTTP 服务: %w", runErr)
 	}
 	return nil
 }

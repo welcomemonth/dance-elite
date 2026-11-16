@@ -40,7 +40,7 @@ func newRegistrationTestEngine(t *testing.T) (*gin.Engine, *token.Signer, *store
 		Seasons:       service.NewSeasonService(stores),
 		Events:        service.NewEventService(stores),
 		PublicEvents:  service.NewPublicEventService(stores),
-		Registrations: service.NewRegistrationService(stores, players),
+		Registrations: service.NewRegistrationService(stores, players, 15),
 		Tokens:        signer,
 	}), signer, db
 }

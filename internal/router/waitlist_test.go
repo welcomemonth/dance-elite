@@ -40,7 +40,7 @@ func newWaitlistTestEngine(t *testing.T) (*gin.Engine, *token.Signer, *store.DB)
 		Seasons:       service.NewSeasonService(stores),
 		Events:        service.NewEventService(stores),
 		PublicEvents:  service.NewPublicEventService(stores),
-		Registrations: service.NewRegistrationService(stores, players),
+		Registrations: service.NewRegistrationService(stores, players, 15),
 		Waitlists:     service.NewWaitlistService(stores, players),
 		Tokens:        signer,
 	}), signer, db

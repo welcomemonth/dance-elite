@@ -212,6 +212,35 @@ func (s *RefundTicketStore) LatestByOrder(ctx context.Context, orderID int64) (*
 	return ticket, nil
 }
 
+// ListStale 返回长时间未收到回调的退款工单（T34 退款看门狗）：
+// status 为 processing/approved 且 updated_at 不晚于 cutoff，按最久未更新优先。
+func (s *RefundTicketStore) ListStale(ctx context.Context, cutoff string, limit int) ([]model.RefundTicket, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.sql.QueryContext(ctx, `
+		SELECT `+refundTicketColumns+` FROM refund_tickets
+		WHERE status IN ('processing', 'approved') AND updated_at <= ?
+		ORDER BY updated_at LIMIT ?`, cutoff, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query stale refund tickets: %w", err)
+	}
+	defer rows.Close()
+
+	var list []model.RefundTicket
+	for rows.Next() {
+		ticket, err := scanRefundTicket(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan stale refund ticket: %w", err)
+		}
+		list = append(list, *ticket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate stale refund tickets: %w", err)
+	}
+	return list, nil
+}
+
 func scanRefundTicket(row rowScanner) (*model.RefundTicket, error) {
 	var t model.RefundTicket
 	if err := row.Scan(&t.ID, &t.TicketNo, &t.OrderID, &t.Reason, &t.Applicant, &t.Status,

@@ -100,6 +100,37 @@ func (s *PaymentService) QueryStatus(ctx context.Context, userID, orderID int64)
 	return orderStatusResponse(order), nil
 }
 
+// QueryAndApply 主动查单并按微信结果推进订单（T34：超时回收与过期预下单共用）：
+//   - SUCCESS：复用结账事务，返回 applied=true；
+//   - CLOSED / REVOKED / PAYERROR：取消待支付订单（reason=pay_failed），返回 applied=true；
+//   - NOTPAY 或其他进行中状态：不改变本地状态，返回 applied=false（调用方按超时策略处理）；
+//   - 查询失败返回错误，调用方本轮跳过，不盲目取消。
+func (s *PaymentService) QueryAndApply(ctx context.Context, order *model.Order) (bool, error) {
+	if order.Status != model.OrderStatusPendingPayment {
+		return false, nil
+	}
+	queried, err := s.query.QueryOrder(ctx, order.OrderNo)
+	if err != nil {
+		return false, fmt.Errorf("查询订单 %s 支付状态: %w", order.OrderNo, err)
+	}
+	if queried == nil || queried.OutTradeNo != order.OrderNo {
+		return false, nil
+	}
+	switch {
+	case queried.TradeState == wxpay.TradeStateSuccess:
+		if err := s.settle(ctx, queried, nil); err != nil {
+			return false, err
+		}
+		return true, nil
+	case wxpay.IsFailureTradeState(queried.TradeState):
+		if err := s.cancel.cancelByOrderNo(ctx, order.OrderNo, model.OrderCancelReasonPayFailed); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 // settle 在单个事务内完成"流水 → 订单 → 报名单"的状态推进。
 // rawCallback 为原始回调报文（查单兜底时为 nil，流水保留来源可区分）。
 func (s *PaymentService) settle(ctx context.Context, tx *wxpay.Transaction, rawCallback *string) error {

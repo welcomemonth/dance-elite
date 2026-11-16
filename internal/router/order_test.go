@@ -52,15 +52,16 @@ func newOrderTestEngine(t *testing.T) (*gin.Engine, *token.Signer, *store.DB) {
 	signer := token.NewSigner("test-secret", time.Hour)
 	players := service.NewPlayerService(stores, "test-hmac-key")
 	mockPay := wxpay.NewMockGateway()
+	payments := service.NewPaymentService(stores, mockPay, mockPay)
 	return New(Deps{
 		Stores:        stores,
 		AdminAuth:     service.NewAdminAuthService(stores, signer),
 		Seasons:       service.NewSeasonService(stores),
 		Events:        service.NewEventService(stores),
 		PublicEvents:  service.NewPublicEventService(stores),
-		Registrations: service.NewRegistrationService(stores, players),
-		Orders:        service.NewOrderService(stores, &routerFakeGateway{}),
-		Payments:      service.NewPaymentService(stores, mockPay, mockPay),
+		Registrations: service.NewRegistrationService(stores, players, 15),
+		Orders:        service.NewOrderService(stores, &routerFakeGateway{}, payments, 15),
+		Payments:      payments,
 		Tokens:        signer,
 	}), signer, db
 }
@@ -177,7 +178,7 @@ func TestPrepayErrorsViaHTTP(t *testing.T) {
 func submitViaService(t *testing.T, db *store.DB, userID, eventID int64, danceType, key string) *model.SubmitRegistrationResponse {
 	t.Helper()
 	stores := store.New(db)
-	svc := service.NewRegistrationService(stores, service.NewPlayerService(stores, "test-hmac-key"))
+	svc := service.NewRegistrationService(stores, service.NewPlayerService(stores, "test-hmac-key"), 15)
 	resp, err := svc.Submit(context.Background(), userID, eventID, model.SubmitRegistrationRequest{
 		PlayerName:     "王小舞",
 		IDCardNo:       routerValidIDCard,
