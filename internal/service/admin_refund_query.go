@@ -148,7 +148,7 @@ func compactLogDetail(raw *string) string {
 	}
 	parts := make([]string, 0, len(detail))
 	for k, v := range detail {
-		parts = append(parts, k+"="+ stringifyLogValue(v))
+		parts = append(parts, k+"="+stringifyLogValue(v))
 	}
 	return strings.Join(parts, "; ")
 }

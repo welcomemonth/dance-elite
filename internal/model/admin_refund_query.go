@@ -15,18 +15,18 @@ type AdminRefundTicketListQuery struct {
 
 // AdminRefundTicketItem 是退款工单列表单条记录（API 文档 11.4.2）。
 type AdminRefundTicketItem struct {
-	TicketID   int64   `json:"ticket_id"`
-	TicketNo   string  `json:"ticket_no"`
-	OrderNo    string  `json:"order_no"`
-	EventID    int64   `json:"event_id"`
-	EventName  string  `json:"event_name"`
-	PlayerName string  `json:"player_name"`
-	Reason     string  `json:"reason"`
-	Applicant  string  `json:"applicant"`
-	Status     string  `json:"status"`
+	TicketID    int64   `json:"ticket_id"`
+	TicketNo    string  `json:"ticket_no"`
+	OrderNo     string  `json:"order_no"`
+	EventID     int64   `json:"event_id"`
+	EventName   string  `json:"event_name"`
+	PlayerName  string  `json:"player_name"`
+	Reason      string  `json:"reason"`
+	Applicant   string  `json:"applicant"`
+	Status      string  `json:"status"`
 	HandlerName *string `json:"handler_name"`
-	CreatedAt  string  `json:"created_at"`
-	HandledAt  *string `json:"handled_at"`
+	CreatedAt   string  `json:"created_at"`
+	HandledAt   *string `json:"handled_at"`
 }
 
 // AdminRefundTicketListResponse 是退款工单列表响应（统一分页结构）。
