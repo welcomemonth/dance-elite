@@ -6,7 +6,7 @@
 # =============================================================================
 
 # ---------- 1. 前端构建阶段 ----------
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:24-alpine AS frontend
 
 WORKDIR /src
 
