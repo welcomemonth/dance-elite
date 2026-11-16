@@ -20,6 +20,11 @@ func NowISO() string {
 	return time.Now().Format(isoLayout)
 }
 
+// TodayDate 返回中国时区的当天日期（YYYY-MM-DD），用于按日期判定赛季等归属关系。
+func TodayDate() string {
+	return time.Now().In(ChinaLoc).Format(dateLayout)
+}
+
 // FormatISO 把任意时间转换为全库统一格式（Asia/Shanghai 时区 + 偏移）。
 // 用于外部时间（如微信支付 success_time）入库前的归一化。
 func FormatISO(t time.Time) string {

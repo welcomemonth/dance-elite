@@ -415,9 +415,9 @@ func TestAdminEventCreateRequiresActiveSeasonRoute(t *testing.T) {
 	engine, _ := newAdminEventTestEngine(t)
 	auth := map[string]string{"Authorization": "Bearer " + adminToken(t, engine)}
 
-	// 未激活的赛季创建赛事 → 40901。
+	// 未激活的赛季创建赛事 → 40901（未来日期创建为 upcoming）。
 	w := postJSON(t, engine, http.MethodPost, "/api/v1/admin/seasons",
-		`{"name":"2028 赛季"}`, auth)
+		`{"name":"2028 赛季","start_date":"2099-01-01","end_date":"2099-12-31"}`, auth)
 	var created struct {
 		Data struct {
 			ID int64 `json:"id"`

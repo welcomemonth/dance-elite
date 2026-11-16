@@ -163,8 +163,10 @@ func TestEventCreateRequiresActiveSeason(t *testing.T) {
 		t.Fatalf("err = %v, want 40401", err)
 	}
 
-	// upcoming 赛季不能挂赛事 → 40901。
-	inactive, err := seasonSvc.Create(ctx, 1, model.AdminSeasonRequest{Name: "2028 赛季"})
+	// upcoming 赛季不能挂赛事 → 40901（未来日期创建为 upcoming）。
+	inactive, err := seasonSvc.Create(ctx, 1, model.AdminSeasonRequest{
+		Name: "2028 赛季", StartDate: "2099-01-01", EndDate: "2099-12-31",
+	})
 	if err != nil {
 		t.Fatalf("create inactive season: %v", err)
 	}

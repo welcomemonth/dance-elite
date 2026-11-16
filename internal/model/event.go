@@ -55,7 +55,7 @@ type Season struct {
 }
 
 // AdminSeasonRequest 是创建/编辑赛季（POST/PUT /api/v1/admin/seasons）的请求体。
-// 创建时 status 忽略（恒为 upcoming，group_rules 从系统设置复制）；
+// 创建时 status 由服务端按日期自动判定（今天在起止区间内 → active，否则 upcoming）；
 // 编辑时全部字段可选，status 只允许 upcoming → active → archived 顺序流转。
 type AdminSeasonRequest struct {
 	Name      string `json:"name" binding:"required"`

@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
 	"github.com/meetmonth/dance-elite/internal/store"
+	"github.com/meetmonth/dance-elite/internal/utils"
 )
 
 // newSeasonFixture 打开内存库、跑迁移并种子超管与系统配置。
@@ -30,18 +32,15 @@ func newSeasonFixture(t *testing.T) (*SeasonService, *store.Store) {
 	return NewSeasonService(stores), stores
 }
 
-// mustActiveSeason 创建并激活一个赛季，供赛事测试使用。
+// mustActiveSeason 创建一个日期不限的赛季（创建即按日期判定为 active），供赛事测试使用。
 func mustActiveSeason(t *testing.T, svc *SeasonService) *model.AdminSeasonItem {
 	t.Helper()
 	season, err := svc.Create(context.Background(), 1, model.AdminSeasonRequest{Name: "2027 赛季"})
 	if err != nil {
 		t.Fatalf("create season: %v", err)
 	}
-	season, err = svc.Update(context.Background(), 1, season.ID, model.AdminSeasonRequest{
-		Name: season.Name, Status: model.SeasonStatusActive,
-	})
-	if err != nil {
-		t.Fatalf("activate season: %v", err)
+	if season.Status != model.SeasonStatusActive {
+		t.Fatalf("season status = %q, want active", season.Status)
 	}
 	return season
 }
@@ -56,9 +55,6 @@ func TestSeasonCreateCopiesGroupRules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if season.Status != model.SeasonStatusUpcoming {
-		t.Fatalf("status = %q, want upcoming", season.Status)
-	}
 	// group_rules 必须从系统设置复制（迁移 0007 种子）。
 	template, err := stores.Settings.Get(ctx, "group_rules")
 	if err != nil {
@@ -66,6 +62,49 @@ func TestSeasonCreateCopiesGroupRules(t *testing.T) {
 	}
 	if season.GroupRules != template {
 		t.Fatalf("group_rules = %q, want settings template %q", season.GroupRules, template)
+	}
+}
+
+func TestSeasonCreateStatusByToday(t *testing.T) {
+	svc, _ := newSeasonFixture(t)
+	ctx := context.Background()
+	today := utils.TodayDate()
+
+	// 今天落在区间内 → 创建即 active，无需再手工激活。
+	inRange, err := svc.Create(ctx, 1, model.AdminSeasonRequest{
+		Name: "当前赛季", StartDate: today, EndDate: today,
+	})
+	if err != nil {
+		t.Fatalf("create in-range season: %v", err)
+	}
+	if inRange.Status != model.SeasonStatusActive {
+		t.Fatalf("status = %q, want active", inRange.Status)
+	}
+
+	// 已有进行中赛季且时间重叠 → 40901，提示时间不能重复。
+	if _, err := svc.Create(ctx, 1, model.AdminSeasonRequest{
+		Name: "重叠赛季", StartDate: today, EndDate: today,
+	}); err == nil {
+		t.Fatal("时间重叠的 active 赛季应被拒绝")
+	} else {
+		var biz *httpx.BizError
+		if !errors.As(err, &biz) || biz.Code != httpx.CodeConflict {
+			t.Fatalf("err = %v, want 40901", err)
+		}
+		if !strings.Contains(biz.Message, "时间不能重复") {
+			t.Fatalf("message = %q, want 时间不能重复", biz.Message)
+		}
+	}
+
+	// 时间不重叠的未来赛季 → upcoming，不影响已有 active 赛季。
+	future, err := svc.Create(ctx, 1, model.AdminSeasonRequest{
+		Name: "未来赛季", StartDate: "2099-01-01", EndDate: "2099-12-31",
+	})
+	if err != nil {
+		t.Fatalf("create future season: %v", err)
+	}
+	if future.Status != model.SeasonStatusUpcoming {
+		t.Fatalf("future status = %q, want upcoming", future.Status)
 	}
 }
 
@@ -94,7 +133,9 @@ func TestSeasonUpdateStatusFlow(t *testing.T) {
 	svc, _ := newSeasonFixture(t)
 	ctx := context.Background()
 
-	season, err := svc.Create(ctx, 1, model.AdminSeasonRequest{Name: "S1"})
+	season, err := svc.Create(ctx, 1, model.AdminSeasonRequest{
+		Name: "S1", StartDate: "2099-01-01", EndDate: "2099-12-31",
+	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -190,7 +231,9 @@ func TestSeasonUniqueActive(t *testing.T) {
 
 	mustActiveSeason(t, svc)
 
-	other, err := svc.Create(ctx, 1, model.AdminSeasonRequest{Name: "2028 赛季"})
+	other, err := svc.Create(ctx, 1, model.AdminSeasonRequest{
+		Name: "2028 赛季", StartDate: "2099-01-01", EndDate: "2099-12-31",
+	})
 	if err != nil {
 		t.Fatalf("create other: %v", err)
 	}

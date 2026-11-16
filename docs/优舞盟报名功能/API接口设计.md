@@ -2046,9 +2046,9 @@ curl -X POST https://api.example.com/api/v1/admin/events/12/audio-review-token \
 |---|---|---|---|---|
 | name | string | 是 | 赛季名称 | `"2027 赛季"` |
 | start_date / end_date | string | 否 | YYYY-MM-DD，起始不得晚于结束 | `"2027-01-01"` |
-| status | string | 编辑时可填 | upcoming / active / archived，只允许向前流转（upcoming → active → archived，可跳级归档） | `"active"` |
+| status | string | 编辑时可填 | 创建时忽略（按日期自动判定，见创建响应）；编辑时 upcoming / active / archived，只允许向前流转（upcoming → active → archived，可跳级归档） | `"active"` |
 
-**创建响应**：完整赛季对象（含 `group_rules`、`archived_at`）；创建时状态恒为 `upcoming`，忽略请求中的 status。
+**创建响应**：完整赛季对象（含 `group_rules`、`archived_at`）；创建时忽略请求中的 status，按当天日期自动判定初始状态——今天落在 `start_date`～`end_date` 内（留空视为不限）→ `active`，否则 `upcoming`。
 
 **编辑响应**：完整赛季对象；转入 `archived` 时服务端自动写 `archived_at`。
 
@@ -2058,10 +2058,11 @@ curl -X POST https://api.example.com/api/v1/admin/events/12/audio-review-token \
 |---|---|
 | 40001 | 日期格式非法 / 起始晚于结束 |
 | 40401 | 赛季不存在 |
-| 40901 | 状态流转非法（回退、归档后变更）；激活时已有其他 active 赛季 |
+| 40901 | 状态流转非法（回退、归档后变更）；已存在进行中赛季（创建时判定为 active 且时间重叠，或激活时已有其他 active 赛季） |
 
 **注意事项**：
 - **全系统同时最多一个 active 赛季**；只有 active 赛季才能创建赛事（否则 40901）。
+- 创建时若按日期判定为 `active`，且已有进行中赛季的日期区间与之重叠 → 40901「赛季时间不能重复」，需先归档当前赛季。
 - 赛季被赛事引用后仅可改名/调整日期/推进状态，不可删除。
 - 创建/编辑/状态流转均记 `admin_logs`（action=`admin.season.create` / `admin.season.update`）。
 

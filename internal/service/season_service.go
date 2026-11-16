@@ -55,9 +55,13 @@ func (s *SeasonService) List(ctx context.Context) ([]model.AdminSeasonItem, erro
 	return items, nil
 }
 
-// Create 创建赛季（恒为 upcoming，group_rules 从系统设置复制）。
+// Create 创建赛季（group_rules 从系统设置复制）。
+//
+// 状态按当天日期自动判定：今天落在 [start_date, end_date] 内（缺省视为不限）→ active，
+// 否则 upcoming。判定为 active 时若已有时间重叠的进行中赛季 → 40901（时间不能重复）。
 //
 // 错误码：参数非法（名称空/日期非 YYYY-MM-DD/起始晚于结束）→ 40001；
+// 已有时间重叠的进行中赛季（或并发激活撞唯一索引）→ 40901；
 // 系统缺少 group_rules 配置 → 50001。
 func (s *SeasonService) Create(ctx context.Context, adminID int64, req model.AdminSeasonRequest) (*model.AdminSeasonItem, error) {
 	name := strings.TrimSpace(req.Name)
@@ -73,6 +77,13 @@ func (s *SeasonService) Create(ctx context.Context, adminID int64, req model.Adm
 		return nil, err
 	}
 
+	status := seasonStatusForDates(req.StartDate, req.EndDate, utils.TodayDate())
+	if status == model.SeasonStatusActive {
+		if err := s.ensureNoActiveOverlap(ctx, req.StartDate, req.EndDate); err != nil {
+			return nil, err
+		}
+	}
+
 	var id int64
 	if err := s.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		var err error
@@ -80,14 +91,19 @@ func (s *SeasonService) Create(ctx context.Context, adminID int64, req model.Adm
 			Name:       name,
 			StartDate:  emptyToNil(req.StartDate),
 			EndDate:    emptyToNil(req.EndDate),
+			Status:     status,
 			GroupRules: rules,
 		})
 		if err != nil {
 			return err
 		}
 		return adminLog(ctx, s.stores, tx, &adminID, adminActionSeasonCreate, strPtr("season"), &id,
-			map[string]any{"name": name})
+			map[string]any{"name": name, "status": status})
 	}); err != nil {
+		if errors.Is(err, store.ErrConflict) {
+			// 并发创建时预检可能同时通过，由唯一活跃索引兜底。
+			return nil, httpx.ErrConflict("已存在进行中的赛季，请先归档当前赛季")
+		}
 		return nil, httpx.ErrInternal(err, "创建赛季失败，请稍后重试")
 	}
 
@@ -97,6 +113,29 @@ func (s *SeasonService) Create(ctx context.Context, adminID int64, req model.Adm
 	}
 	item := model.NewAdminSeasonItem(*season)
 	return &item, nil
+}
+
+// ensureNoActiveOverlap 校验新建 active 赛季与已有进行中赛季的日期区间：
+// 有进行中赛季且时间重叠 → 40901（时间不能重复）；不重叠但仍存在 active → 40901（唯一活跃约束）。
+func (s *SeasonService) ensureNoActiveOverlap(ctx context.Context, start, end string) error {
+	active, err := s.stores.Seasons.GetActive(ctx)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return httpx.ErrInternal(err, "查询赛季失败，请稍后重试")
+	}
+	var activeStart, activeEnd string
+	if active.StartDate != nil {
+		activeStart = *active.StartDate
+	}
+	if active.EndDate != nil {
+		activeEnd = *active.EndDate
+	}
+	if seasonRangesOverlap(activeStart, activeEnd, start, end) {
+		return httpx.ErrConflict("已存在进行中的赛季且时间重叠，赛季时间不能重复")
+	}
+	return httpx.ErrConflict("已存在进行中的赛季，请先归档当前赛季")
 }
 
 // Update 编辑赛季（名称/日期/状态流转）。

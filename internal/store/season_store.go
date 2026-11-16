@@ -18,11 +18,13 @@ func NewSeasonStore(db *DB) *SeasonStore { return &SeasonStore{db: db} }
 const seasonColumns = `id, name, start_date, end_date, status, group_rules, archived_at,
 	created_at, updated_at`
 
-// SeasonParams 是创建赛季的字段。GroupRules 从系统设置复制（service 层负责取模板）。
+// SeasonParams 是创建赛季的字段。GroupRules 从系统设置复制（service 层负责取模板）；
+// Status 为空串时落库为默认值 upcoming。
 type SeasonParams struct {
 	Name       string
 	StartDate  *string
 	EndDate    *string
+	Status     string
 	GroupRules string
 }
 
@@ -70,6 +72,19 @@ func (s *SeasonStore) Get(ctx context.Context, id int64) (*model.Season, error) 
 	return season, nil
 }
 
+// GetActive 返回当前 active 赛季；唯一活跃约束下最多一条，不存在返回 ErrNotFound。
+func (s *SeasonStore) GetActive(ctx context.Context) (*model.Season, error) {
+	season, err := scanSeason(s.db.sql.QueryRowContext(ctx,
+		`SELECT `+seasonColumns+` FROM seasons WHERE status = 'active' ORDER BY id DESC LIMIT 1`))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query active season: %w", err)
+	}
+	return season, nil
+}
+
 // HasOtherActive 返回除 excludeID 外是否已有 active 赛季（唯一活跃赛季约束）。
 func (s *SeasonStore) HasOtherActive(ctx context.Context, excludeID int64) (bool, error) {
 	var n int
@@ -81,13 +96,17 @@ func (s *SeasonStore) HasOtherActive(ctx context.Context, excludeID int64) (bool
 	return n > 0, nil
 }
 
-// Insert 在事务内创建赛季（状态恒为 upcoming）。
+// Insert 在事务内创建赛季；Status 为空时落为 upcoming。
+// 与唯一活跃索引（uq_seasons_single_active）冲突时返回 ErrConflict。
 func (s *SeasonStore) Insert(ctx context.Context, tx *sql.Tx, p SeasonParams) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO seasons (name, start_date, end_date, group_rules)
-		VALUES (?, NULLIF(?, ''), NULLIF(?, ''), ?)`,
-		p.Name, derefOrEmpty(p.StartDate), derefOrEmpty(p.EndDate), p.GroupRules)
+		INSERT INTO seasons (name, start_date, end_date, status, group_rules)
+		VALUES (?, NULLIF(?, ''), NULLIF(?, ''), COALESCE(NULLIF(?, ''), 'upcoming'), ?)`,
+		p.Name, derefOrEmpty(p.StartDate), derefOrEmpty(p.EndDate), p.Status, p.GroupRules)
 	if err != nil {
+		if IsUniqueViolation(err) {
+			return 0, ErrConflict
+		}
 		return 0, fmt.Errorf("insert season %q: %w", p.Name, err)
 	}
 	id, err := res.LastInsertId()
