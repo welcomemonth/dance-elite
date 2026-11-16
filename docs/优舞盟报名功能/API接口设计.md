@@ -1938,6 +1938,9 @@ curl -X POST https://api.example.com/api/v1/admin/events/12/publish \
 - 后台手动操作仍然有效：手动「关闭报名」可提前把赛事置为 `reg_closed`，时间线不会把它推导回 `registering`；`offline` 为终止态。
 - 后台 `10.1` 的 `status` 筛选作用于落库状态（最长滞后一个调度周期，约 60 秒）；小程序端展示态实时推导，不受影响。
 - `finished` 后赛事不可再编辑、调名额、开关组别；T33 的赛后媒体清理以该状态为触发依据。
+- 同一调度器还执行两轮兜底任务（同为无接口的系统动作）：
+  - **待支付订单超时回收**：扫描 `status='pending_payment'` 且 `expire_at`（缺省按 `created_at` + `ORDER_EXPIRE_MINUTES`）已过的订单，先向微信查单——SUCCESS 补结账、失败终态取消（`pay_failed`）、确认未支付才系统取消（`cancel_reason=system`），查询失败本轮跳过不取消。
+  - **退款看门狗**：`refund_tickets.status` 为 `processing` / `approved` 且超过 `REFUND_WATCHDOG_MINUTES`（默认 10 分钟）无回调时主动查微信退款单——SUCCESS 完成退款、CLOSED/ABNORMAL 置 `refund_failed` 并回退订单为 `paid`（可重试）、PROCESSING 或查询失败留待下轮。`PAY_MOCK=true` 时跳过（mock 无真实退款单）。
 
 ---
 

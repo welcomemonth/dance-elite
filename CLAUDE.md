@@ -11,7 +11,6 @@ This file provides guidance to Claude Code when working with code in this reposi
 - `docs/数据库表结构设计.md` — ER 关系与设计决策（先读第 0 节）
 - `docs/优舞盟报名功能.md` — 报名流程与状态机、已确认的关键业务决策
 - `docs/小程序页面/优舞盟小程序页面与功能设计.md`、`docs/后台管理/优舞盟后台管理页面与功能设计.md`
-- `docs/部署说明.md` — Docker 部署（`scripts/docker-compose.yml`）：容器内路径、必设环境变量、升级与备份
 
 ## Tech Stack
 
@@ -47,10 +46,10 @@ gofmt -w .
 
 # Docker 部署（Aliyun）
 bash scripts/build.sh && bash scripts/push-aliyun.sh
-docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容器 8090，见 docs/部署说明.md
+docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容器 8090
 ```
 
-配置：无 YAML、无命令行参数。全部配置来自环境变量：本地开发由 godotenv 读取 `.env`（可选，已存在的环境变量优先），生产由容器运行时注入；必需项缺失直接 fail-fast。复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）。
+配置：无 YAML、无命令行参数。全部配置来自环境变量：本地开发由 godotenv 读取 `.env`（可选，已存在的环境变量优先），生产由容器运行时注入；必需项缺失直接 fail-fast。复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）。定时任务相关：`STATUS_TICK_SECONDS`（默认 60）、`ORDER_EXPIRE_MINUTES`（默认 15）、`REFUND_WATCHDOG_MINUTES`（默认 10），均须为正整数。
 
 ## Directory Structure
 
@@ -102,7 +101,7 @@ docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容�
 - 音频审核页：每赛事一个免登录 H5，按 `audio_review_token` 访问
 - 舞种仅古典舞（`classical`）和民族民间舞（`folk`）；年龄组 U11/U13/U15 按出生年自动判定
 - 支付：提交报名即创建订单并拉起微信支付；关闭/返回则订单取消消失但留档；小程序端无自助退款，需客服登记 + 管理员后台人工退款
-- 赛事状态按时间线自动流转（进程内定时任务，默认每 60s）：`reg_end_at` → reg_closed、`start_at` → ongoing、比赛日期（event_date）与 start_at 中较晚一天的次日 00:00 → finished；只前进不回退，未发布赛事不自动发布；待支付订单 15 分钟超时（先查单补结账，确认未支付才取消，`cancel_reason=system`）
+- 赛事状态按时间线自动流转（进程内单调度器，`STATUS_TICK_SECONDS` 默认每 60s，启动先跑一轮）：`reg_end_at` → reg_closed、`start_at` → ongoing、比赛日期（event_date）与 start_at 中较晚一天的次日 00:00 → finished；只前进不回退，未发布赛事不自动发布；待支付订单 `ORDER_EXPIRE_MINUTES`（默认 15 分钟）超时（先查单补结账，确认未支付才取消，`cancel_reason=system`）；退款工单 `processing`/`approved` 超过 `REFUND_WATCHDOG_MINUTES`（默认 10 分钟）无回调时由看门狗查微信退款单（`PAY_MOCK=true` 时跳过）
 - 一人同一赛事限报 1 个组别、可报多个舞种；不支持批量代报
 
 ## Backend Rules (Go)
