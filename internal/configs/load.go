@@ -46,6 +46,14 @@ func read() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	wechatPayCert, wechatPayCertFile, err := secretValue("WECHAT_PAY_CERT", "WECHAT_PAY_CERT_FILE")
+	if err != nil {
+		return nil, err
+	}
+	wechatPrivateKey, wechatPrivateKeyFile, err := secretValue("WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_PRIVATE_KEY_FILE")
+	if err != nil {
+		return nil, err
+	}
 
 	return &Config{
 		Port:      envOr("PORT", "8080"),
@@ -66,14 +74,39 @@ func read() (*Config, error) {
 		WechatMchID:           os.Getenv("WECHAT_MCHID"),
 		WechatPayKey:          os.Getenv("WECHAT_PAY_KEY"),
 		WechatMchSerialNo:     os.Getenv("WECHAT_MCH_SERIAL_NO"),
-		WechatPayCert:         os.Getenv("WECHAT_PAY_CERT"),
-		WechatPrivateKey:      os.Getenv("WECHAT_PAY_PRIVATE_KEY"),
+		WechatPayCert:         wechatPayCert,
+		WechatPayCertFile:     wechatPayCertFile,
+		WechatPrivateKey:      wechatPrivateKey,
+		WechatPrivateKeyFile:  wechatPrivateKeyFile,
 		WechatNotifyURL:       os.Getenv("WECHAT_PAY_NOTIFY_URL"),
 		WechatRefundNotifyURL: os.Getenv("WECHAT_REFUND_NOTIFY_URL"),
 
 		AdminInitUsername: envOr("ADMIN_INIT_USERNAME", "admin"),
 		AdminInitPassword: os.Getenv("ADMIN_INIT_PASSWORD"),
 	}, nil
+}
+
+// secretValue 解析「直接 PEM 文本 / 只读挂载文件」二选一的密钥配置。
+// 设置 *_FILE 时读取文件内容（推荐：容器挂载 secret，值不进环境变量），
+// 与直接值同时设置视为配置错误；文件读取失败或内容为空时启动即失败。
+func secretValue(envKey, fileKey string) (value, file string, err error) {
+	value = os.Getenv(envKey)
+	file = os.Getenv(fileKey)
+	if value != "" && file != "" {
+		return "", "", fmt.Errorf("环境变量 %s 与 %s 不能同时设置，请二选一", envKey, fileKey)
+	}
+	if file == "" {
+		return value, "", nil
+	}
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return "", "", fmt.Errorf("读取密钥文件 %s=%s: %w", fileKey, file, err)
+	}
+	value = strings.TrimSpace(string(raw))
+	if value == "" {
+		return "", "", fmt.Errorf("密钥文件 %s=%s 内容为空", fileKey, file)
+	}
+	return value, file, nil
 }
 
 // envOr 读取字符串环境变量，未设置或为空时返回默认值。

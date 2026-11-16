@@ -229,3 +229,104 @@ func TestMissingSecretsRealPay(t *testing.T) {
 		}
 	}
 }
+
+// writeSecretFile 写入测试用密钥文件并返回路径。
+func writeSecretFile(t *testing.T, name, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+	return path
+}
+
+// TestWechatPEMFromFiles 验证 *_FILE 方式读取只读挂载的 PEM 内容。
+func TestWechatPEMFromFiles(t *testing.T) {
+	keyPEM := "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n"
+	certPEM := "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+	keyPath := writeSecretFile(t, "apiclient_key.pem", keyPEM)
+	certPath := writeSecretFile(t, "platform_cert.pem", certPEM)
+	clearEnv(t, "WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_CERT", "WECHAT_PAY_PRIVATE_KEY_FILE", "WECHAT_PAY_CERT_FILE")
+	t.Setenv("WECHAT_PAY_PRIVATE_KEY_FILE", keyPath)
+	t.Setenv("WECHAT_PAY_CERT_FILE", certPath)
+
+	cfg, err := read()
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if cfg.WechatPrivateKey != strings.TrimSpace(keyPEM) {
+		t.Errorf("WechatPrivateKey = %q, want file content", cfg.WechatPrivateKey)
+	}
+	if cfg.WechatPrivateKeyFile != keyPath {
+		t.Errorf("WechatPrivateKeyFile = %q, want %q", cfg.WechatPrivateKeyFile, keyPath)
+	}
+	if cfg.WechatPayCert != strings.TrimSpace(certPEM) {
+		t.Errorf("WechatPayCert = %q, want file content", cfg.WechatPayCert)
+	}
+	if cfg.WechatPayCertFile != certPath {
+		t.Errorf("WechatPayCertFile = %q, want %q", cfg.WechatPayCertFile, certPath)
+	}
+}
+
+// TestWechatPEMFileConflictsWithInline 验证直接值与该文件路径不能同时配置。
+func TestWechatPEMFileConflictsWithInline(t *testing.T) {
+	t.Setenv("WECHAT_PAY_PRIVATE_KEY", "inline-pem")
+	t.Setenv("WECHAT_PAY_PRIVATE_KEY_FILE", filepath.Join(t.TempDir(), "unused.pem"))
+
+	_, err := read()
+	if err == nil || !strings.Contains(err.Error(), "WECHAT_PAY_PRIVATE_KEY") {
+		t.Fatalf("read error = %v, want conflict error", err)
+	}
+}
+
+// TestWechatPEMFileUnreadable 验证密钥文件不存在时启动报错并带上路径。
+func TestWechatPEMFileUnreadable(t *testing.T) {
+	clearEnv(t, "WECHAT_PAY_CERT")
+	path := filepath.Join(t.TempDir(), "missing.pem")
+	t.Setenv("WECHAT_PAY_CERT_FILE", path)
+
+	_, err := read()
+	if err == nil || !strings.Contains(err.Error(), "WECHAT_PAY_CERT_FILE") || !strings.Contains(err.Error(), path) {
+		t.Fatalf("read error = %v, want unreadable file error with path", err)
+	}
+}
+
+// TestWechatPEMFileEmpty 验证空白密钥文件视为配置错误。
+func TestWechatPEMFileEmpty(t *testing.T) {
+	clearEnv(t, "WECHAT_PAY_CERT")
+	path := writeSecretFile(t, "empty.pem", " \n")
+	t.Setenv("WECHAT_PAY_CERT_FILE", path)
+
+	_, err := read()
+	if err == nil || !strings.Contains(err.Error(), "内容为空") {
+		t.Fatalf("read error = %v, want empty file error", err)
+	}
+}
+
+// TestLoadAcceptsFileOnlyPaySecrets 验证只配 *_FILE 时启动自检通过。
+func TestLoadAcceptsFileOnlyPaySecrets(t *testing.T) {
+	clearEnv(t, "WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_CERT")
+	keyPath := writeSecretFile(t, "key.pem", "key-pem")
+	certPath := writeSecretFile(t, "cert.pem", "cert-pem")
+	for key, value := range map[string]string{
+		"JWT_SECRET":                  "jwt",
+		"ID_CARD_HMAC_KEY":            "hmac",
+		"WECHAT_APPID":                "wx",
+		"WECHAT_SECRET":               "secret",
+		"ADMIN_INIT_PASSWORD":         "pass",
+		"PAY_MOCK":                    "false",
+		"WECHAT_MCHID":                "mch",
+		"WECHAT_PAY_KEY":              strings.Repeat("k", 32),
+		"WECHAT_MCH_SERIAL_NO":        "serial",
+		"WECHAT_PAY_NOTIFY_URL":       "https://example.com/notify",
+		"WECHAT_REFUND_NOTIFY_URL":    "https://example.com/refund",
+		"WECHAT_PAY_PRIVATE_KEY_FILE": keyPath,
+		"WECHAT_PAY_CERT_FILE":        certPath,
+	} {
+		t.Setenv(key, value)
+	}
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load with secret files: %v", err)
+	}
+}
