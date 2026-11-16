@@ -155,3 +155,117 @@ export interface CancelOrderResult {
   cancel_reason: "user_cancel" | "pay_failed" | "system";
   canceled_at: string;
 }
+
+/** 绑定手机号响应（API 文档 1.2）。 */
+export interface BindPhoneResult {
+  phone: string;
+}
+
+/** 「我的报名」展示状态（API 文档 3.3/3.4，由订单状态映射）。 */
+export type RegistrationStatus = "paid" | "refunding" | "refunded";
+
+/** 资料完成度（服务端实时计算，missing 为空即资料已齐）。 */
+export interface MaterialStatus {
+  total: number;
+  completed: number;
+  missing: string[];
+}
+
+/** 「我的报名」列表项（GET /api/v1/registrations，API 文档 3.3）。 */
+export interface RegistrationListItem {
+  registration_id: number;
+  event_id: number;
+  event_name: string;
+  level: EventLevel;
+  event_date: string | null;
+  level_group: GroupLevel;
+  dance_type: DanceType;
+  player_name: string;
+  player_no: string;
+  order_no: string;
+  /** 单位：分 */
+  amount: number;
+  status: RegistrationStatus;
+  material_status: MaterialStatus;
+  material_deadline: string | null;
+}
+
+/** 报名详情中的赛事摘要（API 文档 3.4）。 */
+export interface RegistrationEventSummary {
+  id: number;
+  name: string;
+  level: EventLevel;
+  event_date: string | null;
+}
+
+/** 报名详情中的退款信息（API 文档 3.4）。 */
+export interface RegistrationRefund {
+  ticket_no: string;
+  status: "processing" | "refunded";
+  reason: string;
+}
+
+/** 报名资料快照（API 文档 3.4，未传字段为 null）。 */
+export interface Materials {
+  photo_url: string | null;
+  audio_url: string | null;
+  audio_filename: string | null;
+  program_name: string | null;
+  teacher_name: string | null;
+  contact_phone: string | null;
+  express_address: string | null;
+  work_intro: string | null;
+  special_req: string | null;
+  updated_at: string | null;
+}
+
+/** 报名详情（GET /api/v1/registrations/{id}，API 文档 3.4）。 */
+export interface RegistrationDetail {
+  status: RegistrationStatus;
+  status_desc: string;
+  material_readonly: boolean;
+  material_status: MaterialStatus;
+  event: RegistrationEventSummary;
+  level_group: GroupLevel;
+  dance_type: DanceType;
+  player_name: string;
+  player_no: string;
+  institution: string | null;
+  order_no: string;
+  /** 单位：分 */
+  amount: number;
+  paid_at: string | null;
+  refund: RegistrationRefund | null;
+  materials: Materials;
+}
+
+/** 文本资料更新请求体（PUT /api/v1/registrations/{id}/materials，API 文档 4.1）。 */
+export interface UpdateMaterialsPayload {
+  program_name?: string;
+  teacher_name?: string;
+  contact_phone?: string;
+  express_address?: string;
+  work_intro?: string;
+  special_req?: string;
+}
+
+/** 资料更新响应（API 文档 4.1）。 */
+export interface UpdateMaterialsResult {
+  material_status: MaterialStatus;
+  materials: Materials;
+}
+
+/** 候补展示状态（API 文档 5.2；removed 为后台移出后保留的留档记录）。 */
+export type WaitlistStatus = "waiting" | "notified" | "converted" | "given_up" | "removed";
+
+/** 「我的候补」列表项（GET /api/v1/waitlists，API 文档 5.2）。 */
+export interface WaitlistItem {
+  waitlist_id: number;
+  event_id: number;
+  event_name: string;
+  level: GroupLevel;
+  dance_type: DanceType;
+  position_no: number;
+  status: WaitlistStatus;
+  created_at: string;
+}

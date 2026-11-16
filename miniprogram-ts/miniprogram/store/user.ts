@@ -1,6 +1,6 @@
 import { makeAutoObservable } from "mobx";
 
-import { loginWithWechat } from "../api/auth";
+import { bindPhone as bindPhoneApi, loginWithWechat } from "../api/auth";
 import type { User } from "../types/models";
 import { readSession, removeSession, writeSession } from "../utils/session";
 
@@ -23,7 +23,7 @@ class UserStore {
   }
 
   get displayName(): string {
-    return this.profile?.nickname || "未登录";
+    return this.profile?.nickname?.trim() || "菁英舞者";
   }
 
   setSession(token: string, user: User): void {
@@ -68,6 +68,16 @@ class UserStore {
       return Promise.resolve(this.profile);
     }
     return this.login();
+  }
+
+  /** 绑定/换绑手机号，成功后同步本地用户信息（后端返回脱敏号码）。 */
+  async bindPhone(phoneCode: string): Promise<string> {
+    const result = await bindPhoneApi(phoneCode);
+    if (this.profile) {
+      this.profile = { ...this.profile, phone: result.phone };
+      writeSession({ token: this.token, user: this.profile });
+    }
+    return result.phone;
   }
 }
 

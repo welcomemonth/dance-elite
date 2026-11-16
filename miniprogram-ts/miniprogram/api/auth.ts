@@ -1,4 +1,4 @@
-import type { LoginResult } from "../types/models";
+import type { BindPhoneResult, LoginResult } from "../types/models";
 import { DEBUG } from "../config/env";
 import { http } from "../utils/request";
 
@@ -38,4 +38,12 @@ export function loginWithWechat(payload: Omit<WxLoginPayload, "code"> = {}): Pro
   return getWxLoginCode().then((code) =>
     http.post<LoginResult>("/api/v1/auth/wx-login", { ...payload, code }, { auth: false }),
   );
+}
+
+/**
+ * 绑定/换绑手机号：`getPhoneNumber` 返回的 code 交给后端换取手机号。
+ * 对应接口：PUT /api/v1/auth/phone（API 文档 1.2）。
+ */
+export function bindPhone(phoneCode: string): Promise<BindPhoneResult> {
+  return http.put<BindPhoneResult>("/api/v1/auth/phone", { phone_code: phoneCode });
 }

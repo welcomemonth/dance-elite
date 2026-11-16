@@ -26,6 +26,75 @@ export function chooseImages(options: ChooseImageOptions = {}): Promise<string[]
   });
 }
 
+export interface ChosenImage {
+  path: string;
+  size: number;
+  fileType: string;
+}
+
+/** 选择单张图片并返回临时路径与大小（用于上传前校验）。 */
+export function chooseImageFile(options: ChooseImageOptions = {}): Promise<ChosenImage | null> {
+  return new Promise((resolve, reject) => {
+    wx.chooseMedia({
+      count: 1,
+      mediaType: ["image"],
+      sizeType: options.sizeType ?? ["compressed"],
+      sourceType: options.sourceType ?? ["album", "camera"],
+      success(result) {
+        const file = result.tempFiles[0];
+        if (!file) {
+          resolve(null);
+          return;
+        }
+        resolve({
+          path: file.tempFilePath,
+          size: file.size,
+          fileType: file.fileType ?? "image",
+        });
+      },
+      fail(error) {
+        if (error.errMsg.includes("cancel")) {
+          resolve(null);
+          return;
+        }
+        reject(new Error(`选择图片失败：${error.errMsg}`));
+      },
+    });
+  });
+}
+
+export interface ChosenAudio {
+  path: string;
+  name: string;
+  size: number;
+}
+
+/** 从微信聊天记录中选择一个 mp3 音频文件（小程序唯一可用的文件选择入口）。 */
+export function chooseAudioFile(): Promise<ChosenAudio | null> {
+  return new Promise((resolve, reject) => {
+    wx.chooseMessageFile({
+      count: 1,
+      type: "file",
+      extension: ["mp3"],
+      success(result) {
+        const file = result.tempFiles[0];
+        if (!file) {
+          resolve(null);
+          return;
+        }
+        resolve({ path: file.path, name: file.name, size: file.size });
+      },
+      fail(error) {
+        if (error.errMsg.includes("cancel")) {
+          resolve(null);
+          return;
+        }
+        reject(new Error(`选择音频失败：${error.errMsg}`));
+      },
+    });
+  });
+}
+
 /** 预览图片（支持远程 URL 与本地临时路径）。 */
 export function previewImages(urls: string[], current?: string): void {
   if (urls.length === 0) {
