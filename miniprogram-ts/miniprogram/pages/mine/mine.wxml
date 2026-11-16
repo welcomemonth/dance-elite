@@ -1,0 +1,43 @@
+<view class="app-page mine-page">
+  <nav-bar bare="{{true}}" bg="#f4f1e8" />
+
+  <view class="mine-hero">
+    <view class="mine-card">
+      <view class="mine-avatar">{{avatarText}}</view>
+      <view class="mine-info">
+        <view class="mine-name">{{displayName}}</view>
+        <view wx:if="{{playerNoText}}" class="mine-player-no">选手编号：{{playerNoText}}</view>
+        <view wx:else class="mine-player-no">完成一次报名后生成选手编号</view>
+      </view>
+      <button wx:if="{{!loggedIn}}" class="mine-login" loading="{{loading}}" bind:tap="onLoginTap">
+        登录
+      </button>
+    </view>
+    <view wx:if="{{loggedIn}}" class="mine-logout" bind:tap="onLogoutTap">退出登录</view>
+  </view>
+
+  <view class="mine-menu">
+    <view class="menu-row" data-label="我的报名" bind:tap="onMenuTap">
+      <text class="menu-row__label">我的报名</text>
+      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+    </view>
+    <view class="menu-row" data-label="历史订单" bind:tap="onMenuTap">
+      <text class="menu-row__label">历史订单</text>
+      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+    </view>
+    <view class="menu-row" data-label="我的候补" bind:tap="onMenuTap">
+      <text class="menu-row__label">我的候补</text>
+      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+    </view>
+    <button class="menu-row menu-row--button" open-type="contact">
+      <text class="menu-row__label">联系客服</text>
+      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+    </button>
+    <view class="menu-row" data-label="关于与规则" bind:tap="onMenuTap">
+      <text class="menu-row__label">关于与规则</text>
+      <image class="menu-row__arrow" src="/assets/icons/chevron.svg" />
+    </view>
+  </view>
+
+  <view class="mine-footer">优舞盟 · 青少年独舞赛事</view>
+</view>

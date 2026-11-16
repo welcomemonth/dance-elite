@@ -1,0 +1,93 @@
+<view class="app-page events-page">
+  <nav-bar bare="{{true}}" bg="#ffc233" />
+
+  <view class="hero">
+    <view class="hero__top">
+      <view class="hero__badge">优舞盟 · 赛事中心</view>
+      <view class="hero__refresh" bind:tap="onRefreshTap" hover-class="hero__refresh--hover">
+        <image class="hero__refresh-icon" src="/assets/icons/refresh.svg" />
+      </view>
+    </view>
+    <view class="hero__title">下一场舞台，</view>
+    <view class="hero__title hero__title--second">从这里开始。</view>
+    <view class="hero__meta">
+      <text>全国青少年独舞赛事</text>
+      <text class="hero__meta-strong">{{total}} 场赛事</text>
+    </view>
+  </view>
+
+  <view class="filters">
+    <view
+      wx:for="{{filters}}"
+      wx:key="label"
+      class="filter {{item.value === activeStatus ? 'filter--active' : ''}}"
+      data-value="{{item.value}}"
+      bind:tap="onFilterTap"
+    >
+      {{item.label}}
+    </view>
+  </view>
+
+  <view class="event-list">
+    <view
+      wx:for="{{rows}}"
+      wx:key="id"
+      class="event-card"
+      data-id="{{item.id}}"
+      bind:tap="onEventTap"
+      hover-class="event-card--hover"
+    >
+      <view class="event-card__top {{item.featured ? 'event-card__top--featured' : ''}}">
+        <view class="app-tag {{item.featured ? 'event-card__level--featured' : ''}}">
+          {{item.levelText}}
+        </view>
+        <view class="event-card__status">
+          <view wx:if="{{item.status === 'registering'}}" class="event-card__dot"></view>
+          {{item.statusText}}
+        </view>
+      </view>
+
+      <view class="event-card__body">
+        <view class="event-card__title">{{item.name}}</view>
+        <view class="event-card__meta">
+          <image class="event-card__meta-icon" src="/assets/icons/pin.svg" />
+          <text>{{item.city || '城市待定'}} · {{item.venue || '场馆待定'}}</text>
+        </view>
+        <view class="event-card__meta">
+          <image class="event-card__meta-icon" src="/assets/icons/calendar.svg" />
+          <text>{{item.dateText}}</text>
+        </view>
+
+        <view class="event-card__bottom">
+          <view>
+            <view class="event-card__fee-label">报名费</view>
+            <view class="event-card__fee">
+              {{item.feeText}}
+              <text wx:if="{{item.fee > 0}}" class="event-card__fee-unit"> / 人</text>
+            </view>
+          </view>
+          <view class="event-card__action">
+            <text>查看赛事</text>
+            <image class="event-card__arrow" src="/assets/icons/arrow.svg" />
+          </view>
+        </view>
+
+        <view wx:if="{{item.hotText}}" class="event-card__hot">{{item.hotText}}</view>
+      </view>
+    </view>
+
+    <view wx:if="{{listError}}" class="app-error">{{listError}}</view>
+
+    <view wx:if="{{loading || (refreshing && list.length === 0)}}" class="app-loading">
+      正在加载赛事…
+    </view>
+    <view wx:elif="{{finished && list.length > 0}}" class="app-footer-text">没有更多赛事了</view>
+
+    <empty-state
+      wx:if="{{isEmpty}}"
+      text="暂无赛事，敬请期待下一场"
+      show-retry="{{true}}"
+      bind:retry="emptyState_retry"
+    />
+  </view>
+</view>

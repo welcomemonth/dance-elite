@@ -12,11 +12,11 @@ const ENV_CONFIG: Record<EnvVersion, EnvConfig> = {
     requestTimeout: 15000,
   },
   trial: {
-    apiBaseUrl: "https://api.example.com",
+    apiBaseUrl: "https://dance.meetmonth.top",
     requestTimeout: 15000,
   },
   release: {
-    apiBaseUrl: "https://api.example.com",
+    apiBaseUrl: "https://dance-test.meetmonth.top",
     requestTimeout: 15000,
   },
 };
@@ -34,3 +34,6 @@ export const ENV_VERSION: EnvVersion = detectEnvVersion();
 export const API_BASE_URL: string = ENV_CONFIG[ENV_VERSION].apiBaseUrl;
 
 export const REQUEST_TIMEOUT: number = ENV_CONFIG[ENV_VERSION].requestTimeout;
+
+/** 是否输出请求链路日志（仅开发环境）。 */
+export const DEBUG: boolean = ENV_VERSION === "develop";

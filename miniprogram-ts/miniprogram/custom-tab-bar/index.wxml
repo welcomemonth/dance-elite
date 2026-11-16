@@ -1,0 +1,39 @@
+<view class="tabbar">
+  <view
+    class="tabbar__item {{selected === 0 ? 'tabbar__item--active' : ''}}"
+    data-index="0"
+    bind:tap="onTap"
+  >
+    <image
+      class="tabbar__icon"
+      src="{{selected === 0 ? '/assets/icons/tab-calendar-active.svg' : '/assets/icons/tab-calendar.svg'}}"
+    />
+    <view class="tabbar__label">赛事列表</view>
+  </view>
+
+  <view
+    class="tabbar__item tabbar__item--center {{selected === 1 ? 'tabbar__item--active' : ''}}"
+    data-index="1"
+    bind:tap="onTap"
+  >
+    <view class="tabbar__trophy {{selected === 1 ? 'tabbar__trophy--active' : ''}}">
+      <image
+        class="tabbar__trophy-icon"
+        src="{{selected === 1 ? '/assets/icons/tab-trophy-active.svg' : '/assets/icons/tab-trophy.svg'}}"
+      />
+    </view>
+    <view class="tabbar__label tabbar__label--center">排行榜</view>
+  </view>
+
+  <view
+    class="tabbar__item {{selected === 2 ? 'tabbar__item--active' : ''}}"
+    data-index="2"
+    bind:tap="onTap"
+  >
+    <image
+      class="tabbar__icon"
+      src="{{selected === 2 ? '/assets/icons/tab-user-active.svg' : '/assets/icons/tab-user.svg'}}"
+    />
+    <view class="tabbar__label">我的</view>
+  </view>
+</view>

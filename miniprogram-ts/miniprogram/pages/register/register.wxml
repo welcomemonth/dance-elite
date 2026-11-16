@@ -1,0 +1,99 @@
+<view class="app-page register-page">
+  <nav-bar title="填写报名信息" bg="#fffdf8" />
+
+  <view wx:if="{{loading}}" class="app-loading">正在加载赛事信息…</view>
+
+  <view wx:elif="{{loadError}}" class="register-error">
+    <view class="app-error">{{loadError}}</view>
+    <button class="app-btn app-btn--primary" bind:tap="onRetry">重新加载</button>
+  </view>
+
+  <block wx:elif="{{event}}">
+    <view class="register-hero">
+      <view class="register-hero__label">正在报名</view>
+      <view class="register-hero__title">{{eventTitle}}</view>
+      <view class="register-hero__meta">{{levelText}} · {{dateText}}</view>
+    </view>
+
+    <view class="register-body">
+      <view class="register-section">
+        <view class="register-section__title">选手信息</view>
+
+        <view class="app-field">
+          <view class="app-field__label">选手姓名<text class="app-field__required">*</text></view>
+          <input
+            class="app-field__input"
+            value="{{playerName}}"
+            maxlength="30"
+            placeholder="请输入真实姓名"
+            bindinput="onPlayerInput"
+          />
+        </view>
+
+        <view class="app-field">
+          <view class="app-field__label">大陆身份证号<text class="app-field__required">*</text></view>
+          <input
+            class="app-field__input"
+            value="{{idCardNo}}"
+            maxlength="18"
+            placeholder="请输入 18 位身份证号"
+            bindinput="onIdCardInput"
+          />
+          <view class="app-field__hint">
+            身份证号仅用于年龄与重复报名校验，服务端加密存储；组别由系统自动判定。
+          </view>
+        </view>
+
+        <view class="app-field">
+          <view class="app-field__label">机构名称</view>
+          <input
+            class="app-field__input"
+            value="{{institution}}"
+            maxlength="50"
+            placeholder="选填"
+            bindinput="onInstitutionInput"
+          />
+        </view>
+      </view>
+
+      <view class="register-section">
+        <view class="register-section__title">组别判定</view>
+        <view class="register-note">
+          提交后由系统根据身份证出生年份自动匹配 U11 / U13 / U15 组别，无需手动选择。
+        </view>
+      </view>
+
+      <view class="register-section">
+        <view class="register-section__title">选择舞种</view>
+        <view class="dance-options">
+          <view
+            wx:for="{{danceOptions}}"
+            wx:key="value"
+            class="dance-option {{item.value === danceType ? 'dance-option--active' : ''}}"
+            data-value="{{item.value}}"
+            bind:tap="onDanceTap"
+          >
+            <view class="dance-option__radio">
+              <view wx:if="{{item.value === danceType}}" class="dance-option__radio-dot"></view>
+            </view>
+            <view class="dance-option__label">{{item.label}}</view>
+            <view class="dance-option__hint">{{item.hint}}</view>
+          </view>
+        </view>
+        <view class="register-note">
+          同一赛事一人只能报名一个组别，可报名多个舞种；名额以提交时服务端校验为准。
+        </view>
+      </view>
+    </view>
+
+    <view class="app-fixed-bottom">
+      <button
+        class="app-btn app-btn--primary"
+        disabled="{{submitting}}"
+        bind:tap="onSubmit"
+      >
+        {{submitText}}
+      </button>
+    </view>
+  </block>
+</view>

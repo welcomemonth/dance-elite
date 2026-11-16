@@ -1,0 +1,107 @@
+.mine-page {
+  padding-bottom: calc(220rpx + env(safe-area-inset-bottom));
+}
+
+.mine-hero {
+  padding: 40rpx 32rpx 24rpx;
+}
+
+.mine-card {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 32rpx;
+  border: 2rpx solid #121217;
+  background: #ffc233;
+}
+
+.mine-avatar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 104rpx;
+  height: 104rpx;
+  border: 2rpx solid #121217;
+  background: #ffffff;
+  font-size: 44rpx;
+  font-weight: 700;
+}
+
+.mine-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.mine-name {
+  overflow: hidden;
+  font-size: 36rpx;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mine-player-no {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+}
+
+.mine-login {
+  flex-shrink: 0;
+  min-width: 120rpx;
+  height: 64rpx;
+  padding: 0 20rpx;
+  border: 2rpx solid #121217;
+  background: #121217;
+  color: #ffffff;
+  font-size: 24rpx;
+  font-weight: 700;
+  line-height: 60rpx;
+}
+
+.mine-logout {
+  margin-top: 16rpx;
+  color: #6c6c89;
+  font-size: 22rpx;
+  text-align: right;
+}
+
+.mine-menu {
+  margin: 24rpx 32rpx 0;
+  border: 2rpx solid #121217;
+  background: #fffdf8;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 30rpx 28rpx;
+  border-bottom: 2rpx solid rgba(18, 18, 23, 0.12);
+  font-size: 28rpx;
+}
+
+.menu-row:last-child {
+  border-bottom: none;
+}
+
+.menu-row--button {
+  width: 100%;
+  text-align: left;
+}
+
+.menu-row__label {
+  font-weight: 700;
+}
+
+.menu-row__arrow {
+  width: 32rpx;
+  height: 32rpx;
+}
+
+.mine-footer {
+  margin-top: 48rpx;
+  color: #6c6c89;
+  font-size: 22rpx;
+  text-align: center;
+}

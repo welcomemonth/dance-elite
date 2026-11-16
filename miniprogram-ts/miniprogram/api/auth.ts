@@ -1,4 +1,5 @@
 import type { LoginResult } from "../types/models";
+import { DEBUG } from "../config/env";
 import { http } from "../utils/request";
 
 interface WxLoginPayload {
@@ -11,6 +12,9 @@ function getWxLoginCode(): Promise<string> {
   return new Promise((resolve, reject) => {
     wx.login({
       success(result) {
+        if (DEBUG) {
+          console.log("[wx.login] 成功", result);
+        }
         if (result.code) {
           resolve(result.code);
           return;
@@ -18,6 +22,8 @@ function getWxLoginCode(): Promise<string> {
         reject(new Error("微信登录失败：未获取到 code"));
       },
       fail(error) {
+        // 微信登录在本地就失败了，请求不会发出；打印完整错误对象便于定位。
+        console.error("[wx.login] 失败", error);
         reject(new Error(`微信登录失败：${error.errMsg}`));
       },
     });

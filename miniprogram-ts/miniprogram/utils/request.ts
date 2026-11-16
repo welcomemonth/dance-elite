@@ -1,4 +1,4 @@
-import { API_BASE_URL, REQUEST_TIMEOUT } from "../config/env";
+import { API_BASE_URL, DEBUG, REQUEST_TIMEOUT } from "../config/env";
 import { ERROR_CODE, type ApiEnvelope } from "../types/api";
 import { ApiError } from "./api-error";
 import { unwrapEnvelope } from "./api-response";
@@ -54,10 +54,15 @@ function buildUrl(path: string, query?: QueryParams): string {
 export function request<T>(path: string, config: RequestConfig = {}): Promise<T> {
   const { method = "GET", query, data, auth = true, header = {}, timeout = REQUEST_TIMEOUT } = config;
   const token = readToken();
+  const url = buildUrl(path, query);
+
+  if (DEBUG) {
+    console.log(`[request] → ${method} ${url}`, data ?? "");
+  }
 
   return new Promise<T>((resolve, reject) => {
     wx.request<ApiEnvelope<T>>({
-      url: buildUrl(path, query),
+      url,
       method,
       data,
       timeout,
@@ -67,6 +72,12 @@ export function request<T>(path: string, config: RequestConfig = {}): Promise<T>
         ...header,
       },
       success(response) {
+        if (DEBUG) {
+          console.log(
+            `[request] ← ${method} ${url} (HTTP ${response.statusCode})`,
+            response.data,
+          );
+        }
         try {
           resolve(unwrapEnvelope<T>(response.data, response.statusCode));
         } catch (error) {
@@ -77,6 +88,9 @@ export function request<T>(path: string, config: RequestConfig = {}): Promise<T>
         }
       },
       fail(error) {
+        if (DEBUG) {
+          console.error(`[request] ✕ ${method} ${url} 未收到响应`, error);
+        }
         reject(new ApiError(-1, error.errMsg || "网络异常，请稍后重试"));
       },
     });

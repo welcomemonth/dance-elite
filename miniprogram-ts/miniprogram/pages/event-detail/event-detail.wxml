@@ -1,0 +1,114 @@
+<view class="app-page detail-page">
+  <nav-bar title="{{event ? event.name : '赛事详情'}}" bg="#fffdf8" />
+
+  <view wx:if="{{loading}}" class="app-loading">正在加载赛事详情…</view>
+
+  <view wx:elif="{{loadError}}" class="detail-error">
+    <view class="app-error">{{loadError}}</view>
+    <button class="app-btn app-btn--primary" bind:tap="onRetry">重新加载</button>
+  </view>
+
+  <block wx:elif="{{event}}">
+    <view class="detail-hero">
+      <view class="app-tag app-tag--yellow">{{levelText}}</view>
+      <view class="detail-hero__title">{{event.name}}</view>
+      <view class="detail-hero__meta">
+        <image class="detail-hero__icon" src="/assets/icons/pin-light.svg" />
+        <text>{{cityVenueText}}</text>
+      </view>
+      <view class="detail-hero__meta">
+        <image class="detail-hero__icon" src="/assets/icons/calendar-light.svg" />
+        <text>{{eventDateText}}</text>
+      </view>
+    </view>
+
+    <view class="status-band">
+      <view>
+        <view class="status-band__label">当前状态</view>
+        <view class="status-band__value">{{statusText}}</view>
+      </view>
+      <image class="status-band__icon" src="/assets/icons/refresh.svg" />
+    </view>
+    <view class="status-band__hint">{{statusHint}}</view>
+
+    <view class="detail-section">
+      <view class="app-section-kicker">EVENT TIMELINE</view>
+      <view class="app-section-title">赛事时间线</view>
+      <view class="timeline">
+        <view wx:for="{{timelineItems}}" wx:key="label" class="timeline__item">
+          <view class="timeline__line"></view>
+          <view class="timeline__dot {{item.done ? 'timeline__dot--done' : ''}}"></view>
+          <view class="timeline__label">{{item.label}}</view>
+          <view class="timeline__date">{{item.dateText}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="detail-section">
+      <view class="app-section-kicker">GROUPS</view>
+      <view class="app-section-title">组别与名额</view>
+      <view class="group-section" wx:for="{{groupSections}}" wx:key="level">
+        <view class="group-section__head">
+          <view class="group-section__level">{{item.level}}</view>
+          <view class="group-section__range">{{item.birthRange}}</view>
+        </view>
+        <view class="group-section__body">
+          <view class="group-row" wx:for="{{item.items}}" wx:for-item="group" wx:key="groupId">
+            <view class="group-row__top">
+              <view>
+                <view class="group-row__name">{{group.danceTypeText}}</view>
+                <view class="group-row__meta">
+                  已报 {{group.registered}} / {{group.quota}} 人
+                  <text wx:if="{{!group.enabled}}"> · 已关闭</text>
+                </view>
+              </view>
+              <view class="app-tag {{group.tagClass}}">
+                {{group.enabled ? group.tagText : '已关闭'}}
+              </view>
+            </view>
+            <view class="group-row__track">
+              <view class="group-row__bar" style="width: {{group.percent}}%;"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="detail-section">
+      <view class="app-section-kicker">FEES & RULES</view>
+      <view class="app-section-title">费用与规则</view>
+      <view class="rules">
+        <view class="rules__row" wx:for="{{rules}}" wx:key="label">
+          <text class="rules__label">{{item.label}}</text>
+          <text class="rules__value">{{item.value}}</text>
+        </view>
+      </view>
+      <view wx:if="{{event.refund_policy}}" class="rules__policy">{{event.refund_policy}}</view>
+    </view>
+
+    <view class="detail-section honors" wx:if="{{event.honor_desc}}">
+      <view class="honors__head" bind:tap="onHonorsTap">
+        <view>
+          <view class="app-section-kicker">HONORS</view>
+          <view class="app-section-title">荣誉与奖金</view>
+        </view>
+        <image
+          class="honors__chevron {{honorsOpen ? 'honors__chevron--open' : ''}}"
+          src="/assets/icons/chevron.svg"
+        />
+      </view>
+      <view wx:if="{{honorsOpen}}" class="honors__content">{{event.honor_desc}}</view>
+    </view>
+
+    <view class="detail-bottom">
+      <button
+        class="app-btn {{canRegister ? 'app-btn--primary' : ''}}"
+        disabled="{{!canRegister}}"
+        bind:tap="onRegisterTap"
+      >
+        {{ctaText}}
+        <image wx:if="{{canRegister}}" class="detail-bottom__arrow" src="/assets/icons/arrow-light.svg" />
+      </button>
+    </view>
+  </block>
+</view>

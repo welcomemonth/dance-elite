@@ -84,3 +84,20 @@ export function formatDuration(totalSeconds: number): string {
   const seconds = Math.max(0, Math.floor(totalSeconds));
   return `${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;
 }
+
+/** 统一 ISO 时间（固定 +08:00），用于本地联调 mock 支付回调。 */
+export function nowISO(): string {
+  const date = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(
+    date.getUTCHours(),
+  )}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}+08:00`;
+}
+
+/** 中文日期：2027-03-01T18:00:00+08:00 => 2027 年 3 月 1 日。 */
+export function formatChineseDate(input: DateInput): string {
+  const date = toDate(input);
+  if (!date) {
+    return "";
+  }
+  return `${date.getFullYear()} 年 ${date.getMonth() + 1} 月 ${date.getDate()} 日`;
+}

@@ -1,0 +1,20 @@
+<view class="app-page ranking-page">
+  <nav-bar bare="{{true}}" bg="#5423e7" />
+
+  <view class="ranking-hero">
+    <view class="ranking-hero__badge">优舞盟 · 年度榜单</view>
+    <view class="ranking-hero__title">每一份坚持，</view>
+    <view class="ranking-hero__title ranking-hero__title--second">都值得被看见。</view>
+    <view class="ranking-hero__desc">直通榜 · 积分榜 · 机构年度榜</view>
+  </view>
+
+  <view class="ranking-body">
+    <view class="ranking-placeholder">
+      <image class="ranking-placeholder__icon" src="/assets/icons/tab-trophy.svg" />
+      <view class="ranking-placeholder__title">榜单即将上线</view>
+      <view class="ranking-placeholder__text">
+        成绩发布后，这里将展示各年龄组与舞种的直通榜、积分榜和机构年度榜。
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,43 @@
+<view class="app-page success-page">
+  <nav-bar title="报名成功" show-back="{{false}}" bg="#fffdf8" />
+
+  <view class="success-hero">
+    <view class="success-icon">
+      <image class="success-icon__image" src="/assets/icons/check.svg" />
+    </view>
+    <view class="success-title">报名成功</view>
+    <view class="success-desc">请按赛事时间安排参赛，并记得在截止前补充参赛资料。</view>
+  </view>
+
+  <view class="success-card">
+    <view class="success-row">
+      <text class="success-row__label">赛事</text>
+      <text class="success-row__value">{{eventName}}</text>
+    </view>
+    <view class="success-row">
+      <text class="success-row__label">组别 / 舞种</text>
+      <text class="success-row__value">{{levelText}} · {{danceTypeText}}</text>
+    </view>
+    <view class="success-row">
+      <text class="success-row__label">订单号</text>
+      <text class="success-row__value success-row__value--mono">{{orderNo}}</text>
+    </view>
+    <view class="success-row">
+      <text class="success-row__label">支付金额</text>
+      <text class="success-row__value">{{amountText}}</text>
+    </view>
+    <view class="success-row">
+      <text class="success-row__label">资料截止</text>
+      <text class="success-row__value">{{deadlineText}}</text>
+    </view>
+  </view>
+
+  <view class="success-note">
+    资料可在截止前随时补充和修改，不上传不影响参赛。退款须联系客服登记，由管理员后台处理。
+  </view>
+
+  <view class="success-actions">
+    <button class="app-btn app-btn--primary" bind:tap="onGoMine">查看我的报名</button>
+    <button class="app-btn" bind:tap="onGoEvents">返回赛事列表</button>
+  </view>
+</view>

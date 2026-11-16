@@ -46,11 +46,21 @@ miniprogram-ts/
 │   ├── config/env.ts                  # 运行环境与 API 地址
 │   ├── types/                         # 响应包装、错误码、领域模型
 │   ├── utils/                         # request / session / cache / paged-list / format / upload / media
-│   ├── api/                           # 按模块拆分的接口函数
+│   ├── api/                           # 按模块拆分的接口函数（auth / events / registrations / orders）
 │   ├── store/                         # MobX 全局状态
+│   ├── assets/icons/                  # 导航与 tabBar SVG 图标
+│   ├── components/nav-bar/            # 自定义导航栏（状态栏 + 胶囊避让）
+│   ├── custom-tab-bar/                # 3 Tab 自定义 tabBar（中间排行榜大入口）
 │   ├── components/empty-state/        # 自定义组件示例（props + customEvents）
-│   ├── pages/home/                    # 页面示例（store / computed / 注入方法）
-│   └── pages/list-demo/               # 下拉刷新 + 上拉加载 + 格式化示例
+│   └── pages/
+│       ├── events/                    # Tab1：赛事列表
+│       ├── event-detail/              # 赛事详情 + 时间线 + 组别名额
+│       ├── register/                  # 报名表单 + 支付
+│       ├── register-success/          # 报名成功
+│       ├── ranking/                   # Tab2：榜单占位（T30 前）
+│       ├── mine/                      # Tab3：我的（登录态 + 菜单）
+│       ├── home/                      # 模板能力示例
+│       └── list-demo/                 # 下拉刷新 + 上拉加载示例
 ├── typings/index.d.ts                 # IAppOption 等全局声明
 ├── scripts/patch-mobx.mjs             # postinstall 处理 mobx 的小程序兼容问题
 ├── project.config.json
@@ -150,6 +160,23 @@ const result = await uploadFile<{ url: string }>({
 ### 全局注入
 
 `inject.ts` 通过 `instanceConfig.setInjectInfo` 注入所有页面/组件可用的 `data`（`appName`、`appVersion`、`envVersion`）和方法（`showToast`、`showError`），并通过 `declare module "annil"` 补全类型提示。新增注入字段时同时更新 `injectData` / `injectMethods` 即可。
+
+## 当前页面
+
+| 页面 | 路径 | 说明 |
+|---|---|---|
+| 赛事列表 | `pages/events/events` | Tab1；真实接口，支持状态筛选、下拉刷新、上拉加载 |
+| 赛事详情 | `pages/event-detail/event-detail` | 时间线、组别名额、费用规则、荣誉奖金 |
+| 报名表单 | `pages/register/register` | 真实提交报名 → 预下单 → 微信支付（mock 通道见下） |
+| 报名成功 | `pages/register-success/register-success` | 订单号、组别、金额、资料截止 |
+| 排行榜 | `pages/ranking/ranking` | Tab2；T30 前占位，不接旧 JSON |
+| 我的 | `pages/mine/mine` | Tab3；登录态与菜单骨架 |
+
+导航：`app.json` 使用 `custom: true` 的 tabBar，组件位于 `miniprogram/custom-tab-bar/`；页面使用 `navigationStyle: "custom"` + `components/nav-bar`。
+
+### 本地支付联调
+
+后端 `PAY_MOCK=true` 时，预下单返回 `paySign = "MOCK-SIGN"`。小程序在 `develop` 环境会跳过 `wx.requestPayment`，直接向 `POST /api/v1/payments/wechat/notify` 提交 mock 成功报文，再轮询 `GET /api/v1/orders/{order_id}` 确认报名生效。`trial` / `release` 不会走该分支。
 
 ## 新增页面清单
 

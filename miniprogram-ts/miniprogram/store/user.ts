@@ -47,8 +47,13 @@ class UserStore {
     this.loggingIn = true;
     loginTask = loginWithWechat()
       .then((result) => {
+        console.log("[userStore] 登录成功", result);
         this.setSession(result.token, result.user);
         return result.user;
+      })
+      .catch((error: unknown) => {
+        console.error("[userStore] 登录失败", error);
+        throw error;
       })
       .finally(() => {
         loginTask = null;

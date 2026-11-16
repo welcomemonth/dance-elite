@@ -1,11 +1,41 @@
 {
-  "pages": ["pages/home/home", "pages/list-demo/list-demo"],
+  "pages": [
+    "pages/events/events",
+    "pages/ranking/ranking",
+    "pages/mine/mine",
+    "pages/event-detail/event-detail",
+    "pages/register/register",
+    "pages/register-success/register-success",
+    "pages/home/home",
+    "pages/list-demo/list-demo"
+  ],
   "window": {
     "navigationBarTitleText": "优舞盟",
-    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarBackgroundColor": "#fffdf8",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f6f4f7",
-    "backgroundTextStyle": "light"
+    "backgroundColor": "#f4f1e8",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#6c6c89",
+    "selectedColor": "#5423e7",
+    "backgroundColor": "#fffdf8",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/events/events",
+        "text": "赛事列表"
+      },
+      {
+        "pagePath": "pages/ranking/ranking",
+        "text": "排行榜"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "我的"
+      }
+    ]
   },
   "style": "v2",
   "lazyCodeLoading": "requiredComponents",
