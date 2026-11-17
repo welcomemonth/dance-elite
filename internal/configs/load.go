@@ -99,7 +99,7 @@ func read() (*Config, error) {
 			logFormat = "console"
 		}
 	}
-	wechatPayCert, wechatPayCertFile, err := secretValue("WECHAT_PAY_CERT", "WECHAT_PAY_CERT_FILE")
+	wechatPublicKey, wechatPublicKeyFile, err := secretValue("WECHAT_PAY_PUBLIC_KEY", "WECHAT_PAY_PUBLIC_KEY_FILE")
 	if err != nil {
 		return nil, err
 	}
@@ -128,15 +128,16 @@ func read() (*Config, error) {
 		WechatAppID:  os.Getenv("WECHAT_APPID"),
 		WechatSecret: os.Getenv("WECHAT_SECRET"),
 
-		WechatMchID:           os.Getenv("WECHAT_MCHID"),
-		WechatPayKey:          os.Getenv("WECHAT_PAY_KEY"),
-		WechatMchSerialNo:     os.Getenv("WECHAT_MCH_SERIAL_NO"),
-		WechatPayCert:         wechatPayCert,
-		WechatPayCertFile:     wechatPayCertFile,
-		WechatPrivateKey:      wechatPrivateKey,
-		WechatPrivateKeyFile:  wechatPrivateKeyFile,
-		WechatNotifyURL:       os.Getenv("WECHAT_PAY_NOTIFY_URL"),
-		WechatRefundNotifyURL: os.Getenv("WECHAT_REFUND_NOTIFY_URL"),
+		WechatMchID:            os.Getenv("WECHAT_MCHID"),
+		WechatPayKey:           os.Getenv("WECHAT_PAY_KEY"),
+		WechatMchSerialNo:      os.Getenv("WECHAT_MCH_SERIAL_NO"),
+		WechatPayPublicKeyID:   strings.TrimSpace(os.Getenv("WECHAT_PAY_PUBLIC_KEY_ID")),
+		WechatPayPublicKey:     wechatPublicKey,
+		WechatPayPublicKeyFile: wechatPublicKeyFile,
+		WechatPrivateKey:       wechatPrivateKey,
+		WechatPrivateKeyFile:   wechatPrivateKeyFile,
+		WechatNotifyURL:        os.Getenv("WECHAT_PAY_NOTIFY_URL"),
+		WechatRefundNotifyURL:  os.Getenv("WECHAT_REFUND_NOTIFY_URL"),
 
 		AdminInitUsername: envOr("ADMIN_INIT_USERNAME", "admin"),
 		AdminInitPassword: os.Getenv("ADMIN_INIT_PASSWORD"),

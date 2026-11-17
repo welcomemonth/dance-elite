@@ -50,7 +50,7 @@ bash scripts/build.sh && bash scripts/push-aliyun.sh
 docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容器 8090
 ```
 
-配置：无 YAML、无命令行参数。全部配置来自环境变量：本地开发由 godotenv 读取 `.env`（可选，已存在的环境变量优先），生产由容器运行时注入；必需项缺失直接 fail-fast。复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）。定时任务相关：`STATUS_TICK_SECONDS`（默认 60）、`ORDER_EXPIRE_MINUTES`（默认 15）、`REFUND_WATCHDOG_MINUTES`（默认 10），均须为正整数。日志相关：`LOG_LEVEL`（debug/info/warn/error）、`LOG_FORMAT`（json/console），未设置时随 `DEBUG` 推导；`SLOW_REQUEST_MS`（默认 500，0 关闭慢请求告警）。
+配置：无 YAML、无命令行参数。全部配置来自环境变量：本地开发由 godotenv 读取 `.env`（可选，已存在的环境变量优先），生产由容器运行时注入；必需项缺失直接 fail-fast。复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）。定时任务相关：`STATUS_TICK_SECONDS`（默认 60）、`ORDER_EXPIRE_MINUTES`（默认 15）、`REFUND_WATCHDOG_MINUTES`（默认 10），均须为正整数。日志相关：`LOG_LEVEL`（debug/info/warn/error）、`LOG_FORMAT`（json/console），未设置时随 `DEBUG` 推导；`SLOW_REQUEST_MS`（默认 500，0 关闭慢请求告警）。微信支付固定使用公钥模式（回调验签）：`WECHAT_PAY_PUBLIC_KEY_ID` + `WECHAT_PAY_PUBLIC_KEY(_FILE)`；`WECHAT_PAY_PRIVATE_KEY(_FILE)` 与 `WECHAT_MCH_SERIAL_NO` 用于请求签名。
 
 ## Directory Structure
 

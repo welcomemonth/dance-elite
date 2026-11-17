@@ -71,7 +71,7 @@ func signHeaders(t *testing.T, client *Client, key *rsa.PrivateKey, body []byte)
 		Timestamp: timestamp,
 		Nonce:     nonce,
 		Signature: base64.StdEncoding.EncodeToString(sig),
-		Serial:    client.platformSerial,
+		Serial:    client.verifySerial,
 	}
 }
 
@@ -122,7 +122,7 @@ func TestParseNotify_Rejects(t *testing.T) {
 			h.Signature = base64.StdEncoding.EncodeToString(sig)
 			return notifyBody
 		}},
-		{"证书序列号不匹配", func(body []byte, h *NotifyHeaders) []byte {
+		{"公钥 ID 不匹配", func(body []byte, h *NotifyHeaders) []byte {
 			h.Serial = "DEADBEEF"
 			return body
 		}},

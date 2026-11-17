@@ -261,8 +261,8 @@ func TestMissingSecretsRealPay(t *testing.T) {
 		AdminInitPassword: "pass",
 	}
 	got := cfg.MissingSecrets()
-	if len(got) != 7 {
-		t.Fatalf("MissingSecrets = %v, want 7 pay-related items", got)
+	if len(got) != 8 {
+		t.Fatalf("MissingSecrets = %v, want 8 pay-related items", got)
 	}
 	for _, item := range got {
 		if !strings.HasPrefix(item, "WECHAT_") {
@@ -284,12 +284,13 @@ func writeSecretFile(t *testing.T, name, body string) string {
 // TestWechatPEMFromFiles 验证 *_FILE 方式读取只读挂载的 PEM 内容。
 func TestWechatPEMFromFiles(t *testing.T) {
 	keyPEM := "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n"
-	certPEM := "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
+	pubPEM := "-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----\n"
 	keyPath := writeSecretFile(t, "apiclient_key.pem", keyPEM)
-	certPath := writeSecretFile(t, "platform_cert.pem", certPEM)
-	clearEnv(t, "WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_CERT", "WECHAT_PAY_PRIVATE_KEY_FILE", "WECHAT_PAY_CERT_FILE")
+	pubPath := writeSecretFile(t, "wechatpay_pub_key.pem", pubPEM)
+	clearEnv(t, "WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_PUBLIC_KEY",
+		"WECHAT_PAY_PRIVATE_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_FILE")
 	t.Setenv("WECHAT_PAY_PRIVATE_KEY_FILE", keyPath)
-	t.Setenv("WECHAT_PAY_CERT_FILE", certPath)
+	t.Setenv("WECHAT_PAY_PUBLIC_KEY_FILE", pubPath)
 
 	cfg, err := read()
 	if err != nil {
@@ -301,11 +302,11 @@ func TestWechatPEMFromFiles(t *testing.T) {
 	if cfg.WechatPrivateKeyFile != keyPath {
 		t.Errorf("WechatPrivateKeyFile = %q, want %q", cfg.WechatPrivateKeyFile, keyPath)
 	}
-	if cfg.WechatPayCert != strings.TrimSpace(certPEM) {
-		t.Errorf("WechatPayCert = %q, want file content", cfg.WechatPayCert)
+	if cfg.WechatPayPublicKey != strings.TrimSpace(pubPEM) {
+		t.Errorf("WechatPayPublicKey = %q, want file content", cfg.WechatPayPublicKey)
 	}
-	if cfg.WechatPayCertFile != certPath {
-		t.Errorf("WechatPayCertFile = %q, want %q", cfg.WechatPayCertFile, certPath)
+	if cfg.WechatPayPublicKeyFile != pubPath {
+		t.Errorf("WechatPayPublicKeyFile = %q, want %q", cfg.WechatPayPublicKeyFile, pubPath)
 	}
 }
 
@@ -322,21 +323,21 @@ func TestWechatPEMFileConflictsWithInline(t *testing.T) {
 
 // TestWechatPEMFileUnreadable 验证密钥文件不存在时启动报错并带上路径。
 func TestWechatPEMFileUnreadable(t *testing.T) {
-	clearEnv(t, "WECHAT_PAY_CERT")
+	clearEnv(t, "WECHAT_PAY_PUBLIC_KEY")
 	path := filepath.Join(t.TempDir(), "missing.pem")
-	t.Setenv("WECHAT_PAY_CERT_FILE", path)
+	t.Setenv("WECHAT_PAY_PUBLIC_KEY_FILE", path)
 
 	_, err := read()
-	if err == nil || !strings.Contains(err.Error(), "WECHAT_PAY_CERT_FILE") || !strings.Contains(err.Error(), path) {
+	if err == nil || !strings.Contains(err.Error(), "WECHAT_PAY_PUBLIC_KEY_FILE") || !strings.Contains(err.Error(), path) {
 		t.Fatalf("read error = %v, want unreadable file error with path", err)
 	}
 }
 
 // TestWechatPEMFileEmpty 验证空白密钥文件视为配置错误。
 func TestWechatPEMFileEmpty(t *testing.T) {
-	clearEnv(t, "WECHAT_PAY_CERT")
+	clearEnv(t, "WECHAT_PAY_PUBLIC_KEY")
 	path := writeSecretFile(t, "empty.pem", " \n")
-	t.Setenv("WECHAT_PAY_CERT_FILE", path)
+	t.Setenv("WECHAT_PAY_PUBLIC_KEY_FILE", path)
 
 	_, err := read()
 	if err == nil || !strings.Contains(err.Error(), "内容为空") {
@@ -344,30 +345,65 @@ func TestWechatPEMFileEmpty(t *testing.T) {
 	}
 }
 
-// TestLoadAcceptsFileOnlyPaySecrets 验证只配 *_FILE 时启动自检通过。
-func TestLoadAcceptsFileOnlyPaySecrets(t *testing.T) {
-	clearEnv(t, "WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_CERT")
-	keyPath := writeSecretFile(t, "key.pem", "key-pem")
-	certPath := writeSecretFile(t, "cert.pem", "cert-pem")
-	for key, value := range map[string]string{
-		"JWT_SECRET":                  "jwt",
-		"ID_CARD_HMAC_KEY":            "hmac",
-		"WECHAT_APPID":                "wx",
-		"WECHAT_SECRET":               "secret",
-		"ADMIN_INIT_PASSWORD":         "pass",
-		"PAY_MOCK":                    "false",
-		"WECHAT_MCHID":                "mch",
-		"WECHAT_PAY_KEY":              strings.Repeat("k", 32),
-		"WECHAT_MCH_SERIAL_NO":        "serial",
-		"WECHAT_PAY_NOTIFY_URL":       "https://example.com/notify",
-		"WECHAT_REFUND_NOTIFY_URL":    "https://example.com/refund",
-		"WECHAT_PAY_PRIVATE_KEY_FILE": keyPath,
-		"WECHAT_PAY_CERT_FILE":        certPath,
-	} {
+// setRealPayEnv 设置真实支付通道的基础环境变量，overrides 覆盖或补充。
+func setRealPayEnv(t *testing.T, overrides map[string]string) {
+	t.Helper()
+	base := map[string]string{
+		"JWT_SECRET":               "jwt",
+		"ID_CARD_HMAC_KEY":         "hmac",
+		"WECHAT_APPID":             "wx",
+		"WECHAT_SECRET":            "secret",
+		"ADMIN_INIT_PASSWORD":      "pass",
+		"PAY_MOCK":                 "false",
+		"WECHAT_MCHID":             "mch",
+		"WECHAT_PAY_KEY":           strings.Repeat("k", 32),
+		"WECHAT_MCH_SERIAL_NO":     "serial",
+		"WECHAT_PAY_NOTIFY_URL":    "https://example.com/notify",
+		"WECHAT_REFUND_NOTIFY_URL": "https://example.com/refund",
+	}
+	for key, value := range base {
 		t.Setenv(key, value)
 	}
+	for key, value := range overrides {
+		t.Setenv(key, value)
+	}
+}
 
-	if _, err := Load(); err != nil {
-		t.Fatalf("Load with secret files: %v", err)
+// TestLoadAcceptsPublicKeyMode 验证公钥模式配置可通过启动自检。
+func TestLoadAcceptsPublicKeyMode(t *testing.T) {
+	clearEnv(t, "WECHAT_PAY_PUBLIC_KEY", "WECHAT_PAY_PUBLIC_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_ID")
+	pubPath := writeSecretFile(t, "wechatpay_pub_key.pem",
+		"-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----\n")
+	keyPath := writeSecretFile(t, "apiclient_key.pem", "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n")
+	setRealPayEnv(t, map[string]string{
+		"WECHAT_PAY_PRIVATE_KEY_FILE": keyPath,
+		"WECHAT_PAY_PUBLIC_KEY_FILE":  pubPath,
+		"WECHAT_PAY_PUBLIC_KEY_ID":    "PUB_KEY_ID_0114232134912410000000000000",
+	})
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with public key mode: %v", err)
+	}
+	if !strings.Contains(cfg.WechatPayPublicKey, "BEGIN PUBLIC KEY") {
+		t.Fatalf("WechatPayPublicKey = %q, want file content", cfg.WechatPayPublicKey)
+	}
+	if cfg.WechatPayPublicKeyFile != pubPath {
+		t.Fatalf("WechatPayPublicKeyFile = %q, want %q", cfg.WechatPayPublicKeyFile, pubPath)
+	}
+}
+
+// TestLoadRequiresPublicKeyID 验证必须同时配置公钥 ID。
+func TestLoadRequiresPublicKeyID(t *testing.T) {
+	clearEnv(t, "WECHAT_PAY_PUBLIC_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_ID")
+	keyPath := writeSecretFile(t, "apiclient_key.pem", "key-pem")
+	setRealPayEnv(t, map[string]string{
+		"WECHAT_PAY_PRIVATE_KEY_FILE": keyPath,
+		"WECHAT_PAY_PUBLIC_KEY":       "-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----\n",
+	})
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "WECHAT_PAY_PUBLIC_KEY_ID") {
+		t.Fatalf("Load error = %v, want missing WECHAT_PAY_PUBLIC_KEY_ID", err)
 	}
 }

@@ -2,8 +2,8 @@
 //
 // 配置全部来自环境变量：本地开发由 godotenv 读取 .env（可选，已存在的
 // 环境变量优先），生产由容器运行时注入。不存在 YAML 配置文件，密钥永远
-// 不落文件入库；微信支付平台证书与商户私钥还可只给文件路径（*_FILE），
-// 由启动时读取只读挂载的 PEM。必需项缺失时启动直接失败。
+// 不落文件入库；微信支付公钥与商户私钥还可只给文件路径（*_FILE），由启动
+// 时读取只读挂载的 PEM。必需项缺失时启动直接失败。
 package config
 
 // Config 是全部运行配置。字段名与环境变量一一对应（见 load.go）。
@@ -36,10 +36,12 @@ type Config struct {
 	WechatMchID       string
 	WechatPayKey      string
 	WechatMchSerialNo string
-	// 平台证书 / 商户私钥：PEM 文本与只读挂载文件二选一。文件方式下
-	// WechatPayCert/WechatPrivateKey 为读取后的内容，*File 记录来源路径。
-	WechatPayCert         string
-	WechatPayCertFile     string
+	// 微信支付公钥模式（本项目唯一支持的回调验签方式）：公钥 ID + 公钥 PEM。
+	// PEM 文本与只读挂载文件二选一；文件方式下 *File 记录来源路径。
+	WechatPayPublicKeyID   string
+	WechatPayPublicKey     string
+	WechatPayPublicKeyFile string
+	// 商户 API 私钥：请求签名用。
 	WechatPrivateKey      string
 	WechatPrivateKeyFile  string
 	WechatNotifyURL       string
@@ -76,8 +78,9 @@ func (c *Config) MissingSecrets() []string {
 			requirement{"WECHAT_MCHID", c.WechatMchID},
 			requirement{"WECHAT_PAY_KEY", c.WechatPayKey},
 			requirement{"WECHAT_MCH_SERIAL_NO", c.WechatMchSerialNo},
-			requirement{"WECHAT_PAY_CERT", c.WechatPayCert},
 			requirement{"WECHAT_PAY_PRIVATE_KEY", c.WechatPrivateKey},
+			requirement{"WECHAT_PAY_PUBLIC_KEY_ID", c.WechatPayPublicKeyID},
+			requirement{"WECHAT_PAY_PUBLIC_KEY", c.WechatPayPublicKey},
 			requirement{"WECHAT_PAY_NOTIFY_URL", c.WechatNotifyURL},
 			requirement{"WECHAT_REFUND_NOTIFY_URL", c.WechatRefundNotifyURL},
 		)

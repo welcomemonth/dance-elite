@@ -7,13 +7,11 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,35 +37,18 @@ func testKey(t *testing.T) (string, *rsa.PrivateKey) {
 // testAPIv3Key 是 32 字节的测试 APIv3 密钥。
 const testAPIv3Key = "0123456789abcdef0123456789abcdef"
 
-// selfSignedCert 为 key 生成自签证书 PEM，返回 PEM 文本与证书序列号（大写十六进制）。
-func selfSignedCert(t *testing.T, key *rsa.PrivateKey) (string, string) {
-	t.Helper()
-	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(0x5a5b5c5d),
-		Subject:      pkix.Name{CommonName: "wechatpay-platform-test"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	if err != nil {
-		t.Fatalf("create certificate: %v", err)
-	}
-	pemText := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
-	return pemText, strings.ToUpper(tmpl.SerialNumber.Text(16))
-}
-
-// testClient 构造自带平台证书的 Client（回调验签用同一密钥对）。
+// testClient 构造公钥模式的 Client（回调验签使用同一密钥对的公钥）。
 func testClient(t *testing.T, keyPEM string, key *rsa.PrivateKey) *Client {
 	t.Helper()
-	certPEM, _ := selfSignedCert(t, key)
 	client, err := NewClient(ClientOptions{
-		AppID:           "wx-appid",
-		MchID:           "1900000109",
-		SerialNo:        "MERCHANT-SERIAL-1",
-		PrivateKeyPEM:   keyPEM,
-		APIv3Key:        testAPIv3Key,
-		PlatformCertPEM: certPEM,
-		NotifyURL:       "https://example.com/pay/callback",
+		AppID:         "wx-appid",
+		MchID:         "1900000109",
+		SerialNo:      "MERCHANT-SERIAL-1",
+		PrivateKeyPEM: keyPEM,
+		APIv3Key:      testAPIv3Key,
+		PublicKeyID:   testPublicKeyID,
+		PublicKeyPEM:  testPublicKeyPEM(t, key),
+		NotifyURL:     "https://example.com/pay/callback",
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)

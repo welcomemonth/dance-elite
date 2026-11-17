@@ -7,10 +7,8 @@ import (
 	"crypto/cipher"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -55,7 +53,7 @@ type NotifyHeaders struct {
 	Timestamp string // Wechatpay-Timestamp
 	Nonce     string // Wechatpay-Nonce
 	Signature string // Wechatpay-Signature
-	Serial    string // Wechatpay-Serial（平台证书序列号）
+	Serial    string // Wechatpay-Serial（微信支付公钥 ID）
 }
 
 // Transaction 是回调解密后或主动查单得到的交易结果。
@@ -126,7 +124,7 @@ func (c *Client) ParseNotify(headers NotifyHeaders, body []byte) (*Transaction, 
 	return tx, nil
 }
 
-// verifyNotifySignature 校验时间戳新鲜度、平台证书序列号与 RSA 签名。
+// verifyNotifySignature 校验时间戳新鲜度、公钥 ID（Wechatpay-Serial）与 RSA 签名。
 func (c *Client) verifyNotifySignature(headers NotifyHeaders, body []byte) error {
 	ts, err := strconv.ParseInt(headers.Timestamp, 10, 64)
 	if err != nil {
@@ -136,8 +134,8 @@ func (c *Client) verifyNotifySignature(headers NotifyHeaders, body []byte) error
 	if skew > notifyMaxSkew || skew < -notifyMaxSkew {
 		return fmt.Errorf("%w: 回调时间戳超出允许偏差", ErrInvalidNotify)
 	}
-	if !strings.EqualFold(strings.TrimSpace(headers.Serial), c.platformSerial) {
-		return fmt.Errorf("%w: 平台证书序列号不匹配", ErrInvalidNotify)
+	if !strings.EqualFold(strings.TrimSpace(headers.Serial), c.verifySerial) {
+		return fmt.Errorf("%w: 微信支付公钥 ID 不匹配（Wechatpay-Serial）", ErrInvalidNotify)
 	}
 	signature, err := base64.StdEncoding.DecodeString(headers.Signature)
 	if err != nil {
@@ -145,7 +143,7 @@ func (c *Client) verifyNotifySignature(headers NotifyHeaders, body []byte) error
 	}
 	message := headers.Timestamp + "\n" + headers.Nonce + "\n" + string(body) + "\n"
 	digest := sha256.Sum256([]byte(message))
-	if err := rsa.VerifyPKCS1v15(c.platformPublicKey, crypto.SHA256, digest[:], signature); err != nil {
+	if err := rsa.VerifyPKCS1v15(c.verifyKey, crypto.SHA256, digest[:], signature); err != nil {
 		return fmt.Errorf("%w: 签名验证失败", ErrInvalidNotify)
 	}
 	return nil
@@ -305,25 +303,6 @@ func parseWechatError(status int, body []byte) *Error {
 		return &Error{Status: status, Code: "UNKNOWN", Message: "微信支付返回异常"}
 	}
 	return &Error{Status: status, Code: wxErr.Code, Message: wxErr.Message}
-}
-
-// parsePlatformCert 解析微信支付平台证书 PEM，返回公钥与序列号（大写十六进制，
-// 与回调头 Wechatpay-Serial 口径一致）。
-func parsePlatformCert(raw string) (*rsa.PublicKey, string, error) {
-	normalized := strings.ReplaceAll(raw, `\n`, "\n")
-	block, _ := pem.Decode([]byte(normalized))
-	if block == nil {
-		return nil, "", errors.New("PEM 块缺失（检查 WECHAT_PAY_CERT 是否完整）")
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, "", fmt.Errorf("解析平台证书: %w", err)
-	}
-	publicKey, ok := cert.PublicKey.(*rsa.PublicKey)
-	if !ok {
-		return nil, "", errors.New("平台证书公钥不是 RSA")
-	}
-	return publicKey, strings.ToUpper(cert.SerialNumber.Text(16)), nil
 }
 
 // ParseNotify 是 mock 通道的回调解析：直接读取明文交易 JSON，不做验签解密

@@ -603,7 +603,7 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 
 **注意事项**
 
-- **验签**：用微信支付平台证书（`WECHAT_PAY_CERT`）公钥对 `时间戳\n随机串\n请求体\n` 做 SHA256-RSA 验签，并校验时间戳偏差 ≤5 分钟、`Wechatpay-Serial` 与平台证书序列号一致；失败返回 HTTP 401，微信重推。
+- **验签**：用微信支付公钥（`WECHAT_PAY_PUBLIC_KEY`）对 `时间戳\n随机串\n请求体\n` 做 SHA256-RSA 验签，并校验时间戳偏差 ≤5 分钟、`Wechatpay-Serial` 与公钥 ID（`WECHAT_PAY_PUBLIC_KEY_ID`）一致；失败返回 HTTP 401，微信重推。
 - **解密**：用 APIv3 密钥（`WECHAT_PAY_KEY`，32 字节）对 `resource` 做 AES-256-GCM 解密；解密后再校验 appid/mchid 与商户配置一致。
 - **幂等**：`payments.transaction_id` 唯一约束，重复回调直接返回 SUCCESS。
 - **事务**：写 `payments` 流水（`raw_callback` 全量留档）→ `orders` 置 `paid`+`paid_at` → `registrations` 置 `active`，任一步失败整事务回滚并返回非 success，微信重试。

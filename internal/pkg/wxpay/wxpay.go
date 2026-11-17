@@ -5,6 +5,10 @@
 //     经环境变量注入（configs，T3 密钥管理）；
 //   - MockGateway：无商户证书时的 fake 通道，供本地与联调环境拉起"支付"。
 //
+// 验证微信支付身份使用「微信支付公钥」模式（新商户默认）：公钥 PEM + 公钥 ID，
+// 回调头 Wechatpay-Serial 即公钥 ID。公钥在商户平台「API 安全 → 微信支付公钥」
+// 下载，启动时由 parseVerifyMaterial 解析。
+//
 // 安全约定：日志中绝不打印商户私钥、APIv3 密钥与请求/响应体之外的敏感内容；
 // 本包不感知订单业务，只接受 out_trade_no/金额/openid 等下单参数。
 package wxpay
@@ -91,10 +95,12 @@ type Client struct {
 	// 退款结果回调地址（T15）。与支付回调分开配置，微信按 notify_url 分别推送。
 	refundNotifyURL string
 
-	// 回调验签与解密（T11）：平台证书公钥 + APIv3 密钥。
-	apiV3Key          string
-	platformPublicKey *rsa.PublicKey
-	platformSerial    string
+	// APIv3 密钥：回调报文 AES-256-GCM 解密（T11）。
+	apiV3Key string
+
+	// 验证微信支付身份（回调验签）：微信支付公钥 + 公钥 ID（Wechatpay-Serial）。
+	verifyKey    *rsa.PublicKey
+	verifySerial string
 
 	httpClient *http.Client
 	baseURL    string
@@ -103,19 +109,21 @@ type Client struct {
 
 // ClientOptions 是微信支付 V3 真实通道的商户配置，全部来自环境变量（T3）。
 type ClientOptions struct {
-	AppID           string
-	MchID           string
-	SerialNo        string // 商户 API 证书序列号（请求签名用）
-	PrivateKeyPEM   string // 商户 API 私钥（PKCS#8 / PKCS#1 PEM）
-	APIv3Key        string // APIv3 密钥，32 字节，回调报文 AES-256-GCM 解密
-	PlatformCertPEM string // 微信支付平台证书 PEM，回调验签
+	AppID         string
+	MchID         string
+	SerialNo      string // 商户 API 证书序列号（请求签名用）
+	PrivateKeyPEM string // 商户 API 私钥（PKCS#8 / PKCS#1 PEM）
+	APIv3Key      string // APIv3 密钥，32 字节，回调报文 AES-256-GCM 解密
+	// 验证微信支付身份（回调验签）：微信支付公钥 PEM + 公钥 ID。
+	PublicKeyID     string // PUB_KEY_ID_...，回调头 Wechatpay-Serial
+	PublicKeyPEM    string // 商户平台「API 安全 → 微信支付公钥」下载的公钥
 	NotifyURL       string // 支付结果回调地址（POST /api/v1/payments/wechat/notify）
 	RefundNotifyURL string // 退款结果回调地址（POST /api/v1/payments/wechat/refund-notify）
 }
 
-// NewClient 构造真实微信支付客户端；PEM 支持 PKCS#8 / PKCS#1 与平台证书，
-// 环境变量中的 \n 字面量会自动还原为换行。任何解析失败返回错误，由组合根
-// fail-fast（密钥缺失或格式错误不进入运行态）。
+// NewClient 构造真实微信支付客户端；PEM 支持 PKCS#8 / PKCS#1 私钥与
+// 微信支付公钥，环境变量中的 \n 字面量会自动还原为换行。任何解析失败返回
+// 错误，由组合根 fail-fast（密钥缺失或格式错误不进入运行态）。
 func NewClient(opts ClientOptions) (*Client, error) {
 	key, err := parsePrivateKey(opts.PrivateKeyPEM)
 	if err != nil {
@@ -124,23 +132,23 @@ func NewClient(opts ClientOptions) (*Client, error) {
 	if len(opts.APIv3Key) != 32 {
 		return nil, fmt.Errorf("微信支付 APIv3 密钥必须为 32 字节，当前 %d 字节", len(opts.APIv3Key))
 	}
-	platformKey, platformSerial, err := parsePlatformCert(opts.PlatformCertPEM)
+	verifyKey, verifySerial, err := parseVerifyMaterial(opts)
 	if err != nil {
-		return nil, fmt.Errorf("解析微信支付平台证书: %w", err)
+		return nil, fmt.Errorf("解析微信支付验签材料: %w", err)
 	}
 	return &Client{
-		appID:             opts.AppID,
-		mchID:             opts.MchID,
-		serialNo:          opts.SerialNo,
-		privateKey:        key,
-		notifyURL:         opts.NotifyURL,
-		refundNotifyURL:   opts.RefundNotifyURL,
-		apiV3Key:          opts.APIv3Key,
-		platformPublicKey: platformKey,
-		platformSerial:    platformSerial,
-		httpClient:        &http.Client{Timeout: 10 * time.Second},
-		baseURL:           defaultBaseURL,
-		now:               time.Now,
+		appID:           opts.AppID,
+		mchID:           opts.MchID,
+		serialNo:        opts.SerialNo,
+		privateKey:      key,
+		notifyURL:       opts.NotifyURL,
+		refundNotifyURL: opts.RefundNotifyURL,
+		apiV3Key:        opts.APIv3Key,
+		verifyKey:       verifyKey,
+		verifySerial:    verifySerial,
+		httpClient:      &http.Client{Timeout: 10 * time.Second},
+		baseURL:         defaultBaseURL,
+		now:             time.Now,
 	}, nil
 }
 
