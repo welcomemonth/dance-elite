@@ -142,7 +142,7 @@ func isSensitiveParam(name string) bool {
 
 // maskSecretPathPrefix 处理没有路由模板时的敏感前缀（SPA 审核页导航等）。
 func maskSecretPathPrefix(path string) string {
-	for _, prefix := range []string{"/audio-review/", "/h5/audio-review/"} {
+	for _, prefix := range []string{"/audio-review/", "/h5/audio-review/", "/lottery/", "/h5/lottery/"} {
 		if !strings.HasPrefix(path, prefix) {
 			continue
 		}

@@ -87,6 +87,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 	userContentQueryService := service.NewAdminUserQueryService(stores)
 	contentService := service.NewContentService(stores)
 	audioReviewService := service.NewAudioReviewService(stores, cfg.PublicBaseURL)
+	lotteryService := service.NewLotteryService(store.NewLotteryStore(cfg.LotteryDir))
 
 	// 前端构建产物在编译期嵌入；未构建时（只有 .gitkeep）跳过页面托管，
 	// 本地开发请使用 dance-admin 的 pnpm dev（代理到本服务）。
@@ -126,6 +127,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		UserContents:        userContentQueryService,
 		Contents:            contentService,
 		AudioReview:         audioReviewService,
+		Lottery:             lotteryService,
 		Tokens:              tokens,
 		UploadDir:           cfg.UploadDir,
 		SlowRequestMS:       cfg.SlowRequestMS,

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -108,12 +109,14 @@ func read() (*Config, error) {
 		return nil, err
 	}
 
+	dbPath := envOr("DB_PATH", "data/dance-elite.db")
 	return &Config{
-		Port:      envOr("PORT", "8080"),
-		Debug:     debug,
-		DBPath:    envOr("DB_PATH", "data/dance-elite.db"),
-		UploadDir: envOr("UPLOAD_DIR", "uploads"),
-		PayMock:   payMock,
+		Port:       envOr("PORT", "8080"),
+		Debug:      debug,
+		DBPath:     dbPath,
+		UploadDir:  envOr("UPLOAD_DIR", "uploads"),
+		LotteryDir: envOr("LOTTERY_DIR", filepath.Join(filepath.Dir(dbPath), "lottery")),
+		PayMock:    payMock,
 
 		LogLevel:      logLevel,
 		LogFormat:     logFormat,

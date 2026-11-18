@@ -19,6 +19,11 @@ export default [
     component: './audio-review',
   },
   {
+    path: '/lottery/:token',
+    layout: false,
+    component: './lottery',
+  },
+  {
     path: '/dashboard',
     name: '数据看板',
     icon: 'dashboard',

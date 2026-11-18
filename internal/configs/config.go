@@ -13,7 +13,9 @@ type Config struct {
 	Debug     bool
 	DBPath    string
 	UploadDir string
-	PayMock   bool
+	// LotteryDir 是抽签 JSON 文件目录（一个赛事一个 <token>.json）。
+	LotteryDir string
+	PayMock    bool
 	// 日志（T36）：级别 debug/info/warn/error、格式 json/console；
 	// 未显式配置时随 DEBUG 推导（debug → debug+console，否则 info+json）。
 	LogLevel      string

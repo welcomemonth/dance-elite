@@ -11,7 +11,7 @@
 
 | 项 | 约定 |
 |---|---|
-| 基础路径 | 小程序端 `/api/v1`；后台端 `/api/v1/admin`；音频审核 H5 `/h5` |
+| 基础路径 | 小程序端 `/api/v1`；后台端 `/api/v1/admin`；音频审核 / 抽签 H5 `/h5` |
 | 请求/响应字段命名 | **snake_case** |
 | 时间格式 | ISO 8601 本地时间：`2027-01-01T10:00:00+08:00` |
 | 金额单位 | **分**（整数），如 `98000` 表示 ¥980 |
@@ -26,6 +26,7 @@
 | 小程序端 | `Authorization: Bearer <token>` | 微信静默登录换发的 JWT；除登录/榜单只读接口外均必填 |
 | 后台端 | `Authorization: Bearer <token>` | 账号密码登录换发的 JWT，payload 含 `admin_id`、`role`（super_admin / admin / cs） |
 | 音频审核 H5 | URL 内 token | 免登录，token 不可枚举，重新生成后旧链接立即失效 |
+| 抽签 H5 | URL 内 token | 免登录，token 为 JSON 文件名（16 位字母数字），改文件名即失效旧链接 |
 
 ### 0.3 统一响应包装
 
@@ -1530,6 +1531,140 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 - token 重新生成后旧链接立即失效；单 token 限流 60 次/分钟/IP。
 - 审核完整 URL 由后台按配置 `PUBLIC_BASE_URL` 拼接（`/audio-review/{token}`），不依赖请求 Host；重新生成即失效旧链接。
 - 音频 URL 建议加 referer/短期签名校验，防止被站外盗链。
+
+---
+
+## 7.2 抽签 H5（免登录）
+
+**接口概述**
+
+| 项 | 内容 |
+|---|---|
+| 接口名称 | 抽签 H5 |
+| 功能说明 | 每场赛事一个免登录链接：选手输入 **姓名 + 证件号 + 舞种** 抽取出场顺序，或凭 **证件号 + 舞种** 查询；数据读写 `data/lottery/{token}.json`，与报名库解耦 |
+| 请求方法 + URL | `GET /h5/lottery/{token}`、`POST /h5/lottery/{token}/query`、`POST /h5/lottery/{token}/draw` |
+| 鉴权 | 免登录（URL token，8–64 位字母数字，导入时默认生成 16 位） |
+| 页面地址 | `/lottery/{token}`（React H5，移动端优先） |
+
+### 7.2.1 页面元信息
+
+`GET /h5/lottery/{token}`
+
+**响应参数**
+
+| 参数名 | 类型 | 说明 |
+|---|---|---|
+| event_name | string | 赛事名称（页面标题） |
+| genres | array | 可选舞种 |
+| genres[].key | string | 枚举值：`classical` / `folk` |
+| genres[].label | string | 展示名：古典舞 / 民族民间舞 |
+
+```json
+{
+  "code": 0, "message": "success",
+  "data": {
+    "event_name": "优舞盟12月赛事抽签",
+    "genres": [
+      { "key": "classical", "label": "古典舞" },
+      { "key": "folk", "label": "民族民间舞" }
+    ]
+  }
+}
+```
+
+**失败响应**：40401（token 无效或已失效）。
+
+### 7.2.2 查询抽签结果
+
+`POST /h5/lottery/{token}/query`
+
+**请求参数（JSON Body）**
+
+| 参数名 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| id_card | string | 是 | 身份证号（服务端去空白、末位 x 转大写后比对） |
+| genre | string | 是 | 舞种枚举值 |
+
+**响应参数（抽签与查询共用）**
+
+| 参数名 | 类型 | 说明 |
+|---|---|---|
+| name | string | 选手姓名 |
+| genre / genre_label | string | 舞种枚举值 / 展示名 |
+| age_group | string | 年龄组：U11 / U13 / U15 |
+| program | string | 剧目名称（可空） |
+| institution | string | 选送机构（可空） |
+| slot | object \| null | 抽签结果；`null` 表示尚未抽签 |
+| slot.letter | string | 组字母 A/B/C… |
+| slot.no | integer | 组内序号，从 1 开始 |
+| drawn_at | string | 抽签时间（ISO 8601） |
+| just_drawn | boolean | 本次请求是否实际完成抽签（查询恒为 false） |
+
+```json
+{
+  "code": 0, "message": "success",
+  "data": {
+    "name": "张三",
+    "genre": "classical",
+    "genre_label": "古典舞",
+    "age_group": "U11",
+    "program": "《唐印》",
+    "institution": "KKDANCE康康舞蹈",
+    "slot": { "letter": "A", "no": 3 },
+    "drawn_at": "2026-11-18T19:20:00+08:00",
+    "just_drawn": false
+  }
+}
+```
+
+**失败响应**：40401（token 无效，或信息不匹配）。
+
+### 7.2.3 抽签
+
+`POST /h5/lottery/{token}/draw`
+
+**请求参数（JSON Body）**
+
+| 参数名 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| name | string | 是 | 姓名（服务端去全部空白后比对） |
+| id_card | string | 是 | 身份证号 |
+| genre | string | 是 | 舞种枚举值 |
+
+**幂等与并发**：同一人同一舞种重复抽签返回第一次的结果（`just_drawn=false`），不会重抽；「读取 → 分配 → 写回」在进程内互斥锁中完成，写入采用临时文件 + rename 原子替换。
+
+**失败响应**：40001（缺参数）、40401（token 无效 / 信息不匹配）、40901（该组别已无槽位）、42901（限流）。
+
+**分组规则**
+
+- 以「年龄组 × 舞种」为单位独立编号，各范围都从 A 组开始。
+- 组数 = `ceil(N/12)`，各组人数相差不超过 1，余数从 A 组开始依次 +1（25 人 → A9/B8/C8）。
+- 槽位 = 组字母 + 组内序号（A1…A10、B1…B10）；抽签从该范围尚未占用的槽位中均匀随机分配。
+- 人数无法落在每组 8–12 人时（如 13 人 → 7+6），导入工具给出提示但不阻断。
+
+**数据来源与运维**
+
+```bash
+# 从报名 Excel 生成（表头按名称定位，列顺序可变）
+go run ./cmd/lottery-import \
+  -excel "抽签页面资料/12月上海甲级赛-报名资料.xlsx" \
+  -event "优舞盟12月赛事抽签" \
+  -out data/lottery
+
+# 修改数据后覆盖（会清空已有抽签结果）
+go run ./cmd/lottery-import -excel "..." -reset
+```
+
+- 读取的表头：`姓名`、`身份证号`、`组别及场次`（需包含 U11/U13/U15 与 古典舞/民族民间舞）、`剧目名称`、`选送机构`；其余列忽略。
+- 输出目录由 `LOTTERY_DIR` 配置（默认 `<DB_PATH 所在目录>/lottery`，本地即 `data/lottery`），文件名即 token；重新导入未指定 `-token` 时复用目录中唯一文件。
+- **JSON 明文存储身份证号**（本项目既有约定为哈希，此功能例外）；文件权限 0600，每次覆盖前保留 `.bak`，`data/` 不入库。
+
+**安全边界**
+
+- 抽签与查询均用 POST body，避免证件号进入访问日志、浏览器历史和 Referer。
+- 错误统一为「信息不匹配」，不区分姓名/证件号/舞种哪一项错误。
+- 限流（按 IP）：元信息 120 次/分、查询 60 次/分、抽签 60 次/分。
+- 响应不含身份证号；业务日志只记录舞种、组别与槽位。
 
 ---
 
