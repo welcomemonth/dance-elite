@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 
+	"github.com/meetmonth/dance-elite/internal/pkg/sms"
 	"github.com/meetmonth/dance-elite/internal/utils"
 )
 
@@ -24,6 +26,9 @@ type row struct {
 	ageGroup    string
 	institution string
 	program     string
+	phone       string
+	// phoneWarning 记录手机号不合法等不阻断导入的问题。
+	phoneWarning string
 }
 
 // parseRow 解析并校验一行报名数据；错误信息带具体原因，由调用方加行号汇总。
@@ -55,15 +60,42 @@ func parseRow(values []string, cols columnMap, excelRow int) (row, error) {
 		return row{}, fmt.Errorf("舞种无法识别（应为古典舞或民族民间舞），实际为 %q", genreText)
 	}
 
+	phone, phoneWarning := parsePhone(cell(values, cols.Phone))
 	return row{
-		excelRow:    excelRow,
-		name:        name,
-		idCard:      idCard,
-		genre:       genre,
-		ageGroup:    ageGroup,
-		institution: cell(values, cols.Institution),
-		program:     cell(values, cols.Program),
+		excelRow:     excelRow,
+		name:         name,
+		idCard:       idCard,
+		genre:        genre,
+		ageGroup:     ageGroup,
+		institution:  cell(values, cols.Institution),
+		program:      cell(values, cols.Program),
+		phone:        phone,
+		phoneWarning: phoneWarning,
 	}, nil
+}
+
+// parsePhone 规范化手机号（去空白/连字符、去 +86 前缀）并校验；
+// 不合法时返回空号与提示，不阻断导入（该选手只是收不到短信）。
+func parsePhone(raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	phone := strings.Map(func(r rune) rune {
+		switch {
+		case unicode.IsSpace(r), r == '-', r == '(', r == ')':
+			return -1
+		}
+		return r
+	}, raw)
+	phone = strings.TrimPrefix(phone, "+86")
+	if len(phone) == 13 && strings.HasPrefix(phone, "86") {
+		phone = phone[2:]
+	}
+	if !sms.ValidPhone(phone) {
+		return "", fmt.Sprintf("手机号 %q 格式不合法，该选手不会收到短信", raw)
+	}
+	return phone, ""
 }
 
 // parseAgeGroup 从组别文本中提取年龄组标识。

@@ -10,6 +10,7 @@ import (
 
 	config "github.com/meetmonth/dance-elite/internal/configs"
 	"github.com/meetmonth/dance-elite/internal/pkg/logger"
+	"github.com/meetmonth/dance-elite/internal/pkg/sms"
 	"github.com/meetmonth/dance-elite/internal/pkg/storage"
 	"github.com/meetmonth/dance-elite/internal/pkg/token"
 	"github.com/meetmonth/dance-elite/internal/pkg/wechat"
@@ -87,7 +88,22 @@ func run(ctx context.Context, cfg *config.Config) error {
 	userContentQueryService := service.NewAdminUserQueryService(stores)
 	contentService := service.NewContentService(stores)
 	audioReviewService := service.NewAudioReviewService(stores, cfg.PublicBaseURL)
-	lotteryService := service.NewLotteryService(store.NewLotteryStore(cfg.LotteryDir))
+	// 抽签 H5：数据在独立 JSON 文件；短信未配置时为 nil，提醒/通知自动跳过。
+	smsClient, err := sms.New(sms.Config{
+		AccessKeyID:     cfg.SMSAccessKeyID,
+		AccessKeySecret: cfg.SMSAccessKeySecret,
+		SignName:        cfg.SMSSignName,
+		Mock:            cfg.SMSMock,
+	})
+	if err != nil {
+		return fmt.Errorf("初始化短信客户端: %w", err)
+	}
+	if smsClient == nil {
+		logger.Log.Warn("短信通道未配置，抽签提醒与结果通知不会发送")
+	}
+	lotteryStore := store.NewLotteryStore(cfg.LotteryDir)
+	lotteryService := service.NewLotteryService(lotteryStore)
+	lotterySweeper := service.NewLotterySweeper(lotteryStore, smsClient, cfg.PublicBaseURL)
 
 	// 前端构建产物在编译期嵌入；未构建时（只有 .gitkeep）跳过页面托管，
 	// 本地开发请使用 dance-admin 的 pnpm dev（代理到本服务）。
@@ -139,6 +155,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		service.NewEventStatusAdvancer(stores),
 		service.NewOrderExpirySweeper(stores, paymentService, cfg.OrderExpireMinutes),
 		service.NewRefundWatchdog(stores, refundService, payGateway, cfg.RefundWatchdogMinutes, cfg.PayMock),
+		lotterySweeper,
 	)
 	schedulerCtx, stopScheduler := context.WithCancel(ctx)
 	schedulerDone := make(chan struct{})

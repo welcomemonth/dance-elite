@@ -17,6 +17,7 @@ type columnMap struct {
 	Genre       int
 	Program     int
 	Institution int
+	Phone       int
 }
 
 // headerAliases 是各字段可接受的中文表头写法（按优先级）。
@@ -27,6 +28,8 @@ var headerAliases = map[string][]string{
 	"genre":       {"舞种", "舞蹈种类", "参赛舞种"},
 	"program":     {"剧目名称", "节目名称", "剧目", "节目"},
 	"institution": {"选送机构", "机构", "选送单位", "单位"},
+	// 手机号用于截止前提醒与截止后结果通知；缺列时导入照常进行，只是不发短信。
+	"phone": {"手机号", "手机", "联系电话", "联系手机", "家长手机号", "家长电话"},
 }
 
 // readRows 读取第一个工作表的全部行。返回的切片下标 0 是表头，
@@ -54,7 +57,7 @@ func readRows(path string) ([][]string, error) {
 
 // mapColumns 按表头名称定位列；缺少必需列时返回可读的错误。
 func mapColumns(header []string) (columnMap, error) {
-	cols := columnMap{Name: -1, IDCard: -1, Group: -1, Genre: -1, Program: -1, Institution: -1}
+	cols := columnMap{Name: -1, IDCard: -1, Group: -1, Genre: -1, Program: -1, Institution: -1, Phone: -1}
 	find := func(field string) int {
 		for _, alias := range headerAliases[field] {
 			want := normalizeHeader(alias)
@@ -73,6 +76,7 @@ func mapColumns(header []string) (columnMap, error) {
 	cols.Genre = find("genre")
 	cols.Program = find("program")
 	cols.Institution = find("institution")
+	cols.Phone = find("phone")
 
 	var missing []string
 	if cols.Name < 0 {

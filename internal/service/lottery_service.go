@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
@@ -20,27 +21,57 @@ import (
 // 抽签数据来自 store.LotteryStore 管理的 JSON 文件，与报名库无关。
 type LotteryService struct {
 	store *store.LotteryStore
+	// now 可注入，测试固定时钟用；生产为 time.Now。
+	now func() time.Time
 }
 
 // NewLotteryService 构造抽签服务。
 func NewLotteryService(lotteryStore *store.LotteryStore) *LotteryService {
-	return &LotteryService{store: lotteryStore}
+	return &LotteryService{store: lotteryStore, now: time.Now}
 }
 
-// Meta 返回页面初始化信息（赛事名称与舞种列表）。
+// Meta 返回页面初始化信息（赛事名称、舞种列表、抽签时间窗口与服务端时间）。
 func (s *LotteryService) Meta(ctx context.Context, token string) (*model.LotteryMeta, error) {
 	data, err := s.load(ctx, token)
 	if err != nil {
 		return nil, err
 	}
-	return &model.LotteryMeta{EventName: data.EventName, Genres: data.Genres}, nil
+	now := s.now()
+	window := lotteryWindowOf(data)
+	startAt, endAt := data.StartAt, data.EndAt
+	if window.hasStart {
+		startAt = utils.FormatISO(window.start)
+	}
+	if window.hasEnd {
+		endAt = utils.FormatISO(window.end)
+	}
+	return &model.LotteryMeta{
+		EventName:  data.EventName,
+		Genres:     data.Genres,
+		StartAt:    startAt,
+		EndAt:      endAt,
+		ServerTime: utils.FormatISO(now),
+		Status:     window.status(now),
+	}, nil
 }
 
 // Query 按「身份证号 + 舞种」查询抽签结果；未抽签时 Slot 为 nil。
+//
+// 已过截止时间且仍有未抽选手时，顺带完成自动分配，保证查询到的是最终结果。
 func (s *LotteryService) Query(ctx context.Context, token string, req model.LotteryQueryRequest) (*model.LotteryResult, error) {
+	now := s.now()
 	data, err := s.load(ctx, token)
 	if err != nil {
 		return nil, err
+	}
+	if lotteryWindowOf(data).ended(now) && pendingLotteryPlayers(data) > 0 {
+		data, err = s.store.Mutate(ctx, token, func(data *model.LotteryData) error {
+			autoDrawPending(data, now)
+			return nil
+		})
+		if err != nil {
+			return nil, s.wrapStoreError(err)
+		}
 	}
 	player := findLotteryPlayer(data, req.IDCard, req.Genre)
 	if player == nil {
@@ -53,39 +84,51 @@ func (s *LotteryService) Query(ctx context.Context, token string, req model.Lott
 //
 // 已抽过的人直接返回原结果（幂等），不会重新分配；首次抽签在互斥锁内
 // 从同「组别 × 舞种」尚未占用的槽位里均匀随机取一个并写回文件。
+// 未到开始时间拒绝抽签；已过截止时间则按自动分配规则补抽。
 func (s *LotteryService) Draw(ctx context.Context, token string, req model.LotteryDrawRequest) (*model.LotteryResult, error) {
 	name := normalizeLotteryName(req.Name)
 	idCard := utils.NormalizeIDNumber(utils.IDTypeIDCard, req.IDCard)
 	genre := strings.TrimSpace(req.Genre)
+	now := s.now()
 
 	var result *model.LotteryResult
 	justDrawn := false
 	_, err := s.store.Mutate(ctx, token, func(data *model.LotteryData) error {
+		window := lotteryWindowOf(data)
+		if !window.started(now) {
+			return httpx.ErrConflict(fmt.Sprintf("抽签尚未开始，开始时间：%s", lotteryTimeText(window.start)))
+		}
 		player := findLotteryPlayer(data, idCard, genre)
 		if player == nil || normalizeLotteryName(player.Name) != name {
 			return httpx.ErrNotFound("信息不匹配，请核对姓名、证件号和舞种")
 		}
 		if player.Slot == nil {
-			slots := availableLotterySlots(data, player.Genre, player.AgeGroup)
-			if len(slots) == 0 {
-				return httpx.ErrConflict("该组别已无可抽签位，请联系赛事客服")
+			if window.ended(now) {
+				// 已截止：按系统自动分配规则补抽（与定时任务同一逻辑）。
+				autoDrawPending(data, now)
+				if player.Slot == nil {
+					return httpx.ErrConflict("该组别已无可抽签位，请联系赛事客服")
+				}
+				justDrawn = true
+			} else {
+				slots := availableLotterySlots(data, player.Genre, player.AgeGroup)
+				if len(slots) == 0 {
+					return httpx.ErrConflict("该组别已无可抽签位，请联系赛事客服")
+				}
+				slot, err := pickLotterySlot(slots)
+				if err != nil {
+					return httpx.ErrInternal(err, "抽签失败，请稍后重试")
+				}
+				player.Slot = &slot
+				player.DrawnAt = utils.NowISO()
+				justDrawn = true
 			}
-			slot, err := pickLotterySlot(slots)
-			if err != nil {
-				return httpx.ErrInternal(err, "抽签失败，请稍后重试")
-			}
-			player.Slot = &slot
-			player.DrawnAt = utils.NowISO()
-			justDrawn = true
 		}
 		result = lotteryResult(data, player, justDrawn)
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, httpx.ErrNotFound("抽签链接无效或已失效")
-		}
-		return nil, err
+		return nil, s.wrapStoreError(err)
 	}
 	if justDrawn {
 		// 只记录分组与槽位，不记录姓名/证件号（PII）。
@@ -93,9 +136,18 @@ func (s *LotteryService) Draw(ctx context.Context, token string, req model.Lotte
 			"genre", result.Genre,
 			"age_group", result.AgeGroup,
 			"slot", lotterySlotText(*result.Slot),
+			"auto", result.AutoDrawn,
 		)
 	}
 	return result, nil
+}
+
+// wrapStoreError 把文件存储的「不存在」统一转换为对用户友好的业务错误。
+func (s *LotteryService) wrapStoreError(err error) error {
+	if errors.Is(err, store.ErrNotFound) {
+		return httpx.ErrNotFound("抽签链接无效或已失效")
+	}
+	return err
 }
 
 func (s *LotteryService) load(ctx context.Context, token string) (*model.LotteryData, error) {
@@ -175,6 +227,7 @@ func lotteryResult(data *model.LotteryData, player *model.LotteryPlayer, justDra
 		Slot:        player.Slot,
 		DrawnAt:     player.DrawnAt,
 		JustDrawn:   justDrawn,
+		AutoDrawn:   player.AutoDrawn,
 	}
 }
 

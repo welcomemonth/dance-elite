@@ -62,19 +62,33 @@ func Build(excelPath, eventName string) (*model.LotteryData, []string, error) {
 			AgeGroup:    r.ageGroup,
 			Institution: r.institution,
 			Program:     r.program,
+			Phone:       r.phone,
 		})
 	}
-	groups, warnings := computeGroups(players)
+	groups, groupWarnings := computeGroups(players)
+	warnings := phoneWarnings(parsed)
+	warnings = append(warnings, groupWarnings...)
 	if eventName == "" {
 		eventName = "优舞盟赛事抽签"
 	}
 	return &model.LotteryData{
-		Version:   1,
+		Version:   2,
 		EventName: eventName,
 		Genres:    presentGenres(players),
 		Groups:    groups,
 		Players:   players,
 	}, warnings, nil
+}
+
+// phoneWarnings 汇总手机号不合法等提示（带 Excel 行号）。
+func phoneWarnings(rows []row) []string {
+	var warnings []string
+	for _, r := range rows {
+		if r.phoneWarning != "" {
+			warnings = append(warnings, fmt.Sprintf("第 %d 行：%s", r.excelRow, r.phoneWarning))
+		}
+	}
+	return warnings
 }
 
 // duplicateProblems 检查「身份证号 + 舞种」是否重复（同一人同一舞种只能报名一次）。

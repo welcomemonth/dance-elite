@@ -20,6 +20,9 @@ func TestMapColumnsByHeaderName(t *testing.T) {
 	if cols.Program != 4 || cols.Institution != 5 || cols.Genre != -1 {
 		t.Fatalf("optional columns = %+v", cols)
 	}
+	if cols.Phone != 7 {
+		t.Fatalf("phone column = %d, want 7 (表头「手机」)", cols.Phone)
+	}
 }
 
 func TestMapColumnsMissingRequired(t *testing.T) {

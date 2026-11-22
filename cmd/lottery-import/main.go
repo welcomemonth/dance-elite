@@ -18,11 +18,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/meetmonth/dance-elite/internal/lotteryimport"
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/store"
+	"github.com/meetmonth/dance-elite/internal/utils"
 )
 
 const tokenAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -36,7 +38,13 @@ func main() {
 	eventName := flag.String("event", "优舞盟12月赛事抽签", "抽签页标题中的赛事名称")
 	outDir := flag.String("out", defaultDir(), "抽签 JSON 输出目录")
 	explicitToken := flag.String("token", "", "访问 token（8-64 位字母数字）；留空时自动生成或复用目录中唯一文件")
-	reset := flag.Bool("reset", false, "覆盖已存在的抽签数据（会清空已有抽签结果）")
+	reset := flag.Bool("reset", false, "覆盖已存在的抽签数据（会清空已有抽签结果与短信发送记录）")
+	startAt := flag.String("start-at", "", "抽签开始时间，如 \"2026-11-25 10:00\" 或 ISO 8601；留空不限制")
+	endAt := flag.String("end-at", "", "抽签截止时间；到点后未抽选手由系统自动分配；留空不限制")
+	remindTemplate := flag.String("remind-template", os.Getenv("SMS_REMIND_TEMPLATE"),
+		"阿里云提醒短信模板 CODE；默认取 SMS_REMIND_TEMPLATE，留空表示不发提醒短信")
+	resultTemplate := flag.String("result-template", os.Getenv("SMS_RESULT_TEMPLATE"),
+		"阿里云结果短信模板 CODE；默认取 SMS_RESULT_TEMPLATE，留空表示不发结果短信")
 	flag.Parse()
 
 	if strings.TrimSpace(*excelPath) == "" {
@@ -53,10 +61,33 @@ func main() {
 		fail(err.Error())
 	}
 	lotteryStore := store.NewLotteryStore(*outDir)
-	if lotteryStore.Exists(token) && !*reset {
+	exists := lotteryStore.Exists(token)
+	if exists && !*reset {
 		fail(fmt.Sprintf("抽签文件已存在：%s\n如需用当前 Excel 覆盖（会清空已有抽签结果），请加 -reset",
 			filepath.Join(*outDir, token+".json")))
 	}
+
+	startValue, endValue, err := resolveWindow(*startAt, *endAt)
+	if err != nil {
+		fail(err.Error())
+	}
+	data.StartAt, data.EndAt = startValue, endValue
+	if value := strings.TrimSpace(*remindTemplate); value != "" {
+		data.SMSRemindTemplate = value
+	}
+	if value := strings.TrimSpace(*resultTemplate); value != "" {
+		data.SMSResultTemplate = value
+	}
+	if exists {
+		// -reset 只清空抽签结果与短信记录；时间窗口与模板 code 未显式给出时沿用旧文件，
+		// 避免重新导入把手工改好的配置冲掉。
+		previous, err := lotteryStore.Load(context.Background(), token)
+		if err != nil {
+			fail("读取已有抽签文件失败: " + err.Error())
+		}
+		preserveSchedule(data, previous)
+	}
+
 	if err := lotteryStore.Save(context.Background(), token, data); err != nil {
 		fail("写入抽签文件失败: " + err.Error())
 	}
@@ -71,6 +102,113 @@ func main() {
 	}
 	fmt.Printf("已写入：%s\n", filepath.Join(*outDir, token+".json"))
 	fmt.Printf("页面地址：%s\n", baseURL()+"/lottery/"+token)
+	printSchedule(data)
+	printSMSTemplates(data, token)
+}
+
+// resolveWindow 解析 -start-at / -end-at 并校验先后顺序，统一转成 ISO 本地时间。
+func resolveWindow(startRaw, endRaw string) (string, string, error) {
+	var start, end time.Time
+	var hasStart, hasEnd bool
+	if strings.TrimSpace(startRaw) != "" {
+		t, err := utils.ParseFlexibleTime(startRaw)
+		if err != nil {
+			return "", "", fmt.Errorf("-start-at: %w", err)
+		}
+		start, hasStart = t, true
+	}
+	if strings.TrimSpace(endRaw) != "" {
+		t, err := utils.ParseFlexibleTime(endRaw)
+		if err != nil {
+			return "", "", fmt.Errorf("-end-at: %w", err)
+		}
+		end, hasEnd = t, true
+	}
+	if hasStart && hasEnd && !start.Before(end) {
+		return "", "", fmt.Errorf("-start-at 必须早于 -end-at")
+	}
+	startValue, endValue := "", ""
+	if hasStart {
+		startValue = utils.FormatISO(start)
+	}
+	if hasEnd {
+		endValue = utils.FormatISO(end)
+	}
+	return startValue, endValue, nil
+}
+
+// preserveSchedule 在重新导入时沿用旧文件的抽签时间窗口与短信模板配置。
+func preserveSchedule(data, previous *model.LotteryData) {
+	if data.StartAt == "" {
+		data.StartAt = previous.StartAt
+	}
+	if data.EndAt == "" {
+		data.EndAt = previous.EndAt
+	}
+	if data.RemindBeforeMinutes == 0 {
+		data.RemindBeforeMinutes = previous.RemindBeforeMinutes
+	}
+	if data.SMSRemindTemplate == "" {
+		data.SMSRemindTemplate = previous.SMSRemindTemplate
+	}
+	if data.SMSResultTemplate == "" {
+		data.SMSResultTemplate = previous.SMSResultTemplate
+	}
+}
+
+// printSchedule 输出抽签时间窗口，便于人工核对。
+func printSchedule(data *model.LotteryData) {
+	if data.StartAt == "" && data.EndAt == "" {
+		fmt.Println("抽签时间：未配置（随时可抽，不自动分配、不发短信）")
+		return
+	}
+	if data.StartAt != "" {
+		fmt.Println("开始时间：" + data.StartAt)
+	}
+	if data.EndAt != "" {
+		fmt.Println("截止时间：" + data.EndAt)
+	}
+}
+
+// printSMSTemplates 输出当前模板配置；有缺失时打印可直接提交阿里云审核的文案。
+// 阿里云不允许把链接放进变量，链接必须写死在模板正文，因此每个赛事单独提审。
+func printSMSTemplates(data *model.LotteryData, token string) {
+	if data.EndAt == "" {
+		return
+	}
+	fmt.Println()
+	fmt.Printf("短信模板：提醒 %s，结果 %s\n",
+		templateOrUnset(data.SMSRemindTemplate), templateOrUnset(data.SMSResultTemplate))
+
+	missingRemind := data.SMSRemindTemplate == ""
+	missingResult := data.SMSResultTemplate == ""
+	if !missingRemind && !missingResult {
+		return
+	}
+	link := strings.TrimRight(os.Getenv("PUBLIC_BASE_URL"), "/")
+	if link == "" {
+		link = "http://<请先配置 PUBLIC_BASE_URL>"
+	}
+	link += "/lottery/" + token
+	fmt.Println("以下模板需在阿里云短信控制台提交审核（链接写死在正文，每赛事单独提审），")
+	fmt.Println("通过后用 -remind-template / -result-template 重新导入，或手填 JSON 对应字段：")
+	if missingRemind {
+		fmt.Println("  [提醒] 尊敬的${name}家长您好，${event}的抽签将于${deadline}截止，请点击链接完成抽签：" + link)
+		fmt.Println("         变量：name/event/deadline")
+	}
+	if missingResult {
+		fmt.Println("  [结果] 尊敬的${name}家长您好，${event}抽签已截止，您的出场顺序为${slot}（${genre}），点击链接查询详情：" + link)
+		fmt.Println("         变量：name/event/slot/genre")
+	}
+	fmt.Println("  建议 name 按「其他」类型报备（同手机号多个选手会合并为「张三、李四」）。")
+}
+
+// templateOrUnset 把空模板 code 显示为「未配置」，避免输出里出现空串。
+func templateOrUnset(code string) string {
+	if code == "" {
+		return "未配置（不发）"
+	}
+	return code
 }
 
 // resolveToken 确定要写入的 token：显式指定优先；否则复用目录中唯一的

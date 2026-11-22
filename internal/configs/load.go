@@ -48,6 +48,18 @@ func Load() (*Config, error) {
 	if cfg.SlowRequestMS < 0 {
 		return nil, fmt.Errorf("环境变量 SLOW_REQUEST_MS=%d 不能为负数（0 表示关闭慢请求告警）", cfg.SlowRequestMS)
 	}
+	// 短信配置：允许整体不配置（功能关闭），但不允许只配一部分（易造成静默失败）。
+	if !cfg.SMSMock {
+		missingSMS := 0
+		for _, value := range []string{cfg.SMSAccessKeyID, cfg.SMSAccessKeySecret, cfg.SMSSignName} {
+			if value == "" {
+				missingSMS++
+			}
+		}
+		if missingSMS > 0 && missingSMS < 3 {
+			return nil, fmt.Errorf("短信配置不完整：SMS_ACCESS_KEY_ID、SMS_ACCESS_KEY_SECRET、SMS_SIGN_NAME 需同时提供，或设置 SMS_MOCK=true")
+		}
+	}
 	return cfg, nil
 }
 
@@ -62,6 +74,10 @@ func read() (*Config, error) {
 		return nil, err
 	}
 	payMock, err := envBool("PAY_MOCK", false)
+	if err != nil {
+		return nil, err
+	}
+	smsMock, err := envBool("SMS_MOCK", false)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +133,11 @@ func read() (*Config, error) {
 		UploadDir:  envOr("UPLOAD_DIR", "uploads"),
 		LotteryDir: envOr("LOTTERY_DIR", filepath.Join(filepath.Dir(dbPath), "lottery")),
 		PayMock:    payMock,
+
+		SMSMock:            smsMock,
+		SMSAccessKeyID:     os.Getenv("SMS_ACCESS_KEY_ID"),
+		SMSAccessKeySecret: os.Getenv("SMS_ACCESS_KEY_SECRET"),
+		SMSSignName:        os.Getenv("SMS_SIGN_NAME"),
 
 		LogLevel:      logLevel,
 		LogFormat:     logFormat,

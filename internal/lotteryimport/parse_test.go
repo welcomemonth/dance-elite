@@ -24,6 +24,31 @@ func TestParseAgeGroupAndGenre(t *testing.T) {
 	}
 }
 
+func TestParsePhone(t *testing.T) {
+	cases := []struct {
+		raw     string
+		want    string
+		warning bool
+	}{
+		{raw: "13800000001", want: "13800000001"},
+		{raw: " 138-0000-0001 ", want: "13800000001"},
+		{raw: "+8613800000001", want: "13800000001"},
+		{raw: "8613800000001", want: "13800000001"},
+		{raw: "", want: ""},
+		{raw: "12345", want: "", warning: true},
+		{raw: "23800000001", want: "", warning: true},
+	}
+	for _, tc := range cases {
+		got, warning := parsePhone(tc.raw)
+		if got != tc.want {
+			t.Fatalf("parsePhone(%q) = %q, want %q", tc.raw, got, tc.want)
+		}
+		if (warning != "") != tc.warning {
+			t.Fatalf("parsePhone(%q) warning = %q, want warning=%v", tc.raw, warning, tc.warning)
+		}
+	}
+}
+
 func TestParseUnknownValues(t *testing.T) {
 	if _, ok := parseAgeGroup("U17组"); ok {
 		t.Error("U17 should not match")

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/meetmonth/dance-elite/internal/model"
@@ -89,6 +91,33 @@ func (s *LotteryStore) Save(ctx context.Context, token string, data *model.Lotte
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.write(token, data)
+}
+
+// List 返回目录中全部抽签文件的 token（已排序，不含 .bak/.tmp）。
+// 目录不存在视为没有抽签数据，返回空切片。
+func (s *LotteryStore) List(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(s.dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list lottery dir: %w", err)
+	}
+	tokens := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		token := strings.TrimSuffix(entry.Name(), ".json")
+		if ValidLotteryToken(token) {
+			tokens = append(tokens, token)
+		}
+	}
+	sort.Strings(tokens)
+	return tokens, nil
 }
 
 // Exists 判断 token 对应的抽签文件是否已存在。

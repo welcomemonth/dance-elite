@@ -57,6 +57,13 @@ type Config struct {
 	StatusTickSeconds     int
 	OrderExpireMinutes    int
 	RefundWatchdogMinutes int
+
+	// 短信（阿里云）：抽签提醒/结果通知等复用同一通道。
+	// 三项齐全才启用；SMS_MOCK=true 时只记录日志，不调用阿里云。
+	SMSMock            bool
+	SMSAccessKeyID     string
+	SMSAccessKeySecret string
+	SMSSignName        string
 }
 
 // requirement 是一个必需配置项及其当前值。
