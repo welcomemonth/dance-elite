@@ -1541,7 +1541,7 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 | 项 | 内容 |
 |---|---|
 | 接口名称 | 抽签 H5 |
-| 功能说明 | 每场赛事一个免登录链接：选手输入 **姓名 + 证件号 + 舞种** 抽取出场顺序，或凭 **证件号 + 舞种** 查询；数据读写 `data/lottery/{token}.json`，与报名库解耦 |
+| 功能说明 | 每场赛事一个免登录链接：选手输入 **姓名 + 证件号 + 舞种** 抽取出场顺序，或凭 **证件号 + 舞种** 查询；数据读写 `data/lottery/{token}.json`，与报名库解耦。支持抽签开始/截止时间：开始前禁止抽签，截止后剩余选手自动分配，并可通过短信提醒/通知 |
 | 请求方法 + URL | `GET /h5/lottery/{token}`、`POST /h5/lottery/{token}/query`、`POST /h5/lottery/{token}/draw` |
 | 鉴权 | 免登录（URL token，8–64 位字母数字，导入时默认生成 16 位） |
 | 页面地址 | `/lottery/{token}`（React H5，移动端优先） |
@@ -1558,6 +1558,10 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 | genres | array | 可选舞种 |
 | genres[].key | string | 枚举值：`classical` / `folk` |
 | genres[].label | string | 展示名：古典舞 / 民族民间舞 |
+| start_at | string | 抽签开始时间（ISO 8601）；缺省表示不限制 |
+| end_at | string | 抽签截止时间（ISO 8601）；缺省表示不限制 |
+| server_time | string | 服务端当前时间（ISO 8601），前端据此校准倒计时 |
+| status | string | 服务端判定状态：`not_started` / `ongoing` / `ended`（未配置时间窗口时恒为 `ongoing`） |
 
 ```json
 {
@@ -1567,7 +1571,11 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
     "genres": [
       { "key": "classical", "label": "古典舞" },
       { "key": "folk", "label": "民族民间舞" }
-    ]
+    ],
+    "start_at": "2026-11-25T10:00:00+08:00",
+    "end_at": "2026-11-27T22:00:00+08:00",
+    "server_time": "2026-11-24T09:30:00+08:00",
+    "status": "not_started"
   }
 }
 ```
@@ -1599,6 +1607,7 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 | slot.no | integer | 组内序号，从 1 开始 |
 | drawn_at | string | 抽签时间（ISO 8601） |
 | just_drawn | boolean | 本次请求是否实际完成抽签（查询恒为 false） |
+| auto_drawn | boolean | 槽位是否由系统在截止后自动分配 |
 
 ```json
 {
@@ -1612,12 +1621,15 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
     "institution": "KKDANCE康康舞蹈",
     "slot": { "letter": "A", "no": 3 },
     "drawn_at": "2026-11-18T19:20:00+08:00",
-    "just_drawn": false
+    "just_drawn": false,
+    "auto_drawn": false
   }
 }
 ```
 
 **失败响应**：40401（token 无效，或信息不匹配）。
+
+**截止后的查询**：已过 `end_at` 且仍有未抽选手时，查询接口会顺带完成自动分配，保证返回的是最终结果。
 
 ### 7.2.3 抽签
 
@@ -1633,7 +1645,13 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 
 **幂等与并发**：同一人同一舞种重复抽签返回第一次的结果（`just_drawn=false`），不会重抽；「读取 → 分配 → 写回」在进程内互斥锁中完成，写入采用临时文件 + rename 原子替换。
 
-**失败响应**：40001（缺参数）、40401（token 无效 / 信息不匹配）、40901（该组别已无槽位）、42901（限流）。
+**时间窗口**：
+
+- 未到 `start_at`：拒绝抽签，返回 40901「抽签尚未开始，开始时间：…」；查询不受限制。
+- 到达 `end_at`：剩余未抽选手由系统自动分配（同一套随机槽位规则），`auto_drawn=true`；用户此时再点抽签会返回自动分配的结果，不会重抽。
+- 未配置时间窗口：保持旧行为（随时可抽、无自动分配、不发短信）。
+
+**失败响应**：40001（缺参数）、40401（token 无效 / 信息不匹配）、40901（未到开始时间 / 该组别已无槽位）、42901（限流）。
 
 **分组规则**
 
@@ -1649,15 +1667,24 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 go run ./cmd/lottery-import \
   -excel "抽签页面资料/12月上海甲级赛-报名资料.xlsx" \
   -event "优舞盟12月赛事抽签" \
-  -out data/lottery
+  -start-at "2026-11-25 10:00" \
+  -end-at "2026-11-27 22:00" \
+  -out data/lottery \
+  -remind-template "SMS_xxxxxxx" \
+  -result-template "SMS_yyyyyyy"
 
-# 修改数据后覆盖（会清空已有抽签结果）
+# 修改数据后覆盖（会清空已有抽签结果与短信发送记录；未显式给出时间/模板时沿用旧值）
 go run ./cmd/lottery-import -excel "..." -reset
 ```
 
-- 读取的表头：`姓名`、`身份证号`、`组别及场次`（需包含 U11/U13/U15 与 古典舞/民族民间舞）、`剧目名称`、`选送机构`；其余列忽略。
+- 读取的表头：`姓名`、`身份证号`、`组别及场次`（需包含 U11/U13/U15 与 古典舞/民族民间舞）、`剧目名称`、`选送机构`、`手机号`（兼容 `手机`/`联系电话`/`家长手机号` 等写法）；其余列忽略。手机号格式不合法只提示、不阻断导入，该选手不会收到短信。
 - 输出目录由 `LOTTERY_DIR` 配置（默认 `<DB_PATH 所在目录>/lottery`，本地即 `data/lottery`），文件名即 token；重新导入未指定 `-token` 时复用目录中唯一文件。
-- **JSON 明文存储身份证号**（本项目既有约定为哈希，此功能例外）；文件权限 0600，每次覆盖前保留 `.bak`，`data/` 不入库。
+- JSON 中与时间/短信相关的顶层字段（均可手工修改，接口每次请求都会读文件，改完即生效）：
+  - `start_at` / `end_at`：抽签开始/截止时间，ISO 8601 或 `YYYY-MM-DD HH:MM`；
+  - `remind_before_minutes`：截止前多少分钟发提醒短信，缺省 120；
+  - `sms_remind_template` / `sms_result_template`：阿里云短信模板 CODE（每个赛事单独提审，见 7.2.4）；导入时可用 `-remind-template` / `-result-template` 写入，留空时默认取环境变量 `SMS_REMIND_TEMPLATE` / `SMS_RESULT_TEMPLATE`。
+- 选手上另有 `phone`、`auto_drawn`、`sms.{remind_sent_at,remind_attempts,result_sent_at,result_attempts}` 字段，由服务端维护。
+- **JSON 明文存储身份证号与手机号**（本项目既有约定为哈希，此功能例外）；文件权限 0600，每次覆盖前保留 `.bak`，`data/` 不入库。
 
 **安全边界**
 
@@ -1665,6 +1692,42 @@ go run ./cmd/lottery-import -excel "..." -reset
 - 错误统一为「信息不匹配」，不区分姓名/证件号/舞种哪一项错误。
 - 限流（按 IP）：元信息 120 次/分、查询 60 次/分、抽签 60 次/分。
 - 响应不含身份证号；业务日志只记录舞种、组别与槽位。
+
+### 7.2.4 短信提醒与结果通知（阿里云）
+
+抽签页依赖两类短信：截止前提醒未抽签选手、截止后告知被自动分配的选手结果。由进程内定时任务（`STATUS_TICK_SECONDS`，默认 60s）扫描 `LOTTERY_DIR` 下全部抽签文件执行，接口本身不发送短信。
+
+**环境变量**（全部走环境变量注入，不入库）：
+
+| 变量 | 说明 |
+|---|---|
+| `SMS_ACCESS_KEY_ID` / `SMS_ACCESS_KEY_SECRET` | 阿里云账号（建议 RAM 子账号，仅授权短信发送） |
+| `SMS_SIGN_NAME` | 短信签名，需与已审核签名完全一致 |
+| `SMS_MOCK` | `true` 时不调用阿里云，只打 `sms.mock` 日志（手机号脱敏），本地点通流程用 |
+| `PUBLIC_BASE_URL` | 生成短信里的抽签链接前缀（`{PUBLIC_BASE_URL}/lottery/{token}`） |
+
+三项密钥只配了一半（1–2 项）时启动直接失败；三项都不配则关闭短信能力（启动日志告警），抽签功能本身不受影响。
+
+**模板规则（关键约束）**
+
+- 阿里云短信模板**不允许把 URL 放进变量**，链接必须写死在模板正文。因此**每个赛事单独提审一套模板**，模板 CODE 分别填入 JSON 的 `sms_remind_template` / `sms_result_template`。
+- 导入命令会打印可直接提交审核的模板文案（含该赛事的完整链接），复制到阿里云控制台提审即可；模板通过后用 `-remind-template` / `-result-template` 重新导入（或手填 JSON 对应字段），接口每次请求都读文件，无需重启。
+- 模板 CODE 也可放在环境变量 `SMS_REMIND_TEMPLATE` / `SMS_RESULT_TEMPLATE` 中，作为导入命令参数的默认值；服务端运行时不读这两个变量。
+- 另一种「`一级域名/${code}`」写法可以省掉每赛事提审，但变量限首字母开头的 ≤8 位字母数字且域名需 ICP 备案，本项目未采用。
+- 变量名必须与模板完全一致：提醒 `name`/`event`/`deadline`，结果 `name`/`event`/`genre`/`slot`。`name` 建议按「其他」类型报备，以便同手机号多个选手合并为「张三、李四」。
+
+**发送行为**
+
+- 提醒：窗口为 `[end_at - remind_before_minutes, end_at)`，只发未抽签且有手机号的选手；同一手机号合并为一条。`remind_before_minutes` 缺省 120，可在 JSON 中按赛事覆盖。
+- 结果：仅发给 `auto_drawn=true`（截止后由系统自动分配）的选手，手动抽签的不发。
+- 幂等与重试：发送成功即写入 `sms.remind_sent_at`/`result_sent_at`，同一类短信不再重发；失败累加 `*_attempts`，下一轮 tick 重试，最多 3 次。发送记录随 `-reset` 重新导入一并清空。
+- 每批 20 条、并发 4 发送，每批结束立即落盘（独立 10s context），定时任务超时被取消也不会重复发送。
+- 缺少模板、缺少 `PUBLIC_BASE_URL` 时对应短信整体跳过；为避免到点才发现，定时任务在配置了 `end_at` 且仍有待发送选手时，每小时打一条 `lottery.sms_config_missing` 告警（列出缺失项），补齐配置后告警自动停止。未配置 `end_at` 的赛事按设计不发短信，不告警。
+
+**安全边界**
+
+- 手机号在抽签 JSON 中明文存储（与证件号一致，均不进入数据库与日志）；日志中手机号统一脱敏、姓氏打码。
+- 抽签链接即访问凭据，短信文案提示「请勿转发」；链接到期后服务端自动分配，泄露风险仅限于查看结果。
 
 ---
 
