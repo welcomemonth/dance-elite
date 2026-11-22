@@ -210,7 +210,7 @@ func (c *Client) QueryRefund(ctx context.Context, outRefundNo string) (*RefundNo
 }
 
 // QueryRefund 是 mock 通道的退款查询：恒返回处理中（mock 无真实退款单，
-// 看门狗在 PAY_MOCK=true 时整体跳过）。
+// 看门狗检测到 mock 网关时整体跳过）。
 func (m *MockGateway) QueryRefund(_ context.Context, outRefundNo string) (*RefundNotifyResult, error) {
 	return &RefundNotifyResult{OutRefundNo: outRefundNo, RefundStatus: RefundStatusProcessing}, nil
 }

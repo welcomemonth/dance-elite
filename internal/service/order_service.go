@@ -34,7 +34,7 @@ type OrderService struct {
 }
 
 // NewOrderService 构造订单支付服务；gateway 为 wxpay.Client（真实）或
-// wxpay.MockGateway（PAY_MOCK=true）；payments 用于过期订单的查单兜底，
+// wxpay.MockGateway（dev 且支付材料不完整）；payments 用于过期订单的查单兜底，
 // expireMinutes 为待支付超时分钟数（T34）。
 func NewOrderService(stores *store.Store, gateway wxpay.Gateway, payments *PaymentService, expireMinutes int) *OrderService {
 	if expireMinutes <= 0 {

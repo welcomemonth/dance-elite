@@ -86,10 +86,10 @@ func TestNewClient_VerifyMaterialErrors(t *testing.T) {
 		{"公钥不是合法 PEM", func(o *ClientOptions) {
 			o.PublicKeyPEM = "not-a-pem"
 			o.PublicKeyID = testPublicKeyID
-		}, "WECHAT_PAY_PUBLIC_KEY"},
+		}, "WECHAT_PAY_PUBLIC_KEY_FILE"},
 		{"缺公钥", func(o *ClientOptions) {
 			o.PublicKeyID = testPublicKeyID
-		}, "WECHAT_PAY_PUBLIC_KEY"},
+		}, "WECHAT_PAY_PUBLIC_KEY_FILE"},
 	}
 
 	for _, tc := range cases {

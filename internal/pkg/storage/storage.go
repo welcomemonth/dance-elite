@@ -41,7 +41,7 @@ type Store struct {
 	tmp  string
 }
 
-// New 创建存储并确保临时目录存在。root 为物理目录（配置 UPLOAD_DIR，
+// New 创建存储并确保临时目录存在。root 为物理目录（配置 storage.upload_dir，
 // 默认 uploads），数据库中的相对路径不受 root 影响，始终为 uploads/...。
 func New(root string) (*Store, error) {
 	if strings.TrimSpace(root) == "" {

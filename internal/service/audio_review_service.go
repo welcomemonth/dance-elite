@@ -86,7 +86,7 @@ func (s *AudioReviewService) Get(ctx context.Context, token, keyword string) (*m
 	return &model.AudioReviewData{EventName: event.Name, Entries: entries}, nil
 }
 
-// audioReviewURL 按配置拼接完整链接；未配置 PUBLIC_BASE_URL 时返回相对路径。
+// audioReviewURL 按配置拼接完整链接；未配置 server.public_base_url 时返回相对路径。
 func (s *AudioReviewService) audioReviewURL(token string) string {
 	return s.publicBaseURL + "/audio-review/" + token
 }

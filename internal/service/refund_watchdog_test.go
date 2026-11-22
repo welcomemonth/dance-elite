@@ -109,7 +109,7 @@ func TestRefundWatchdogMarksFailedOnAbnormal(t *testing.T) {
 	}
 }
 
-func TestRefundWatchdogSkippedInPayMock(t *testing.T) {
+func TestRefundWatchdogSkippedForMockGateway(t *testing.T) {
 	f := newRefundFixture(t)
 	ctx := context.Background()
 	_, _, orderNo := f.paidOrder(t, "watchdog-mock")
@@ -129,6 +129,6 @@ func TestRefundWatchdogSkippedInPayMock(t *testing.T) {
 		t.Fatalf("RunOnce: %v", err)
 	}
 	if querier.calls != 0 {
-		t.Fatalf("query calls = %d, want 0（PAY_MOCK 下跳过看门狗）", querier.calls)
+		t.Fatalf("query calls = %d, want 0（mock 网关下跳过看门狗）", querier.calls)
 	}
 }

@@ -264,13 +264,13 @@ func (c *Client) signMessage(message []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(sig), nil
 }
 
-// parsePrivateKey 解析 PKCS#8 / PKCS#1 PEM 私钥；环境变量中的字面量 "\n"
-// 还原为真实换行（godotenv 单行值常见写法）。
+// parsePrivateKey 解析 PKCS#8 / PKCS#1 PEM 私钥；PEM 中的字面量 "\n"
+// 还原为真实换行（兼容从单行文本复制的场景）。
 func parsePrivateKey(raw string) (*rsa.PrivateKey, error) {
 	normalized := strings.ReplaceAll(raw, `\n`, "\n")
 	block, _ := pem.Decode([]byte(normalized))
 	if block == nil {
-		return nil, errors.New("PEM 块缺失（检查 WECHAT_PAY_PRIVATE_KEY 是否完整）")
+		return nil, errors.New("PEM 块缺失（检查 WECHAT_PAY_PRIVATE_KEY_FILE 指向的私钥文件是否完整）")
 	}
 	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
 		rsaKey, ok := key.(*rsa.PrivateKey)
@@ -294,7 +294,7 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// MockGateway 是 fake 支付通道（R2：PAY_MOCK=true 时使用）。
+// MockGateway 是 fake 支付通道（APP_ENV=dev 且支付材料缺失/不可解析时使用）。
 // Prepay 恒成功并返回 mock-prepay-* 单号；签名可验证但无密码学意义，
 // 仅用于本地与联调环境走通"下单 → 拉起支付"链路，小程序端不感知。
 type MockGateway struct {
