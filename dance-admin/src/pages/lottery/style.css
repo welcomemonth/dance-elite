@@ -110,6 +110,85 @@
   color: var(--lp-muted);
 }
 
+/* ---- 抽签时间条 ---- */
+
+.lp-schedule {
+  margin: 0 0 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--lp-line);
+  background: var(--lp-paper-soft);
+}
+
+.lp-schedule-label {
+  margin: 0;
+  font-family: var(--lp-font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.lp-schedule-countdown {
+  margin: 6px 0 0;
+  font-family: var(--lp-font-display);
+  font-size: clamp(30px, 8vw, 38px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.lp-schedule-text {
+  margin: 8px 0 0;
+  font-family: var(--lp-font-ui);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--lp-muted);
+}
+
+.lp-schedule.is-waiting {
+  border-left: 4px solid var(--lp-yellow);
+}
+
+.lp-schedule.is-ongoing {
+  background: var(--lp-yellow);
+}
+
+.lp-schedule.is-ongoing .lp-schedule-text {
+  color: rgba(18, 18, 23, 0.68);
+}
+
+/* 截止前两小时：反色 + 呼吸动画，页面里最醒目的元素。 */
+.lp-schedule.is-urgent {
+  border-color: var(--lp-ink);
+  background: var(--lp-ink);
+  color: var(--lp-paper);
+  animation: lp-alert 1.6s ease-in-out infinite;
+}
+
+.lp-schedule.is-urgent .lp-schedule-countdown {
+  color: var(--lp-yellow);
+}
+
+.lp-schedule.is-urgent .lp-schedule-text {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+@keyframes lp-alert {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(18, 18, 23, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(18, 18, 23, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-schedule.is-urgent {
+    animation: none;
+  }
+}
+
 /* ---- 抽签 / 查询 切换 ---- */
 
 .lp-tabs {
@@ -360,6 +439,14 @@
   letter-spacing: 0.06em;
 }
 
+.lp-card-note {
+  margin: 10px 0 0;
+  font-family: var(--lp-font-ui);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--lp-purple);
+}
+
 .lp-card-facts {
   display: flex;
   flex-direction: column;
@@ -450,10 +537,16 @@
   }
 }
 
-/* ---- 未抽签 / 返回 ---- */
+/* ---- 未抽签 / 未开放 / 返回 ---- */
 
 .lp-card-empty {
   padding: 32px 20px;
+}
+
+.lp-locked {
+  margin-top: 28px;
+  padding: 32px 20px;
+  border: 1px dashed var(--lp-line);
 }
 
 .lp-empty-title {

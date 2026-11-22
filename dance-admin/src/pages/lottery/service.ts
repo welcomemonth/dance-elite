@@ -17,11 +17,22 @@ export interface LotterySlot {
   no: number;
 }
 
+/** 抽签页面状态：未开始 / 进行中 / 已截止。 */
+export type LotteryStatus = 'not_started' | 'ongoing' | 'ended';
+
 export interface LotteryMeta {
   /** 赛事名称（页面标题） */
   event_name: string;
   /** 可选舞种 */
   genres: LotteryGenre[];
+  /** 抽签开始时间（ISO 8601）；缺省表示不限制 */
+  start_at?: string;
+  /** 抽签截止时间（ISO 8601）；缺省表示不限制 */
+  end_at?: string;
+  /** 服务端当前时间（ISO 8601），用于校准倒计时 */
+  server_time: string;
+  /** 服务端判定的页面状态 */
+  status: LotteryStatus;
 }
 
 export interface LotteryResult {
@@ -43,6 +54,8 @@ export interface LotteryResult {
   drawn_at?: string;
   /** 本次请求是否实际完成了抽签 */
   just_drawn: boolean;
+  /** 槽位是否由系统在截止后自动分配 */
+  auto_drawn: boolean;
 }
 
 export interface LotteryDrawPayload {

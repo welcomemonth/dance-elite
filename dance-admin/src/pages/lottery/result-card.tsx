@@ -30,6 +30,9 @@ const ResultCard: React.FC<{
           <p className="lp-card-order">
             {slot.letter} 组 · 第 {slot.no} 位出场
           </p>
+          {result.auto_drawn && (
+            <p className="lp-card-note">抽签截止后由系统自动分配</p>
+          )}
 
           <dl className="lp-card-facts">
             <div>

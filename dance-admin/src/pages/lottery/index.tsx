@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import Field from './field';
 import { BrandTopline, InvalidLinkHeader, PageHeader } from './header';
 import ResultCard from './result-card';
+import ScheduleBanner, { useLotteryClock } from './schedule';
 import {
   drawLottery,
   fetchLotteryMeta,
@@ -28,6 +29,7 @@ const LotteryPage: React.FC = () => {
   const [error, setError] = useState('');
   const [result, setResult] = useState<LotteryResult | null>(null);
   const [fresh, setFresh] = useState(false);
+  const clock = useLotteryClock(meta);
 
   useEffect(() => {
     if (!token) {
@@ -66,6 +68,15 @@ const LotteryPage: React.FC = () => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!token || busy) return;
+
+    if (tab === 'draw' && clock.status !== 'ongoing') {
+      setError(
+        clock.status === 'not_started'
+          ? '抽签尚未开始，请到开始后再试。'
+          : '抽签已结束，未抽签的选手已由系统自动分配，请使用「查询」。',
+      );
+      return;
+    }
 
     const trimmedName = name.trim();
     const trimmedID = idCard.trim();
@@ -124,11 +135,17 @@ const LotteryPage: React.FC = () => {
   }
 
   const isDraw = tab === 'draw';
+  const canDraw = clock.status === 'ongoing';
 
   return (
     <div className="lottery-page">
       <BrandTopline />
       <PageHeader eventName={meta.event_name} genres={meta.genres} />
+      <ScheduleBanner
+        meta={meta}
+        status={clock.status}
+        serverNow={clock.serverNow}
+      />
 
       <div className="lp-tabs" role="tablist" aria-label="抽签或查询">
         <button
@@ -166,6 +183,24 @@ const LotteryPage: React.FC = () => {
             ← 返回重新输入
           </button>
         </>
+      ) : isDraw && !canDraw ? (
+        <div className="lp-locked">
+          <p className="lp-empty-title">
+            {clock.status === 'not_started' ? '尚未开始' : '抽签已结束'}
+          </p>
+          <p className="lp-empty-text">
+            {clock.status === 'not_started'
+              ? '抽签开始后才能抽取你的出场顺序，现在可以先查询已有结果。'
+              : '截止后未抽签的选手已由系统自动分配出场顺序，请到「查询」查看结果。'}
+          </p>
+          <button
+            type="button"
+            className="lp-text-btn"
+            onClick={() => switchTab('query')}
+          >
+            去查询 →
+          </button>
+        </div>
       ) : (
         <form className="lp-form" onSubmit={handleSubmit} noValidate>
           {isDraw && (
