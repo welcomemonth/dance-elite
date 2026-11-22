@@ -47,16 +47,24 @@ gofmt -w .
 
 # Docker 部署（Aliyun）
 bash scripts/build.sh && bash scripts/push-aliyun.sh
-docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容器 8090
+# 生产需先准备 config.yaml（模板 scripts/config.prod.example.yaml）并显式指定
+ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容器 8090
 ```
 
-配置：无 YAML、无命令行参数。全部配置来自环境变量：本地开发由 godotenv 读取 `.env`（可选，已存在的环境变量优先），生产由容器运行时注入；必需项缺失直接 fail-fast。复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）。定时任务相关：`STATUS_TICK_SECONDS`（默认 60）、`ORDER_EXPIRE_MINUTES`（默认 15）、`REFUND_WATCHDOG_MINUTES`（默认 10），均须为正整数。日志相关：`LOG_LEVEL`（debug/info/warn/error）、`LOG_FORMAT`（json/console），未设置时随 `DEBUG` 推导；`SLOW_REQUEST_MS`（默认 500，0 关闭慢请求告警）。微信支付固定使用公钥模式（回调验签）：`WECHAT_PAY_PUBLIC_KEY_ID` + `WECHAT_PAY_PUBLIC_KEY(_FILE)`；`WECHAT_PAY_PRIVATE_KEY(_FILE)` 与 `WECHAT_MCH_SERIAL_NO` 用于请求签名。
+配置分两处，互不混用（无命令行参数）：
+
+- **非敏感运行参数**：viper 读取 `config.yaml`（`CONFIG_FILE` 可指定路径，默认仓库根文件）。字段：`server.port` / `server.public_base_url` / `server.slow_request_ms`、`storage.db_path` / `storage.upload_dir`、`log.level` / `log.format`、`auth.jwt_expire_seconds`、`admin.init_username`、`scheduler.status_tick_seconds` / `order_expire_minutes` / `refund_watchdog_minutes`。生产挂载独立 `config.yaml`（镜像不内置）。
+- **密钥与微信账户**：只来自环境变量；本地由 godotenv 读取 `.env`（已存在的环境变量优先），生产由容器注入。始终必需 `JWT_SECRET`、`ID_CARD_HMAC_KEY`、`WECHAT_APPID`、`WECHAT_SECRET`、`ADMIN_INIT_PASSWORD`。微信支付固定公钥验签模式：另需 `WECHAT_MCHID`、`WECHAT_MCH_SERIAL_NO`、`WECHAT_PAY_PUBLIC_KEY_ID`、`WECHAT_PAY_API_V3_KEY`（32 字节）、`WECHAT_PAY_PRIVATE_KEY_FILE`、`WECHAT_PAY_PUBLIC_KEY_FILE`（PEM 只接受文件路径，不接受内联文本）。
+- **`APP_ENV=dev|prod`**（默认 prod）：dev 下支付材料缺失/不可读时自动回退 mock；prod 下同类问题启动即 fail-fast。无 `DEBUG` / `PAY_MOCK` 开关；`log.level=debug` 时 Gin 使用 debug 模式。
+- **派生**：微信支付回调地址 = `server.public_base_url` + `/api/v1/payments/wechat/notify`（退款为 `/refund-notify`），不再单独配置；音频审核外链同源。`public_base_url` 在 prod 必填。
+- 复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）；`APP_ENV=dev` 配合缺省支付材料即可走 mock。
 
 ## Directory Structure
 
 ```
 /
-├── .env.example            # 环境变量模板（.env 不入库）
+├── .env.example            # 密钥/微信账户环境变量模板（.env 不入库）
+├── config.yaml             # 非敏感运行配置（viper 读取；生产挂载独立文件）
 ├── cmd/
 │   ├── dance-elite/        # 服务入口：main.go 配置与日志，run.go 依赖装配（composition root）
 ├── internal/
@@ -65,7 +73,7 @@ docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容�
 │   ├── store/              # 数据访问层（SQLite：db.go 连接池 / migrate.go 迁移 / tx.go 事务）
 │   ├── model/              # 数据模型与 DTO（request / response）
 │   ├── web/                # 前端构建产物 embed（dist/ 由 dance-admin 的 pnpm build 自动同步，不入库）
-│   ├── configs/            # 配置加载（默认值 + .env + 环境变量，启动自检）
+│   ├── configs/            # 配置加载（config.yaml + .env/环境变量，派生与启动自检）
 │   ├── middleware/         # Gin 中间件（RequestID / AccessLog / Recovery）
 │   ├── pkg/httpx/          # 统一响应包装 + 全局错误码 + HandleErrors
 │   ├── pkg/logger/         # zap 日志封装
@@ -102,7 +110,7 @@ docker compose -f scripts/docker-compose.yml up -d   # 宿主机 18080 → 容�
 - 音频审核页：每赛事一个免登录 H5，按 `audio_review_token` 访问
 - 舞种仅古典舞（`classical`）和民族民间舞（`folk`）；年龄组 U11/U13/U15 按出生年自动判定
 - 支付：提交报名即创建订单并拉起微信支付；关闭/返回则订单取消消失但留档；小程序端无自助退款，需客服登记 + 管理员后台人工退款
-- 赛事状态按时间线自动流转（进程内单调度器，`STATUS_TICK_SECONDS` 默认每 60s，启动先跑一轮）：`reg_end_at` → reg_closed、`start_at` → ongoing、比赛日期（event_date）与 start_at 中较晚一天的次日 00:00 → finished；只前进不回退，未发布赛事不自动发布；待支付订单 `ORDER_EXPIRE_MINUTES`（默认 15 分钟）超时（先查单补结账，确认未支付才取消，`cancel_reason=system`）；退款工单 `processing`/`approved` 超过 `REFUND_WATCHDOG_MINUTES`（默认 10 分钟）无回调时由看门狗查微信退款单（`PAY_MOCK=true` 时跳过）
+- 赛事状态按时间线自动流转（进程内单调度器，`scheduler.status_tick_seconds` 默认每 60s，启动先跑一轮）：`reg_end_at` → reg_closed、`start_at` → ongoing、比赛日期（event_date）与 start_at 中较晚一天的次日 00:00 → finished；只前进不回退，未发布赛事不自动发布；待支付订单 `scheduler.order_expire_minutes`（默认 15 分钟）超时（先查单补结账，确认未支付才取消，`cancel_reason=system`）；退款工单 `processing`/`approved` 超过 `scheduler.refund_watchdog_minutes`（默认 10 分钟）无回调时由看门狗查微信退款单（mock 网关下跳过）
 - 一人同一赛事限报 1 个组别、可报多个舞种；不支持批量代报
 
 ## Backend Rules (Go)

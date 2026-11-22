@@ -432,7 +432,7 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 - **幂等**：`idempotency_key` + 服务端唯一索引 `UNIQUE(user_id, idempotency_key)`，重复提交返回首次创建的订单；网络重试安全。判重永久生效（强于早期"5 分钟内"的表述）；若订单已结束（已支付/已取消），同键再提交返回 40901，客户端应换新幂等键重新发起报名。
 - **支付参数拆分（T9 落地口径）**：本接口只创建报名单 + 订单，响应中 `pay_params` 由支付预下单接口 `POST /api/v1/orders/{order_id}/prepay`（T10）换取，小程序拿到后再拉起微信支付。组别 `level` 由服务端按身份证出生年份判定回填，请求体不携带。
 - **并发抢名额**：名额校验与写单在同一事务内完成（`taken < quota` 原子条件 UPDATE），SQLite 单写入者天然串行，仅一人成功。
-- **订单有效期（T34）**：订单创建时写入 `expire_at = 创建时间 + ORDER_EXPIRE_MINUTES`（默认 15 分钟）。有效期内需完成预下单与支付；未完成的订单由服务端定时任务回收（先向微信查单：已支付则补结账，确认未支付才取消），取消原因记 `system`，名额即时释放。用户主动关闭收银台时小程序应**立即调用 3.5**，不要等超时。
+- **订单有效期（T34）**：订单创建时写入 `expire_at = 创建时间 + scheduler.order_expire_minutes`（默认 15 分钟）。有效期内需完成预下单与支付；未完成的订单由服务端定时任务回收（先向微信查单：已支付则补结账，确认未支付才取消），取消原因记 `system`，名额即时释放。用户主动关闭收银台时小程序应**立即调用 3.5**，不要等超时。
 - **安全**：身份证明文仅存在于请求体内存，立即 HMAC-SHA256 哈希后丢弃；日志、错误信息、数据库中均无明文。
 - **限流**：单用户 1 次/5 秒。
 
@@ -495,7 +495,7 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 
 - **幂等复用**：`prepay_id` 持久化在订单上（条件写入：`status='pending_payment' AND prepay_id IS NULL`），同一订单重复预下单直接复用，并发请求按订单串行化，网关只调用一次。
 - **有效期（T34）**：预下单时以订单 `expire_at` 作为微信 `time_expire`（RFC 3339，+08:00）；若订单已过期，服务端先向微信查单，确认未支付才走系统取消并返回 40901，不向微信下单。到期未支付的订单由定时任务先查单再决定补结账或取消，避免「钱已扣但本地取消」。
-- **mock 通道**：`PAY_MOCK=true`（默认开启）时由 MockGateway 返回 `mock-prepay-*` 与 `MOCK-SIGN`，小程序可完整走通支付流程；接入真实微信支付后关闭。
+- **mock 通道**：`APP_ENV=dev` 且支付材料缺失/不可读时自动启用 MockGateway，返回 `mock-prepay-*` 与 `MOCK-SIGN`，小程序可完整走通支付流程；`APP_ENV=prod` 不会回退 mock（材料缺失即启动失败）。
 - **限流**：单用户 10 次/分钟。
 - **安全**：签名私钥只经环境变量注入，不落库、不进日志；日志中不打印支付密钥与完整回调报文之外的内容。
 
@@ -603,14 +603,14 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 
 **注意事项**
 
-- **验签**：用微信支付公钥（`WECHAT_PAY_PUBLIC_KEY`）对 `时间戳\n随机串\n请求体\n` 做 SHA256-RSA 验签，并校验时间戳偏差 ≤5 分钟、`Wechatpay-Serial` 与公钥 ID（`WECHAT_PAY_PUBLIC_KEY_ID`）一致；失败返回 HTTP 401，微信重推。
-- **解密**：用 APIv3 密钥（`WECHAT_PAY_KEY`，32 字节）对 `resource` 做 AES-256-GCM 解密；解密后再校验 appid/mchid 与商户配置一致。
+- **验签**：用微信支付公钥（`WECHAT_PAY_PUBLIC_KEY_FILE` 指向的文件）对 `时间戳\n随机串\n请求体\n` 做 SHA256-RSA 验签，并校验时间戳偏差 ≤5 分钟、`Wechatpay-Serial` 与公钥 ID（`WECHAT_PAY_PUBLIC_KEY_ID`）一致；失败返回 HTTP 401，微信重推。
+- **解密**：用 APIv3 密钥（`WECHAT_PAY_API_V3_KEY`，32 字节）对 `resource` 做 AES-256-GCM 解密；解密后再校验 appid/mchid 与商户配置一致。
 - **幂等**：`payments.transaction_id` 唯一约束，重复回调直接返回 SUCCESS。
 - **事务**：写 `payments` 流水（`raw_callback` 全量留档）→ `orders` 置 `paid`+`paid_at` → `registrations` 置 `active`，任一步失败整事务回滚并返回非 success，微信重试。
 - **金额校验**：实付金额必须与订单金额一致；不一致拒绝（返回非 success）并记录错误日志告警，人工核查。
 - **对账**：回调报文完整落 `payments.raw_callback`；`notified_at` 记录处理时间。查单兜底写入的流水 `raw_callback` 为 NULL（来源可区分）。
 - 支付失败/关闭/用户取消：微信回调 `trade_state=CLOSED/REVOKED/PAYERROR` 时执行 T12 取消（订单 canceled、名额即时释放、关闭流水留档）；`NOTPAY` 仍可能完成支付，本接口仅确认收到、不做状态变更。用户主动取消走 3.5 接口。
-- **mock 通道**：`PAY_MOCK=true` 时不做验签解密，直接接受明文交易 JSON（字段同解密后的 resource），供本地/联调模拟支付成功。
+- **mock 通道**：`APP_ENV=dev` 且支付材料不完整时不做验签解密，直接接受明文交易 JSON（字段同解密后的 resource），供本地/联调模拟支付成功。
 
 ---
 
@@ -633,13 +633,13 @@ curl -X POST https://api.example.com/api/v1/events/12/registrations \
 
 **注意事项**
 
-- 回调地址由环境变量 `WECHAT_REFUND_NOTIFY_URL` 配置；验签/解密规则与支付回调一致。
+- 回调地址由 `server.public_base_url` 派生（`/api/v1/payments/wechat/refund-notify`）；验签/解密规则与支付回调一致。
 - **幂等**：`payments.refund_id` 部分唯一索引 + 工单终态判断；重复回调直接返回 SUCCESS，不重复释放名额。
 - `refund_status=SUCCESS`：事务内 `refund_tickets` → refunded、`orders` → refunded、`registrations` → withdrawn、`event_groups.taken - 1`，补齐退款流水回调报文。
 - `refund_status=PROCESSING`：不做状态变更，返回 SUCCESS。
 - `refund_status=CLOSED/ABNORMAL`：工单回退 `refund_failed`、订单回退 `paid`（可重试或人工核查），退款流水置 failed。
 - 退款接口调用超时但微信实际退款成功时，以本回调为准：即使工单已回退 refund_failed，成功回调仍会完成退款状态推进。
-- **mock 通道**：`PAY_MOCK=true` 时直接接受明文退款 JSON，供本地/联调模拟退款成功。
+- **mock 通道**：`APP_ENV=dev` 且支付材料不完整时直接接受明文退款 JSON，供本地/联调模拟退款成功。
 
 ---
 
@@ -1528,7 +1528,7 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 - **安全边界**：仅返回 `status='active'` 且已上传音频的报名；**不含**证件号、电话、机构、订单等任何敏感数据。
 - **审核范围（2026-11-11 定稿）**：核对 = 音频审核，节目名与音频一起展示核对；**照片不审核、不进入本页**，不存在"资料审核页"或图片审核 token。
 - token 重新生成后旧链接立即失效；单 token 限流 60 次/分钟/IP。
-- 审核完整 URL 由后台按配置 `PUBLIC_BASE_URL` 拼接（`/audio-review/{token}`），不依赖请求 Host；重新生成即失效旧链接。
+- 审核完整 URL 由后台按配置 `server.public_base_url` 拼接（`/audio-review/{token}`），不依赖请求 Host；重新生成即失效旧链接。
 - 音频 URL 建议加 referer/短期签名校验，防止被站外盗链。
 
 ---
@@ -1939,8 +1939,8 @@ curl -X POST https://api.example.com/api/v1/admin/events/12/publish \
 - 后台 `10.1` 的 `status` 筛选作用于落库状态（最长滞后一个调度周期，约 60 秒）；小程序端展示态实时推导，不受影响。
 - `finished` 后赛事不可再编辑、调名额、开关组别；T33 的赛后媒体清理以该状态为触发依据。
 - 同一调度器还执行两轮兜底任务（同为无接口的系统动作）：
-  - **待支付订单超时回收**：扫描 `status='pending_payment'` 且 `expire_at`（缺省按 `created_at` + `ORDER_EXPIRE_MINUTES`）已过的订单，先向微信查单——SUCCESS 补结账、失败终态取消（`pay_failed`）、确认未支付才系统取消（`cancel_reason=system`），查询失败本轮跳过不取消。
-  - **退款看门狗**：`refund_tickets.status` 为 `processing` / `approved` 且超过 `REFUND_WATCHDOG_MINUTES`（默认 10 分钟）无回调时主动查微信退款单——SUCCESS 完成退款、CLOSED/ABNORMAL 置 `refund_failed` 并回退订单为 `paid`（可重试）、PROCESSING 或查询失败留待下轮。`PAY_MOCK=true` 时跳过（mock 无真实退款单）。
+  - **待支付订单超时回收**：扫描 `status='pending_payment'` 且 `expire_at`（缺省按 `created_at` + `scheduler.order_expire_minutes`）已过的订单，先向微信查单——SUCCESS 补结账、失败终态取消（`pay_failed`）、确认未支付才系统取消（`cancel_reason=system`），查询失败本轮跳过不取消。
+  - **退款看门狗**：`refund_tickets.status` 为 `processing` / `approved` 且超过 `scheduler.refund_watchdog_minutes`（默认 10 分钟）无回调时主动查微信退款单——SUCCESS 完成退款、CLOSED/ABNORMAL 置 `refund_failed` 并回退订单为 `paid`（可重试）、PROCESSING 或查询失败留待下轮。mock 网关下跳过（无真实退款单）。
 
 ---
 
