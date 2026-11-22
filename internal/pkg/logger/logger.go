@@ -13,10 +13,33 @@ package logger
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+// supportsColor 判断输出是否连到字符设备（终端）。
+// 重定向到普通文件（nohup.out、容器日志文件）时返回 false，避免写入 ANSI 转义。
+func supportsColor(f *os.File) bool {
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+// levelEncoder 选择级别编码：json 始终小写纯文本；console 仅在终端下用彩色，
+// 重定向到文件时用纯文本，避免日志文件出现 ANSI 转义乱码。
+func levelEncoder(format string, color bool) zapcore.LevelEncoder {
+	if format != "console" {
+		return zapcore.LowercaseLevelEncoder
+	}
+	if color {
+		return zapcore.CapitalColorLevelEncoder
+	}
+	return zapcore.CapitalLevelEncoder
+}
 
 // Log is the process-wide logger. Defaults to a no-op logger so packages
 // stay safe to use in tests before Init runs; main calls Init once.
@@ -54,10 +77,7 @@ func New(opts Options) (*zap.SugaredLogger, error) {
 
 	encCfg := zap.NewProductionEncoderConfig()
 	encCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-	encCfg.EncodeLevel = zapcore.LowercaseLevelEncoder
-	if format == "console" {
-		encCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	}
+	encCfg.EncodeLevel = levelEncoder(format, supportsColor(os.Stdout))
 
 	cfg := zap.NewProductionConfig()
 	cfg.Encoding = format
