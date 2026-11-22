@@ -1,0 +1,30 @@
+# 生产配置模板：复制到服务器上的独立路径（如 /etc/dance-elite/config.yaml），
+# 按部署实际修改后通过 ELITE_CONFIG_FILE 挂载到容器。
+# 本文件不含任何密钥；密钥与微信账户参数由 .env / 编排注入。
+
+server:
+  # 必须与 docker-compose.yml 的端口映射（18080:8090）和健康检查一致
+  port: 8090
+  # 真实可访问域名，用于微信支付回调与音频审核外链；必须是 https
+  public_base_url: https://your-domain.example.com
+  slow_request_ms: 500
+
+storage:
+  # 相对 WORKDIR /opt/dance-elite；data 卷持久化
+  db_path: data/dance-elite.db
+  upload_dir: uploads
+
+log:
+  level: info
+  format: json
+
+auth:
+  jwt_expire_seconds: 7200
+
+admin:
+  init_username: admin
+
+scheduler:
+  status_tick_seconds: 60
+  order_expire_minutes: 15
+  refund_watchdog_minutes: 10

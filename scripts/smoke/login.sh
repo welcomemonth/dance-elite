@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # 登录后台管理端，把 token 写进 .token 文件（与 login.sh 同目录）。
 # 用法：bash scripts/smoke/login.sh
-# 依赖：仓库根目录 .env（读取 ADMIN_INIT_USERNAME / ADMIN_INIT_PASSWORD）。
+# 依赖：仓库根目录 config.yaml（admin.init_username）与 .env（ADMIN_INIT_PASSWORD）。
 set -euo pipefail
 
 cd "$(dirname "$0")"
 ROOT="$(cd ../.. && pwd)"
 BASE="${BASE_URL:-http://localhost:8080}"
+CONFIG_FILE="${CONFIG_FILE:-$ROOT/config.yaml}"
 
-# 从 .env 读取初始管理员账号（不 source 整个文件，避免副作用）
-ADMIN_USERNAME=$(grep -E '^ADMIN_INIT_USERNAME=' "$ROOT/.env" | cut -d= -f2-)
+# 用户名来自 config.yaml，密码来自 .env（不 source 整个文件，避免副作用）
+ADMIN_USERNAME=$(sed -n 's/^[[:space:]]*init_username:[[:space:]]*//p' "$CONFIG_FILE" | head -n1 | tr -d ' "')
 ADMIN_PASSWORD=$(grep -E '^ADMIN_INIT_PASSWORD=' "$ROOT/.env" | cut -d= -f2-)
 ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
 

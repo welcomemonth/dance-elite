@@ -34,5 +34,5 @@ go build -o "$OUTPUT" ./cmd/dance-elite
 echo "✓ Build successful: $OUTPUT"
 echo ""
 echo "Run with:"
-echo "  PORT=8090 DEBUG=true $OUTPUT"
-echo "（密钥通过环境变量注入，模板见 .env.example）"
+echo "  APP_ENV=dev CONFIG_FILE=config.yaml $OUTPUT"
+echo "（非敏感配置见 config.yaml，密钥见 .env.example）"
