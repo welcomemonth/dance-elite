@@ -19,14 +19,15 @@ func main() {
 		log.Fatalf("加载配置失败: %v", err)
 	}
 
-	level, err := logger.ParseLevel(cfg.LogLevel)
+	level, err := logger.ParseLevel(cfg.Log.Level)
 	if err != nil {
 		log.Fatalf("解析日志级别失败: %v", err)
 	}
-	if err := logger.Init(logger.Options{Level: level, Format: cfg.LogFormat}); err != nil {
+	if err := logger.Init(logger.Options{Level: level, Format: cfg.Log.Format}); err != nil {
 		log.Fatalf("初始化日志失败: %v", err)
 	}
-	if !cfg.Debug {
+	// 不再有 DEBUG 开关：日志级别为 debug 时使用 Gin debug 模式，否则 release。
+	if cfg.Log.Level != "debug" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
