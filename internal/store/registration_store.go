@@ -277,3 +277,36 @@ func (s *RegistrationStore) ActiveEventIDs(ctx context.Context, userID int64, ev
 	}
 	return out, nil
 }
+
+// EventPlayerRow 是某赛事报名单元下的选手（成绩匹配用的搜索辅助）。
+type EventPlayerRow struct {
+	RegistrationID int64
+	PlayerID       int64
+	PlayerNo       string
+	PlayerName     string
+	Institution    *string
+}
+
+// ListEventPlayers 返回赛事某组别×舞种下有效报名的选手（成绩导入按姓名匹配用）。
+func (s *RegistrationStore) ListEventPlayers(ctx context.Context, eventID int64, level, danceType string) ([]EventPlayerRow, error) {
+	rows, err := s.db.sql.QueryContext(ctx, `
+		SELECT r.id, pl.id, pl.player_no, pl.name, r.institution
+		FROM registrations r
+		JOIN players pl ON pl.id = r.player_id
+		JOIN event_groups g ON g.id = r.group_id
+		WHERE r.event_id = ? AND r.dance_type = ? AND g.level = ? AND r.status = 'active'
+		ORDER BY r.id`, eventID, danceType, level)
+	if err != nil {
+		return nil, fmt.Errorf("list event players: %w", err)
+	}
+	defer rows.Close()
+	list := make([]EventPlayerRow, 0, 32)
+	for rows.Next() {
+		var p EventPlayerRow
+		if err := rows.Scan(&p.RegistrationID, &p.PlayerID, &p.PlayerNo, &p.PlayerName, &p.Institution); err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, rows.Err()
+}

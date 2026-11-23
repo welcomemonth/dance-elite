@@ -180,6 +180,11 @@ func (s *PlayerStore) MoveDataTx(ctx context.Context, tx *sql.Tx, fromID, toID i
 }
 
 // GetByHash 按证件号哈希查询选手（非事务读）。不存在返回 ErrNotFound。
+// GetByHashTx 是事务内按哈希查询选手（成绩导入在发布事务内匹配档案）。
+func (s *PlayerStore) GetByHashTx(ctx context.Context, tx *sql.Tx, idCardHash string) (*model.Player, error) {
+	return s.getByHashTx(ctx, tx, idCardHash)
+}
+
 func (s *PlayerStore) GetByHash(ctx context.Context, idCardHash string) (*model.Player, error) {
 	player, err := scanPlayer(s.db.sql.QueryRowContext(ctx,
 		`SELECT `+playerColumns+` FROM players WHERE id_card_hash = ?`, idCardHash))

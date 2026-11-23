@@ -39,14 +39,12 @@ func mustInsertPlayerRow(t *testing.T, db *store.DB, playerNo, hash string) int6
 // mustInsertBoard 插入一条榜单并返回 ID（成绩/积分冲突测试用）。
 func mustInsertBoard(t *testing.T, f *regFixture) int64 {
 	t.Helper()
-	res, err := f.db.SQL().ExecContext(context.Background(),
-		`INSERT INTO boards (season_id, level, dance_type) VALUES (?, 'U11', 'classical')`, f.seasonID)
-	if err != nil {
-		t.Fatalf("insert board: %v", err)
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		t.Fatalf("board id: %v", err)
+	// 赛季激活时已自动初始化 6 个榜单，这里直接取用。
+	var id int64
+	if err := f.db.SQL().QueryRowContext(context.Background(),
+		`SELECT id FROM boards WHERE season_id = ? AND level = 'U11' AND dance_type = 'classical'`,
+		f.seasonID).Scan(&id); err != nil {
+		t.Fatalf("load board: %v", err)
 	}
 	return id
 }

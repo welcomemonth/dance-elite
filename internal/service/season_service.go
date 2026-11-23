@@ -97,6 +97,12 @@ func (s *SeasonService) Create(ctx context.Context, adminID int64, req model.Adm
 		if err != nil {
 			return err
 		}
+		// 赛季激活后初始化 6 个榜单（幂等）。
+		if status == model.SeasonStatusActive {
+			if err := s.stores.Boards.EnsureForSeason(ctx, tx, id); err != nil {
+				return err
+			}
+		}
 		return adminLog(ctx, s.stores, tx, &adminID, adminActionSeasonCreate, strPtr("season"), &id,
 			map[string]any{"name": name, "status": status})
 	}); err != nil {
@@ -205,6 +211,9 @@ func (s *SeasonService) Update(ctx context.Context, adminID, id int64, req model
 	if err := s.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		if activating {
 			if err := s.stores.Seasons.Activate(ctx, tx, id, season.Status); err != nil {
+				return err
+			}
+			if err := s.stores.Boards.EnsureForSeason(ctx, tx, id); err != nil {
 				return err
 			}
 		} else if err := s.stores.Seasons.Update(ctx, tx, id, patch); err != nil {

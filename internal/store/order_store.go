@@ -90,6 +90,12 @@ type queryer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+// querier 是 QueryRowContext + QueryContext 的查询接口（*sql.DB / *sql.Tx 均满足）。
+type querier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
 func (s *OrderStore) getByOrderNo(ctx context.Context, q queryer, orderNo string) (*model.Order, error) {
 	order, err := scanOrder(q.QueryRowContext(ctx,
 		`SELECT `+orderQualifiedColumns+` FROM orders o WHERE o.order_no = ?`, orderNo))

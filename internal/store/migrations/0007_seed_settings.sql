@@ -36,38 +36,21 @@ INSERT INTO settings ("key", value) VALUES (
             "gold": 45,
             "silver": 30
         },
-        "participant_coefficient": [
-            {"min_participants": 40, "factor": 1.2},
-            {"min_participants": 20, "factor": 1.0},
-            {"min_participants": 0, "factor": 0.8}
+        "size_bands": [
+            {"min_players": 40, "factor": 1.2},
+            {"min_players": 20, "factor": 1.0},
+            {"min_players": 0, "factor": 0.8}
         ],
-        "level_weight": {"grade_a": 1.0, "super": 1.2, "final": 1.5}
+        "level_weights": {"grade_a": 1.0, "super": 1.2, "final": 1.5}
     }'
 ) ON CONFLICT ("key") DO NOTHING;
 
 INSERT INTO settings ("key", value) VALUES (
     'prize_rules_template',
     '{
-        "grade_a": [
-            {"rank": 1, "min_participants": 40, "amount": 200000},
-            {"rank": 1, "max_participants": 39, "amount": 100000}
-        ],
-        "super": [
-            {"rank": 1, "min_participants": 40, "amount": 300000},
-            {"rank": 2, "min_participants": 40, "amount": 150000},
-            {"rank": 1, "max_participants": 39, "amount": 200000},
-            {"rank": 2, "max_participants": 39, "amount": 100000}
-        ],
-        "final": [
-            {"rank": 1, "amount": 1000000},
-            {"rank": 2, "amount": 300000},
-            {"rank": 3, "amount": 200000},
-            {"rank_from": 4, "rank_to": 8, "amount": 100000}
-        ],
-        "institution_rank": [
-            {"rank": 1, "amount": 1000000},
-            {"rank": 2, "amount": 1000000},
-            {"rank": 3, "amount": 1000000}
-        ]
+        "grade_a": {"ranks": [1], "threshold": 40, "above": [200000], "below": [100000]},
+        "super": {"ranks": [1, 2], "threshold": 40, "above": [300000, 150000], "below": [200000, 100000]},
+        "final": {"amounts": [1000000, 300000, 200000, 100000, 100000, 100000, 100000, 100000]},
+        "institution_top3": 1000000
     }'
 ) ON CONFLICT ("key") DO NOTHING;

@@ -47,6 +47,10 @@ type Deps struct {
 	UserContents        *service.AdminUserQueryService
 	Contents            *service.ContentService
 	AudioReview         *service.AudioReviewService
+	Scores              *service.ScoreService
+	Rankings            *service.RankingAdminService
+	Prizes              *service.PrizeService
+	PublicRanking       *service.PublicRankingService
 	Tokens              *token.Signer
 
 	// UploadDir 是上传文件物理根目录（配置 storage.upload_dir）。非空时把
@@ -129,6 +133,11 @@ func New(deps Deps) *gin.Engine {
 		registerWaitlistRoutes(api, deps.Waitlists, deps.Tokens)
 	}
 
+	// 小程序榜单只读（T29，免鉴权）。
+	if deps.PublicRanking != nil {
+		registerPublicRankingRoutes(api, deps.PublicRanking)
+	}
+
 	// 后台端认证（T5）
 	registerAdminAuthRoutes(api, deps.AdminAuth, deps.Tokens)
 
@@ -181,6 +190,10 @@ func New(deps Deps) *gin.Engine {
 		}
 		if deps.AudioReview != nil {
 			registerAdminAudioReviewRoutes(admin, deps.AudioReview)
+		}
+		// 后台榜单中心（T28/T29/T31）。
+		if deps.Scores != nil && deps.Rankings != nil && deps.Prizes != nil {
+			registerAdminRankingRoutes(admin, deps.Scores, deps.Rankings, deps.Prizes)
 		}
 	}
 

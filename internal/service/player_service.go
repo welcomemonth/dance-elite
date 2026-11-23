@@ -52,6 +52,14 @@ type PreparedIdentity struct {
 	Gender     *string
 }
 
+// HashIDNumber 按证件类型规范化后计算 HMAC 哈希（成绩导入匹配选手用）。
+func (s *PlayerService) HashIDNumber(idType, number string) string {
+	if idType == "" {
+		idType = utils.IDTypeIDCard
+	}
+	return utils.HashIDNumber(s.hmacKey, idType, number)
+}
+
 // PrepareIdentity 校验并解析身份输入，返回可写库的规范化身份字段（不写库）。
 // 校验失败返回统一错误码：身份证不合法 41001，其余参数错误 40001。
 func (s *PlayerService) PrepareIdentity(in IdentityInput) (*PreparedIdentity, error) {
