@@ -111,18 +111,22 @@ export async function publishScores(
   });
 }
 
-/** 成绩纠错：修改已发布成绩 → 自动重算，返回差异预览 */
+/** 成绩纠错：旧成绩置 corrected，写入新成绩并自动重算（返回新成绩 ID）。 */
 export async function correctScore(
   entryId: number,
   data: { award?: string; advanced_to_final?: boolean; remark?: string },
-): Promise<{ entry_id: number; diff: Record<string, unknown> }> {
+): Promise<{ entry_id: number }> {
   return request(`/api/v1/admin/scores/${entryId}`, { method: 'PUT', data });
 }
 
 // ---------- 积分与榜单 ----------
 
 export async function listLeaderboards(seasonId: number): Promise<Leaderboard[]> {
-  return request(`/api/v1/admin/seasons/${seasonId}/leaderboards`, { method: 'GET' });
+  const data = await request<{ list: Leaderboard[] }>(
+    `/api/v1/admin/seasons/${seasonId}/leaderboards`,
+    { method: 'GET' },
+  );
+  return data.list;
 }
 
 /** 更新上榜行：展示名 / 隐藏恢复 */
@@ -142,12 +146,16 @@ export async function updateLeaderboardRow(
 // ---------- 晋级管理 ----------
 
 export async function listQualificationCards(seasonId: number): Promise<QualificationCard[]> {
-  return request(`/api/v1/admin/seasons/${seasonId}/qualification-cards`, { method: 'GET' });
+  const data = await request<{ list: QualificationCard[] }>(
+    `/api/v1/admin/seasons/${seasonId}/qualification-cards`,
+    { method: 'GET' },
+  );
+  return data.list;
 }
 
 export async function grantQualificationCard(
   seasonId: number,
-  data: { player_id: number; board: string; reason: string },
+  data: { player_id: number; board_id: number; reason: string },
 ): Promise<{ card_id: number }> {
   return request(`/api/v1/admin/seasons/${seasonId}/qualification-cards`, { method: 'POST', data });
 }
@@ -162,21 +170,29 @@ export async function revokeQualificationCard(
 }
 
 export async function getFinalsRoster(seasonId: number): Promise<FinalsRosterRow[]> {
-  return request(`/api/v1/admin/seasons/${seasonId}/finals-roster`, { method: 'GET' });
+  const data = await request<{ list: FinalsRosterRow[] }>(
+    `/api/v1/admin/seasons/${seasonId}/finals-roster`,
+    { method: 'GET' },
+  );
+  return data.list;
 }
 
 /** 总决赛名单手动调整（增补/移除，留痕） */
 export async function adjustFinalsRoster(
   seasonId: number,
-  data: { player_id: number; action: 'add' | 'remove'; reason: string },
-): Promise<{ player_id: number }> {
+  data: { board_id: number; player_id: number; action: 'add' | 'remove'; reason: string },
+): Promise<{ adjusted: boolean }> {
   return request(`/api/v1/admin/seasons/${seasonId}/finals-roster/adjust`, { method: 'POST', data });
 }
 
 // ---------- 机构年度榜 ----------
 
 export async function getInstitutionRanking(seasonId: number): Promise<InstitutionRankRow[]> {
-  return request(`/api/v1/admin/seasons/${seasonId}/institution-ranking`, { method: 'GET' });
+  const data = await request<{ list: InstitutionRankRow[] }>(
+    `/api/v1/admin/seasons/${seasonId}/institution-ranking`,
+    { method: 'GET' },
+  );
+  return data.list;
 }
 
 // ---------- 奖金管理 ----------
@@ -200,9 +216,7 @@ export interface PrizeStatementParams {
 export async function listPrizeStatements(params: PrizeStatementParams): Promise<{
   list: PrizeStatementItem[];
   total: number;
-  page: number;
-  page_size: number;
-  summary: { total_amount: number; paid_amount: number; unpaid_count: number };
+  total_amount: number;
 }> {
   return request('/api/v1/admin/prize-statements', { method: 'GET', params });
 }
@@ -218,7 +232,7 @@ export async function adjustPrizeStatement(
 /** 发放登记 */
 export async function payPrizeStatement(
   itemId: number,
-  data: { payee: string; paid_at: string; remark?: string },
+  data: { payee: string; note?: string },
 ): Promise<{ item_id: number; paid: boolean }> {
   return request(`/api/v1/admin/prize-statements/${itemId}/pay`, { method: 'POST', data });
 }

@@ -2,16 +2,21 @@ import { makeAutoObservable } from "mobx";
 
 import { bindPhone as bindPhoneApi, loginWithWechat } from "../api/auth";
 import type { User } from "../types/models";
-import { readSession, removeSession, writeSession } from "../utils/session";
+import { isTokenExpired, readSession, removeSession, writeSession } from "../utils/session";
 
 const initialSession = readSession();
+// 本地缓存 token 已过期时直接丢弃，确保启动后会重新静默登录。
+const initialValid = initialSession && !isTokenExpired(initialSession.token) ? initialSession : null;
+if (initialSession && !initialValid) {
+  removeSession();
+}
 
 // 防止并发登录（启动静默登录 + 页面手动登录同时触发）。
 let loginTask: Promise<User> | null = null;
 
 class UserStore {
-  token = initialSession?.token ?? "";
-  profile: User | null = initialSession?.user ?? null;
+  token = initialValid?.token ?? "";
+  profile: User | null = initialValid?.user ?? null;
   loggingIn = false;
 
   constructor() {
@@ -62,10 +67,16 @@ class UserStore {
     return loginTask;
   }
 
-  /** 已登录则直接返回用户信息，否则发起静默登录。 */
+  /**
+   * 已登录且 token 未过期则直接返回用户信息；token 缺失/过期时先清理
+   * 本地会话再发起静默登录。页面在调需要鉴权的接口前都应 await 本方法。
+   */
   ensureLogin(): Promise<User> {
-    if (this.profile) {
+    if (this.token && this.profile && !isTokenExpired(this.token)) {
       return Promise.resolve(this.profile);
+    }
+    if (this.token) {
+      this.clearSession();
     }
     return this.login();
   }

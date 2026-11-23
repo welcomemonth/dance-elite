@@ -35,6 +35,9 @@ export function registrationStatusView(
   if (status === "refunded") {
     return { label: "已退款", tone: "muted" };
   }
+  if (status === "withdrawn") {
+    return { label: "已退赛", tone: "muted" };
+  }
   const missing = materialStatus?.missing.length ?? 0;
   return missing > 0
     ? { label: "待补充资料", tone: "yellow" }

@@ -91,6 +91,7 @@ func (s *CSTicketService) List(ctx context.Context, adminID int64, role string, 
 	filter := store.AdminCSTicketFilter{
 		Type:     q.Type,
 		Status:   q.Status,
+		Keyword:  strings.TrimSpace(q.Keyword),
 		Page:     page,
 		PageSize: pageSize,
 	}

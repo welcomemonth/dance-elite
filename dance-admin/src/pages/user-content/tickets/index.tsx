@@ -7,7 +7,7 @@ import {
   ProFormTextArea,
   ProTable,
 } from '@ant-design/pro-components';
-import { useAccess } from '@umijs/max';
+import { history, useAccess } from '@umijs/max';
 import { App, Button, Input, Modal, Select, Space, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import {
@@ -123,6 +123,11 @@ const CsTickets: React.FC = () => {
         }}
         pagination={{ defaultPageSize: 20 }}
         toolBarRender={() => [
+          access.canAdmin ? (
+            <Button key="manual" onClick={() => history.push('/order/manual/create')}>
+              人工报名（无身份证）
+            </Button>
+          ) : null,
           <ModalForm
             key="create"
             title="登记工单"

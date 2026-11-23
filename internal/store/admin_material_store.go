@@ -15,6 +15,7 @@ type AdminMissingMaterialFilter struct {
 	DanceType     string
 	MissingItem   string
 	DeadlineState string // open / closed / 空
+	Keyword       string // 选手姓名 / player_no / 联系电话
 	Now           string // 全库统一时间格式，用于截止状态判断
 	Page          int
 	PageSize      int
@@ -57,6 +58,11 @@ func (s *RegistrationStore) ListMissing(ctx context.Context, f AdminMissingMater
 	}
 	if column, ok := materialItemColumn(f.MissingItem); ok {
 		where = append(where, "NOT ("+materialPresentSQL(column)+")")
+	}
+	if f.Keyword != "" {
+		like := "%" + f.Keyword + "%"
+		where = append(where, "(pl.name LIKE ? OR pl.player_no LIKE ? OR COALESCE(r.contact_phone, u.phone) LIKE ?)")
+		args = append(args, like, like, like)
 	}
 	switch f.DeadlineState {
 	case "open":

@@ -35,3 +35,11 @@ export async function login(params: LoginParams): Promise<LoginResult> {
     data: params,
   });
 }
+
+/** PUT /api/v1/admin/auth/password */
+export async function changePassword(data: {
+  old_password: string;
+  new_password: string;
+}): Promise<{ updated: boolean }> {
+  return request('/api/v1/admin/auth/password', { method: 'PUT', data });
+}

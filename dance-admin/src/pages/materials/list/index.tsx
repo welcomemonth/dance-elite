@@ -44,6 +44,22 @@ const MaterialsList: React.FC = () => {
         return data.list.map((e) => ({ label: e.name, value: e.id }));
       },
     },
+    {
+      title: '缺失项',
+      dataIndex: 'missing_item',
+      hideInTable: true,
+      valueType: 'select',
+      valueEnum: Object.fromEntries(
+        Object.entries(MISSING_ITEM_LABELS).map(([value, label]) => [value, { text: label }]),
+      ),
+    },
+    {
+      title: '截止状态',
+      dataIndex: 'deadline_state',
+      hideInTable: true,
+      valueType: 'select',
+      valueEnum: { open: { text: '未截止' }, closed: { text: '已截止' } },
+    },
     { title: '选手姓名', dataIndex: 'player_name', width: 100 },
     {
       title: '组别·舞种',
@@ -118,8 +134,9 @@ const MaterialsList: React.FC = () => {
             event_id: params.event_id as number | undefined,
             level: params.level as 'U11' | 'U13' | 'U15' | undefined,
             dance_type: params.dance_type as 'classical' | 'folk' | undefined,
-            missing_item: params.missing_items as MissingItem | undefined,
-            keyword: params.player_name,
+            missing_item: params.missing_item as MissingItem | undefined,
+            deadline_state: params.deadline_state as 'open' | 'closed' | undefined,
+            keyword: params.player_name as string | undefined,
             page: params.current,
             page_size: params.pageSize,
           });

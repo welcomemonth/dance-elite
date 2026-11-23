@@ -1,7 +1,10 @@
 {
   "navigationStyle": "custom",
   "navigationBarTextStyle": "white",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
   "usingComponents": {
-    "nav-bar": "/components/nav-bar/nav-bar"
+    "nav-bar": "/components/nav-bar/nav-bar",
+    "empty-state": "/components/empty-state/empty-state"
   }
 }

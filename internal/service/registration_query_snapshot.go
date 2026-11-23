@@ -12,7 +12,7 @@ import (
 
 // miniappRegistrationItemOf 把查询行映射为「我的报名」列表项（API 文档 3.3）。
 func miniappRegistrationItemOf(row *store.MiniappRegistrationRow) (model.MiniappRegistrationItem, error) {
-	status, ok := miniappRegistrationStatusOf(row.Order.Status)
+	status, ok := miniappRegistrationStatusOf(row.Order.Status, row.Registration.Status)
 	if !ok {
 		return model.MiniappRegistrationItem{}, httpx.ErrInternal(
 			unexpectedStatusError(row.Order.Status), "加载报名列表失败，请稍后重试")
@@ -57,6 +57,8 @@ func miniappRegistrationStatusDesc(status string, material model.MaterialStatus,
 		return "退款处理中，请等待工作人员处理，结果将通过客服会话告知"
 	case model.MiniappRegistrationStatusRefunded:
 		return "退款已完成，报名已退赛"
+	case model.MiniappRegistrationStatusWithdrawn:
+		return "该报名已退赛，名额已释放；如需退款请联系客服登记"
 	}
 
 	if material.Completed == material.Total {

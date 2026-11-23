@@ -72,6 +72,7 @@ type EventPatch struct {
 type EventFilter struct {
 	Status   string
 	Level    string
+	SeasonID int64
 	Keyword  string
 	Page     int // 从 1 开始
 	PageSize int
@@ -145,6 +146,10 @@ func (s *EventStore) List(ctx context.Context, f EventFilter) ([]model.Event, in
 	if f.Level != "" {
 		where = append(where, "level = ?")
 		args = append(args, f.Level)
+	}
+	if f.SeasonID > 0 {
+		where = append(where, "season_id = ?")
+		args = append(args, f.SeasonID)
 	}
 	if f.Keyword != "" {
 		where = append(where, "name LIKE ?")

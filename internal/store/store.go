@@ -30,6 +30,11 @@ type Store struct {
 	MaterialContacts *MaterialContactStore
 	Dashboard        *DashboardStore
 	Lottery          *LotteryStore
+	Boards           *BoardStore
+	Results          *ResultStore
+	Points           *PointsStore
+	Qualifications   *QualificationStore
+	Prizes           *PrizeStore
 }
 
 // New 构造数据访问层聚合根。
@@ -52,6 +57,11 @@ func New(db *DB) *Store {
 		MaterialContacts: NewMaterialContactStore(db),
 		Dashboard:        NewDashboardStore(db),
 		Lottery:          NewLotteryStore(db),
+		Boards:           NewBoardStore(db),
+		Results:          NewResultStore(db),
+		Points:           NewPointsStore(db),
+		Qualifications:   NewQualificationStore(db),
+		Prizes:           NewPrizeStore(db),
 	}
 }
 

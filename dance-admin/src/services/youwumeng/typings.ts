@@ -153,6 +153,8 @@ export interface EventBrief {
   work_duration_limit: string;
   process_desc: string;
   honor_desc: string;
+  score_rules: string | null;
+  prize_rules: string | null;
   exclude_from_prize: boolean;
   audio_review_token: string | null;
   created_at: string;
@@ -180,6 +182,8 @@ export interface EventInput {
   work_duration_limit?: string;
   process_desc?: string;
   honor_desc?: string;
+  score_rules?: string;
+  prize_rules?: string;
   exclude_from_prize?: boolean;
   publish?: boolean;
 }
@@ -371,6 +375,8 @@ export interface ManualRegistrationInput {
   player_name: string;
   id_type: IdType;
   id_card_no: string;
+  /** 出生日期（YYYY-MM-DD）；非身份证证件必填，服务端据此校验组别年龄 */
+  birth_date: string;
   nationality?: string;
   institution?: string;
   contact_phone: string;
@@ -573,7 +579,7 @@ export interface Season {
   updated_at: string;
 }
 
-export type Award = 'champion' | 'runner_up' | 'third_place' | 'elite_dancer' | 'special_gold' | 'gold' | 'silver';
+export type Award = 'champion' | 'runner_up' | 'third' | 'elite_dancer' | 'special_gold' | 'gold' | 'silver';
 
 export interface ScoreEntry {
   entry_id: number;
@@ -609,10 +615,10 @@ export interface ScorePreview {
 
 export interface ScoreRules {
   /** 名次基础分表 */
-  base_points: Record<Award, number>;
+  base_points: Partial<Record<Award, number>>;
   /** 级别权重 */
-  level_weights: { grade_a: number; super: number; final: number };
-  /** 人数系数分档（按榜单参赛人数） */
+  level_weights: Partial<Record<'grade_a' | 'super' | 'final', number>>;
+  /** 人数系数分档（按榜单参赛人数，降序匹配） */
   size_bands: { min_players: number; factor: number }[];
 }
 
@@ -631,6 +637,7 @@ export interface LeaderboardRow {
 }
 
 export interface Leaderboard {
+  board_id: number;
   level: AgeLevel;
   dance_type: DanceType;
   rows: LeaderboardRow[];
@@ -751,4 +758,30 @@ export interface LotterySettingsInput {
   remind_before_minutes?: number;
   sms_remind_template?: string;
   sms_result_template?: string;
+}
+
+// ---------- 后台报名名单（T17 / S2） ----------
+
+export type RegistrationItemStatus = 'pending_payment' | 'active' | 'canceled' | 'withdrawn';
+
+export interface AdminRegistrationItem {
+  registration_id: number;
+  order_no: string | null;
+  event_id: number;
+  event_name: string;
+  group_id: number;
+  level: AgeLevel;
+  dance_type: DanceType;
+  player_no: string;
+  player_name: string;
+  id_type: 'id_card' | 'passport' | 'hk_macau' | 'other';
+  institution: string | null;
+  contact_phone: string | null;
+  status: RegistrationItemStatus;
+  source: 'miniapp' | 'manual';
+  material_completed: number;
+  material_total: number;
+  missing_items: string[];
+  material_updated_at: string | null;
+  created_at: string;
 }

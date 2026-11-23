@@ -1,7 +1,22 @@
 # 优舞盟 API 接口设计文档
 
-> 配套文档：[报名功能设计](优舞盟报名功能.md)、[小程序页面与功能设计](小程序页面/优舞盟小程序页面与功能设计.md)、[后台管理页面与功能设计](后台管理/优舞盟后台管理页面与功能设计.md)、[数据库表结构设计](数据库表结构设计.md)。
+> 配套文档：[报名功能设计](优舞盟报名功能.md)、[小程序页面与功能设计](../小程序页面/优舞盟小程序页面与功能设计.md)、[后台管理页面与功能设计](../后台管理/优舞盟后台管理页面与功能设计.md)、[数据库表结构设计](数据库表结构设计.md)。
 > 技术栈：Go + Gin，RESTful 风格。本文档覆盖**小程序端**、**后台管理端**、**免登录 H5** 三类接口。
+
+## 实现状态（2026-11-22 核对）
+
+| 章节 | 状态 | 说明 |
+|---|---|---|
+| 1–5（认证、赛事、报名支付、资料、候补） | 已实现 | 3.1/3.1b/3.1c/3.3–3.6、4.1–4.3、5.1–5.3 均有路由 |
+| 6（榜单只读） | **未实现** | `/config`、`/ranking`、`/institution/ranking`、`/dancers/{entry_id}` 均无路由 |
+| 7（音频审核 H5） | 已实现 | — |
+| 8–11（管理端认证、看板、赛事、订单） | 已实现 | 10.x 的封面 `cover` 与编辑 `season_id` 未实现 |
+| 11.4.3 退款错误码 | 已统一 | 订单状态不允许退款统一为 41013 |
+| 12.1–12.5 | 已实现 | — |
+| 12.6 媒体归档 | **未实现** | 无路由 |
+| 13–14 | 已实现 | 14.2 日志导出未实现 |
+
+> 逐条差异见 [文档与实现差异清单](../文档与实现差异清单.md)。
 
 ---
 
@@ -675,7 +690,7 @@ curl "https://api.example.com/api/v1/registrations?page=1&page_size=20" \
 | list[].dance_type | string | classical / folk |
 | list[].player_name / player_no | string | 选手姓名 / 选手编号 |
 | list[].order_no / amount | — | 订单号 / 金额（分） |
-| list[].status | string | `paid`（已支付）/ `refunding`（退款处理中）/ `refunded`（已退款） |
+| list[].status | string | `paid`（已支付）/ `refunding`（退款处理中）/ `refunded`（已退款）/ `withdrawn`（已退赛，名额已释放但未退款） |
 | list[].material_status | object | 资料完成度：`{"total":8,"completed":3,"missing":["photo","audio","program_name"]}` |
 | list[].material_deadline | string | 资料截止（核对舞蹈音频时间） |
 
@@ -731,7 +746,7 @@ curl "https://api.example.com/api/v1/registrations/5001" -H "Authorization: Bear
 
 | 参数名 | 类型 | 说明 |
 |---|---|---|
-| status | string | paid / refunding / refunded |
+| status | string | paid / refunding / refunded / withdrawn（已退赛；名额已释放，未退款） |
 | status_desc | string | 状态说明文案 |
 | material_readonly | bool | 超过核对舞蹈音频时间后为 true，资料整体只读 |
 | material_status | object | 资料完成度：`{"total":8,"completed":3,"missing":["photo","audio","program_name"]}` |
@@ -1869,7 +1884,7 @@ curl -X POST https://api.example.com/api/v1/admin/auth/login \
 **注意事项**：
 - 连续 5 次密码错误锁定账号 15 分钟；锁定期间即使密码正确也返回 40104，登录成功清零失败计数；对不存在账号的连续失败探测同样累计次数并触发锁定。
 - 登录成功刷新 `last_login_at` 并记 `admin_logs`（action=`admin.login`）；触发锁定时记 `admin.login_locked`（`admin_id` 为空，表示系统动作）。
-- 管理员被停用或删除后，其已签发的 token 在过期前仍然有效（不做服务端吊销）；如需立即失效需后续版本引入 token 版本号机制。
+- 管理员被停用后，服务端通过**进程内吊销名单**立即拒绝其已签发 token（与 14.1「停用立即踢下线」一致）；该名单不持久化，进程重启后残留 token 最迟在 JWT 有效期（默认 2h）内自然过期。
 
 ---
 
@@ -2007,7 +2022,7 @@ curl "https://api.example.com/api/v1/admin/events?status=registering" \
   -H "Authorization: Bearer <admin_token>"
 ```
 
-**响应参数**：结构同小程序端 `GET /events`，另增：`season_id`、`reg_start_at` 等完整时间线、`groups`（各组别已报/名额汇总数组）、`exclude_from_prize`、`audio_review_token`（已生成时返回）。
+**响应参数**：基础字段同小程序端 `GET /events`；封面字段为 `cover_path`（后台原始路径；小程序端为 `cover_url`），不返回 `registered_by_me`/`group_summary`。另增：`season_id`、`reg_start_at` 等完整时间线、`groups`（各组别已报/名额汇总数组）、`exclude_from_prize`、`audio_review_token`（已生成时返回）。
 
 **错误码**：无。
 
@@ -2140,6 +2155,8 @@ curl -X PUT https://api.example.com/api/v1/admin/events/12 \
 | 41012 | 赛事状态不允许编辑（已结束） |
 
 **注意事项**：已发布赛事调大名额即时生效（小程序端剩余名额刷新）；如需变更时间线/级别须「下架 + 新建」。`groups` 传法：带 `group_id` 按 ID 定位已有组别；不带 `group_id` 则按 `level + dance_type` 匹配已有组别（用于按勾选整体提交），匹配不到时草稿视为新增组合、已发布赛事返回 40001。
+>
+> **实现状态（2026-11-23）**：10.2/10.3 的封面 `cover` 与编辑时的 `season_id` 当前未实现（后端 DTO 无字段，传了会被忽略）；封面能力随“封面图上传”一并延后。
 
 ---
 
@@ -2298,7 +2315,7 @@ curl -X POST https://api.example.com/api/v1/admin/events/12/audio-review-token \
 | token | string | token |
 
 ```json
-{"code": 0, "message": "success", "data": {"url": "https://api.example.com/h5/audio-review/a8K2mP9x", "token": "a8K2mP9x"}}
+{"code": 0, "message": "success", "data": {"url": "https://api.example.com/audio-review/a8K2mP9x", "token": "a8K2mP9x"}}
 ```
 
 **错误码**：40401。
@@ -2512,9 +2529,9 @@ curl "https://api.example.com/api/v1/admin/orders/2027010109300012345678" \
 | 项 | 内容 |
 |---|---|
 | 接口名称 | 明文查看联系电话 |
-| 功能说明 | 手机号脱敏展示场景下的明文查看（证件号系统无此能力——只存哈希） |
+| 功能说明 | 手机号明文查看接口。**S0 决策（2026-11-23）：订单详情 11.2 已直接返回明文，本接口保留用于审计与后续收紧**（证件号系统无此能力——只存哈希） |
 | 请求方法 + URL | `POST /api/v1/admin/orders/{order_no}/reveal-phone` |
-| 鉴权 | 是（**需单独权限位**，任意角色默认拒绝 → 40301） |
+| 鉴权 | 是（仅 admin / super_admin；cs → 40301） |
 
 **请求示例**
 
@@ -2659,9 +2676,8 @@ curl -X POST https://api.example.com/api/v1/admin/refund-tickets/900/approve \
 |---|---|
 | 40001 | amount 缺失/≤0/超过实付金额；调整金额未填 adjust_reason |
 | 40401 | 工单不存在 |
-| 41013 | 工单状态不允许（非 pending/processing/refund_failed） |
+| 41013 | 工单状态不允许（非 pending/processing/refund_failed），或订单当前状态不允许退款 |
 | 41014 | 微信支付退款 API 调用失败（工单置 refund_failed，可重试） |
-| 41015 | 订单当前状态不允许退款 |
 
 **11.4.4 驳回退款**
 
@@ -2718,7 +2734,7 @@ curl -X POST https://api.example.com/api/v1/admin/refund-tickets/900/reject \
 | 参数名 | 类型 | 必填 | 说明 | 示例值 |
 |---|---|---|---|---|
 | event_id | int | 是 | 赛事（限报名中/未开始） | `12` |
-| group_id | int | 是 | 报名单元 ID | `88` |
+| group_id | int | 是 | 报名单元 ID（管理员手选；服务端按 `birth_date` 校验是否符合该组别，S0 决策） | `88` |
 | player_name | string | 是 | 选手姓名 | `"Emma Wilson"` |
 | id_type | string | 是 | passport / hk_macau / other（缺省时按证件号格式自动判定，合法身份证为 id_card） | `"passport"` |
 | id_card_no | string | 是 | 证件号（哈希存储；**不与大陆身份证判重库混用**） | `"P1234567"` |
@@ -2738,7 +2754,7 @@ curl -X POST https://api.example.com/api/v1/admin/refund-tickets/900/reject \
 curl -X POST https://api.example.com/api/v1/admin/manual-registrations \
   -H "Authorization: Bearer <admin_token>" \
   -H "Content-Type: application/json" \
-  -d '{"event_id":12,"group_id":88,"player_name":"Emma Wilson","id_type":"passport","id_card_no":"P1234567","contact_phone":"13812345678","charge_type":"free","cs_ticket_id":501}'
+  -d '{"event_id":12,"group_id":88,"player_name":"Emma Wilson","id_type":"passport","id_card_no":"P1234567","birth_date":"2017-05-01","contact_phone":"13812345678","charge_type":"free","cs_ticket_id":501}'
 ```
 
 **响应参数**
@@ -2753,16 +2769,60 @@ curl -X POST https://api.example.com/api/v1/admin/manual-registrations \
 
 | code | 说明 |
 |---|---|
-| 40001 | 参数缺失/证件类型非法 |
+| 40001 | 参数缺失/证件类型非法/缺少出生日期（非身份证证件必填） |
+| 41002 | 出生日期不符合所选组别年龄要求 |
+| 41003 | 该选手在该赛事已有其他组别报名（一人一组别） |
+| 41004 | 该选手在该报名单元已有进行中报名 |
 | 41005 | 名额已满 |
 | 41006 | 赛事不在可报名状态 |
 | 40401 | 赛事/组别/工单不存在 |
+| 40901 | 关联客服工单已关联其他报名 |
 
 **注意事项**
 
 - 名额校验与小程序一致（事务内）；满员时可改报其他组别或先登记候补。
 - 支付信息标注「后台人工录入」+ 操作人；记操作日志；资料上传、催收、成绩录入与小程序报名同等对待。
 - 人工报名没有微信提交人，报名单/订单归属保留系统用户（`users.openid='__manual__'`，不可登录）；`free` 时订单金额固定 0。
+
+---
+
+### 11.6 人工退赛（仅释放名额，不退款）
+
+**接口概述**
+
+| 项 | 内容 |
+|---|---|
+| 接口名称 | 人工退赛 |
+| 功能说明 | 管理员把有效报名置为退赛并释放名额。**退赛 ≠ 退款**：订单保持 `paid`，不产生退款流水；如需退款走 11.4 退款工单 |
+| 请求方法 + URL | `POST /api/v1/admin/registrations/{registration_id}/withdraw` |
+| 鉴权 | 是（admin / super_admin）；cs → 40301 |
+
+**请求参数（Body）**：`reason`（string，可选，≤200 字）。
+
+**请求示例**
+
+```bash
+curl -X POST https://api.example.com/api/v1/admin/registrations/5001/withdraw \
+  -H "Authorization: Bearer <admin_token>" -H "Content-Type: application/json" \
+  -d '{"reason":"个人原因放弃参赛"}'
+```
+
+**响应参数**：`{"registration_id":5001,"status":"withdrawn","released":true}`。
+重复退赛幂等：`released` 为 false，不重复释放名额。
+
+**失败响应**
+
+| code | 说明 |
+|---|---|
+| 40001 | registration_id 非法 / reason 超长 |
+| 40401 | 报名不存在（或对应订单不存在） |
+| 41013 | 仅 `active` 报名可退赛；订单非 `paid` 时请走退款工单 |
+
+**注意事项**
+
+- 事务内：报名 → `withdrawn`、`event_groups.taken - 1`、写 `admin_logs`（action=`admin.registration.withdraw`，含订单号/组别/原因）。
+- 退赛后小程序「我的报名」展示为「已退赛」（`status=withdrawn`），详情只读；该报名仍保留在列表中进行对账。
+- 候补联动：释放名额后候补队列「已释放 N 个名额」提示随刷新出现。
 
 ---
 
@@ -2952,7 +3012,7 @@ curl "https://api.example.com/api/v1/admin/events/12/registrations/export" \
 
 ---
 
-### 12.6 媒体资源归档导出（后续扩展，2026-11-11 讨论新增）
+### 12.6 媒体资源归档导出（后续扩展；**首发不含，上线后迭代，S0 决策**）
 
 **接口概述**
 
@@ -3067,7 +3127,7 @@ curl "https://api.example.com/api/v1/admin/players?keyword=%E5%BC%A0%E5%B0%8F%E9
 | list[].merged_into | int \| null | 重复档案合并指向 |
 | list[].registration_count / result_count | int | 历史报名/成绩数 |
 
-**响应参数（详情）**：基本信息 + `registrations[]`（历史报名）+ `results_summary`（奖项汇总）+ `points_summary` + `duplicates[]`（同证件号哈希的重复档案，可手动合并）。
+**响应参数（详情）**：基本信息 + `registrations[]`（历史报名）+ `results_summary`（奖项汇总）+ `points_summary`。**S0 决策（2026-11-23）：同一证件号只会有一个选手，不返回 `duplicates[]`；** 仅当同人持不同证件（身份证/护照，哈希不同）时，管理员可通过档案合并手工归并。
 
 **错误码**：40401。
 
@@ -3261,6 +3321,69 @@ curl "https://api.example.com/api/v1/admin/logs?action=refund&page=1&page_size=5
 
 # 第三部分：附录
 
+## 15. 榜单中心（后台，S4 落地）
+
+> 与报名系统共用账号体系；写操作仅 admin / super_admin，读操作 cs 可用。
+> 规则优先级：**赛事级 `events.score_rules` / `events.prize_rules` 优先，缺省回落到赛季级规则（settings），再回落到内置默认值。**
+
+### 15.1 积分与奖金规则
+
+| 方法 + 路径 | 说明 |
+|---|---|
+| `GET/PUT /api/v1/admin/seasons/{id}/score-rules` | 赛季积分规则（名次基础分 / 级别权重 / 人数系数分档） |
+| `GET/PUT /api/v1/admin/seasons/{id}/prize-rules` | 赛季奖金规则（金额单位：分） |
+
+积分 = `base_points[award] × level_weights[event.level] × size_band(participants)`（四舍五入取整）。
+人数系数按 `min_players` 降序匹配第一个满足的分档。
+
+### 15.2 成绩录入与纠错
+
+| 方法 + 路径 | 说明 |
+|---|---|
+| `GET /api/v1/admin/events/{id}/scores?level=&dance_type=` | 已发布成绩列表 |
+| `POST /api/v1/admin/events/{id}/scores/preview?level=&dance_type=` | 解析预览：按 `id_card_no`（身份证/护照哈希）或姓名匹配选手，返回 `matched/unmatched` |
+| `POST /api/v1/admin/events/{id}/scores?level=&dance_type=` | 确认发布：写成绩 → 固化积分/奖金 → 重算榜单与资格 |
+| `PUT /api/v1/admin/scores/{entry_id}` | 纠错：旧记录置 `corrected`，写入新发布记录并重算 |
+
+请求体：
+- preview：`{"rows":[{"row_no":1,"player_name":"...","id_card_no":"...","award":"champion","advanced_to_final":false,"remark":""}]}`
+- publish：`{"rows":[<preview 返回的 rows，含 match_status/player_id>]}`
+- correct：`{"award":"runner_up","advanced_to_final":true,"remark":"纠错原因"}`
+
+奖项枚举：`champion / runner_up / third / elite_dancer / special_gold / gold / silver`（兼容旧写法 `third_place`）。
+
+### 15.3 榜单、晋级与机构榜
+
+| 方法 + 路径 | 说明 |
+|---|---|
+| `GET /api/v1/admin/seasons/{id}/leaderboards` | 赛季 6 个榜单（含隐藏选手、展示名、直通标记） |
+| `PUT /api/v1/admin/seasons/{id}/leaderboards/{level}/{dance_type}/players/{player_id}` | 设置展示名 / 隐藏（隐藏不占排名） |
+| `GET /api/v1/admin/seasons/{id}/qualification-cards` | 直通卡（自动 + 手动） |
+| `POST /api/v1/admin/seasons/{id}/qualification-cards` | 手动增补直通卡（`board_id/player_id/reason`） |
+| `DELETE /api/v1/admin/seasons/{id}/qualification-cards/{card_id}` | 取消直通卡 |
+| `GET /api/v1/admin/seasons/{id}/finals-roster` | 总决赛资格名单（直通 + 积分前 20 + 手动） |
+| `POST /api/v1/admin/seasons/{id}/finals-roster/adjust` | 手动增补/移除（`board_id/player_id/action/reason`） |
+| `GET /api/v1/admin/seasons/{id}/institution-ranking` | 机构年度榜（含荣誉与奖金） |
+
+### 15.4 奖金明细
+
+| 方法 + 路径 | 说明 |
+|---|---|
+| `GET /api/v1/admin/prize-statements?season_id=&status=` | 赛季奖金明细（`pending/granted/skipped`） |
+| `PUT /api/v1/admin/prize-statements/{item_id}` | 调整未发放金额（`amount` 分 + `reason`） |
+| `POST /api/v1/admin/prize-statements/{item_id}/pay` | 登记发放（`payee`、可选 `note`） |
+
+### 15.5 榜单计算口径
+
+- **选手积分**：每名选手在该榜单取本年度积分最高的 3 场之和（`used_event_ids` 记录实际计入场次）。
+- **排名**：按总积分降序，同分按 `player_id` 升序；**隐藏选手不占排名**。
+- **直通卡**：甲级赛冠军、超级赛前两名自动写入（`auto_direct`）；手动增补为 `manual_direct`。
+- **积分晋级**：每个榜单按快照排名取前 20（跳过已直通/手动资格）写入 `points`。
+- **机构积分**：每位选手取各榜单最高总积分，按成绩所属机构求和；机构榜前 3 获「年度菁英机构奖」，4–10 获「年度十佳机构奖」。
+- **奖金**：甲级赛冠军、超级赛前两名按参赛人数分档；总决赛按名次；`exclude_from_prize` 赛事不生成奖金。
+
+---
+
 ## A. 状态机对照
 
 ### A.1 订单状态机
@@ -3317,7 +3440,7 @@ waiting/notified --用户放弃/管理员移出--> given_up / removed
 ## C. 安全与合规清单
 
 1. **证件号**：HMAC-SHA256（服务端密钥，环境变量注入）哈希存储，不可逆；接口、日志、数据库、导出物全程无明文。
-2. **手机号**：明文存储、脱敏展示；后台明文查看需独立权限 + 留痕 + 限流。
+2. **手机号**：明文存储；订单详情按 S0 决策直接展示明文（cs 可见），`reveal-phone` 保留留痕 + 限流；用户/选手列表仍脱敏。
 3. **文件**：音频 mp3/≤100MB/≤4 分钟，照片 png|jpg/≤10MB；服务端 magic number 校验（不只信扩展名）；存储路径不可遍历。
 4. **音频审核 H5**：仅姓名/节目名/音频三类信息，token 不可枚举、可失效、限流。
 5. **支付**：回调验签 + transaction_id/refund_id 幂等；退款金额 ≤ 实付金额；全流水留档（含 raw_callback）对账。

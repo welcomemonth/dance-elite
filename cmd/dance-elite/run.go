@@ -82,6 +82,11 @@ func run(ctx context.Context, cfg *config.Config) error {
 	manualRegService := service.NewManualRegistrationService(stores, playerService)
 	adminOrderQueryService := service.NewAdminOrderQueryService(stores)
 	adminRegistrationQueryService := service.NewAdminRegistrationQueryService(stores)
+	adminRegistrationActionService := service.NewAdminRegistrationActionService(stores)
+	scoreService := service.NewScoreService(stores, playerService)
+	rankingAdminService := service.NewRankingAdminService(stores)
+	prizeService := service.NewPrizeService(stores)
+	publicRankingService := service.NewPublicRankingService(stores)
 	materialCollectionService := service.NewMaterialCollectionService(stores)
 	dashboardService := service.NewDashboardService(stores)
 	accountService := service.NewAdminAccountService(stores, tokens)
@@ -137,6 +142,11 @@ func run(ctx context.Context, cfg *config.Config) error {
 		Players:             playerService,
 		AdminOrders:         adminOrderQueryService,
 		AdminRegs:           adminRegistrationQueryService,
+		AdminRegActions:     adminRegistrationActionService,
+		Scores:              scoreService,
+		Rankings:            rankingAdminService,
+		Prizes:              prizeService,
+		PublicRanking:       publicRankingService,
 		MaterialMissing:     materialCollectionService,
 		Dashboard:           dashboardService,
 		Accounts:            accountService,

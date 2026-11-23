@@ -57,6 +57,32 @@ export function formatEventDeadline(value: string | null): string {
   return value ? formatChineseDate(value) : "";
 }
 
+/**
+ * 距目标时间的倒计时文案（用于报名截止/开始提醒）。
+ * 已过期或无法解析返回空串。
+ */
+export function formatCountdown(target: string | null, now = Date.now()): string {
+  if (!target) {
+    return "";
+  }
+  const normalized = target.includes("T") ? target : target.replace(" ", "T");
+  const time = new Date(normalized).getTime();
+  if (!Number.isFinite(time) || time <= now) {
+    return "";
+  }
+  const minutes = Math.floor((time - now) / 60000);
+  const days = Math.floor(minutes / (24 * 60));
+  const hours = Math.floor((minutes % (24 * 60)) / 60);
+  const restMinutes = minutes % 60;
+  if (days > 0) {
+    return `${days} 天 ${hours} 小时`;
+  }
+  if (hours > 0) {
+    return `${hours} 小时 ${restMinutes} 分钟`;
+  }
+  return `${Math.max(1, restMinutes)} 分钟`;
+}
+
 export function formatEventFee(fee: number): string {
   if (fee <= 0) {
     return "免费";
@@ -89,6 +115,7 @@ export interface EventCardView extends EventItem {
   dateText: string;
   feeText: string;
   hotText: string;
+  countdownText: string;
   featured: boolean;
 }
 
@@ -100,6 +127,8 @@ export function eventCardView(event: EventItem, index: number, allFilter: boolea
     dateText: formatEventDate(event.event_date),
     feeText: formatEventFee(event.fee),
     hotText: eventHotText(event),
+    countdownText:
+      event.status === "registering" ? formatCountdown(event.reg_end_at) : "",
     featured: allFilter && index === 0,
   };
 }

@@ -8,18 +8,28 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
-import { useService } from '@/services/youwumeng/useService';
-import { Alert, App, Button, Card, Popconfirm, Space, Tabs, Tag, Typography } from 'antd';
+import {
+  Alert,
+  App,
+  Button,
+  Card,
+  Popconfirm,
+  Tabs,
+  Tag,
+  Typography,
+} from 'antd';
 import React, { useRef, useState } from 'react';
 import { formatDateTime } from '@/services/youwumeng/format';
 import {
   adjustFinalsRoster,
   getFinalsRoster,
   grantQualificationCard,
+  listLeaderboards,
   listQualificationCards,
   listSeasons,
   revokeQualificationCard,
 } from '@/services/youwumeng/seasons';
+import { useService } from '@/services/youwumeng/useService';
 
 /** 晋级管理（设计文档 8.4）：直通卡 + 总决赛资格名单 */
 const Promotion: React.FC = () => {
@@ -30,6 +40,13 @@ const Promotion: React.FC = () => {
   const rosterRef = useRef<ActionType>(null);
 
   const { data: seasons } = useService(listSeasons);
+  const { data: boards } = useService(() => listLeaderboards(seasonId), {
+    refreshDeps: [seasonId],
+  });
+  const boardOptions = (boards ?? []).map((b) => ({
+    label: `${b.level}·${b.dance_type}`,
+    value: b.board_id,
+  }));
   const { data: cards, refresh: refreshCards } = useService(
     () => listQualificationCards(seasonId),
     { refreshDeps: [seasonId] },
@@ -48,10 +65,19 @@ const Promotion: React.FC = () => {
       dataIndex: 'source',
       width: 90,
       render: (_, r) =>
-        r.source === 'auto' ? <Tag color="blue">自动</Tag> : <Tag color="purple">手动增补</Tag>,
+        r.source === 'auto' ? (
+          <Tag color="blue">自动</Tag>
+        ) : (
+          <Tag color="purple">手动增补</Tag>
+        ),
     },
     { title: '原因', dataIndex: 'reason', render: (_, r) => r.reason ?? '-' },
-    { title: '授予时间', dataIndex: 'granted_at', width: 150, render: (_, r) => formatDateTime(r.granted_at) },
+    {
+      title: '授予时间',
+      dataIndex: 'granted_at',
+      width: 150,
+      render: (_, r) => formatDateTime(r.granted_at),
+    },
     {
       title: '操作',
       valueType: 'option',
@@ -84,7 +110,11 @@ const Promotion: React.FC = () => {
       dataIndex: 'source',
       width: 110,
       render: (_, r) =>
-        r.source === 'direct_card' ? <Tag color="gold">直通卡</Tag> : <Tag color="blue">积分前 20</Tag>,
+        r.source === 'direct_card' ? (
+          <Tag color="gold">直通卡</Tag>
+        ) : (
+          <Tag color="blue">积分前 20</Tag>
+        ),
     },
     { title: '总积分', dataIndex: 'total_points', width: 100 },
   ];
@@ -97,8 +127,14 @@ const Promotion: React.FC = () => {
         extra={
           <ProFormSelect
             noStyle
-            fieldProps={{ value: seasonId, onChange: (v: number) => setSeasonId(v), style: { minWidth: 150 } }}
-            request={async () => (seasons ?? []).map((s) => ({ label: s.name, value: s.id }))}
+            fieldProps={{
+              value: seasonId,
+              onChange: (v: number) => setSeasonId(v),
+              style: { minWidth: 150 },
+            }}
+            request={async () =>
+              (seasons ?? []).map((s) => ({ label: s.name, value: s.id }))
+            }
           />
         }
       >
@@ -118,11 +154,15 @@ const Promotion: React.FC = () => {
                   {access.canAdmin && (
                     <ModalForm
                       title="手动增补直通卡"
-                      trigger={<Button type="primary" style={{ marginBottom: 12 }}>增补直通卡</Button>}
+                      trigger={
+                        <Button type="primary" style={{ marginBottom: 12 }}>
+                          增补直通卡
+                        </Button>
+                      }
                       onFinish={async (values) => {
                         await grantQualificationCard(seasonId, {
                           player_id: Number(values.player_id),
-                          board: String(values.board),
+                          board_id: Number(values.board_id),
                           reason: String(values.reason),
                         });
                         message.success('已增补');
@@ -130,9 +170,22 @@ const Promotion: React.FC = () => {
                         return true;
                       }}
                     >
-                      <ProFormText name="player_id" label="选手 ID" rules={[{ required: true }]} />
-                      <ProFormText name="board" label="榜单（如 U11·古典舞）" rules={[{ required: true }]} />
-                      <ProFormTextArea name="reason" label="增补原因（必填，留痕）" rules={[{ required: true }]} />
+                      <ProFormText
+                        name="player_id"
+                        label="选手 ID"
+                        rules={[{ required: true }]}
+                      />
+                      <ProFormSelect
+                        name="board_id"
+                        label="榜单"
+                        options={boardOptions}
+                        rules={[{ required: true, message: '请选择榜单' }]}
+                      />
+                      <ProFormTextArea
+                        name="reason"
+                        label="增补原因（必填，留痕）"
+                        rules={[{ required: true }]}
+                      />
                     </ModalForm>
                   )}
                   <ProTable
@@ -156,9 +209,14 @@ const Promotion: React.FC = () => {
                   {access.canAdmin && (
                     <ModalForm
                       title="手动调整资格名单"
-                      trigger={<Button style={{ marginBottom: 12 }}>手动调整（增补/移除）</Button>}
+                      trigger={
+                        <Button style={{ marginBottom: 12 }}>
+                          手动调整（增补/移除）
+                        </Button>
+                      }
                       onFinish={async (values) => {
                         await adjustFinalsRoster(seasonId, {
+                          board_id: Number(values.board_id),
                           player_id: Number(values.player_id),
                           action: values.action as 'add' | 'remove',
                           reason: String(values.reason),
@@ -168,7 +226,17 @@ const Promotion: React.FC = () => {
                         return true;
                       }}
                     >
-                      <ProFormText name="player_id" label="选手 ID" rules={[{ required: true }]} />
+                      <ProFormText
+                        name="player_id"
+                        label="选手 ID"
+                        rules={[{ required: true }]}
+                      />
+                      <ProFormSelect
+                        name="board_id"
+                        label="榜单"
+                        options={boardOptions}
+                        rules={[{ required: true, message: '请选择榜单' }]}
+                      />
                       <ProFormSelect
                         name="action"
                         label="动作"
@@ -178,7 +246,11 @@ const Promotion: React.FC = () => {
                           { label: '移除', value: 'remove' },
                         ]}
                       />
-                      <ProFormTextArea name="reason" label="原因（必填，留痕）" rules={[{ required: true }]} />
+                      <ProFormTextArea
+                        name="reason"
+                        label="原因（必填，留痕）"
+                        rules={[{ required: true }]}
+                      />
                     </ModalForm>
                   )}
                   <ProTable

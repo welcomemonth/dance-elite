@@ -195,7 +195,8 @@ func TestRegistrationInFlightUnique(t *testing.T) {
 	}
 }
 
-// TestOrderRequestIdempotency 同一用户同一 request_id 只允许一个订单；NULL request_id 不受限。
+// TestOrderRequestIdempotency 同一用户同一 request_id 只允许一个订单；
+// 订单与报名单 1:1（0019 唯一索引），同一报名单不允许第二笔订单。
 func TestOrderRequestIdempotency(t *testing.T) {
 	db := openMigrated(t)
 	sqlDB := db.SQL()
@@ -207,10 +208,16 @@ func TestOrderRequestIdempotency(t *testing.T) {
 		t.Fatal("expected unique violation for duplicate (user_id, request_id)")
 	}
 
+	// 新建一条已取消报名（不占唯一部分索引），用于验证订单与报名单 1:1。
+	exec(t, sqlDB, `INSERT INTO registrations (id, event_id, group_id, player_id, user_id, dance_type, status)
+		VALUES (2, 1, 1, 1, 1, 'classical', 'canceled')`)
 	exec(t, sqlDB, `INSERT INTO orders (order_no, registration_id, user_id, amount, status)
-		VALUES ('ORD-NULL-1', 1, 1, 98000, 'pending_payment')`)
-	exec(t, sqlDB, `INSERT INTO orders (order_no, registration_id, user_id, amount, status)
-		VALUES ('ORD-NULL-2', 1, 1, 98000, 'pending_payment')`)
+		VALUES ('ORD-NULL-1', 2, 1, 98000, 'pending_payment')`)
+	// 同一报名单的第二笔订单被唯一索引拦截。
+	if _, err := sqlDB.Exec(`INSERT INTO orders (order_no, registration_id, user_id, amount, status)
+		VALUES ('ORD-NULL-2', 2, 1, 98000, 'pending_payment')`); err == nil {
+		t.Fatal("expected unique violation for duplicate registration_id")
+	}
 }
 
 // TestEventGroupTakenAtomicUpdate 抢名额必须用原子条件 UPDATE，满员后 RowsAffected=0。

@@ -1,4 +1,4 @@
-import { LogoutOutlined } from '@ant-design/icons';
+import { KeyOutlined, LogoutOutlined } from '@ant-design/icons';
 import { history, useModel } from '@umijs/max';
 import type { MenuProps } from 'antd';
 import { Spin } from 'antd';
@@ -12,6 +12,11 @@ type GlobalHeaderRightProps = {
 
 const menuItems: MenuProps['items'] = [
   {
+    key: 'password',
+    icon: <KeyOutlined />,
+    label: '修改密码',
+  },
+  {
     key: 'logout',
     icon: <LogoutOutlined />,
     label: '退出登录',
@@ -22,6 +27,10 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({ children }) =
   const { initialState, setInitialState } = useModel('@@initialState');
 
   const onMenuClick: MenuProps['onClick'] = (event) => {
+    if (event.key === 'password') {
+      history.push('/account/password');
+      return;
+    }
     if (event.key !== 'logout') return;
     // 后端无登出接口（JWT 短期有效），本地清除会话即可
     clearSession();
@@ -40,8 +49,6 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({ children }) =
   if (!initialState?.currentUser) {
     return <Spin size="small" />;
   }
-
-  const { currentUser } = initialState;
 
   return (
     <HeaderDropdown

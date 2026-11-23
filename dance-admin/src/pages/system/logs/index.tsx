@@ -75,10 +75,10 @@ const Logs: React.FC = () => {
     { title: '详情', dataIndex: 'detail', ellipsis: true, render: (_, r) => JSON.stringify(r.detail) },
   ];
 
-  if (!access.isSuperAdmin) {
+  if (!access.canAdmin) {
     return (
       <PageContainer title={false}>
-        <Alert type="warning" showIcon message="操作日志仅超级管理员可查看。" />
+        <Alert type="warning" showIcon message="操作日志仅管理员及以上可查看。" />
       </PageContainer>
     );
   }

@@ -62,8 +62,20 @@
                   <text wx:if="{{!group.enabled}}"> · 已关闭</text>
                 </view>
               </view>
-              <view class="app-tag {{group.tagClass}}">
-                {{group.enabled ? group.tagText : '已关闭'}}
+              <view class="group-row__side">
+                <view class="app-tag {{group.tagClass}}">
+                  {{group.enabled ? group.tagText : '已关闭'}}
+                </view>
+                <button
+                  wx:if="{{group.canWaitlist}}"
+                  class="group-row__waitlist"
+                  data-group-id="{{group.groupId}}"
+                  data-level="{{group.level}}"
+                  data-dance-type="{{group.danceType}}"
+                  bind:tap="onWaitlistTap"
+                >
+                  候补
+                </button>
               </view>
             </view>
             <view class="group-row__track">

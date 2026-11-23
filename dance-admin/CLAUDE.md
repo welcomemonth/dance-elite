@@ -22,14 +22,14 @@
 
 ### Mock ↔ 真实后端切换（改一处即可）
 
-- Mock 开发：`pnpm start`（默认，mock 拦截 `/api/**` 与 `/h5/**`）。
-- 真实后端：`pnpm dev`（MOCK=none）+ `config/proxy.ts` 的 dev target 指向 Go 服务（默认 http://localhost:8080）。
+- 真实后端（默认）：`pnpm start` / `pnpm dev`（均 MOCK=none）+ `config/proxy.ts` 的 dev target 指向 Go 服务（默认 http://localhost:8080）。
+- Mock 开发：`pnpm start:mock`（mock 拦截 `/api/**` 与 `/h5/**`，仅用于无后端时预览）。
 - 测试账号：`admin/Admin@12345`（超管）、`ops/Ops@12345`（管理员）、`cs01/Cs@12345`（客服只读）。
 - 模拟故障内置：退款工单 903 同意→41014 退款失败；非待处理工单操作→41013；cs 写操作→40301。
 
 ## Commands
 
-`pnpm start` (dev+mock), `pnpm dev` (no mock → proxy 到真实后端), `pnpm build` (utoopack), `pnpm lint` (Biome+tsc), `pnpm test` (Jest), `npx antd lint ./src` (antd-specific checks).
+`pnpm start` (dev, 真实后端), `pnpm start:mock` (dev+mock), `pnpm dev` (no mock → proxy 到真实后端), `pnpm build` (utoopack), `pnpm lint` (Biome+tsc), `pnpm test` (Jest), `npx antd lint ./src` (antd-specific checks).
 
 Other: `pnpm openapi` (regenerate `src/services/`), `pnpm simple` (**irreversible** — commit first), `pnpm biome` (auto-fix), `pnpm tsc` (type-check only).
 

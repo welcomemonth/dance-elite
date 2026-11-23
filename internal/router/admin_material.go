@@ -21,7 +21,8 @@ func registerAdminMaterialRoutes(group *gin.RouterGroup, svc *service.MaterialCo
 	h := &adminMaterialHandler{svc: svc}
 	materials := group.Group("/materials")
 	materials.GET("/missing", h.list)
-	materials.POST("/missing/:registration_id/contacted", h.contacted)
+	write := materials.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
+	write.POST("/missing/:registration_id/contacted", h.contacted)
 }
 
 // list 资料未传齐名单（赛事/组别/舞种/缺失项/截止状态筛选）。
@@ -37,6 +38,7 @@ func (h *adminMaterialHandler) list(c *gin.Context) {
 		DanceType:     c.Query("dance_type"),
 		MissingItem:   c.Query("missing_item"),
 		DeadlineState: c.Query("deadline_state"),
+		Keyword:       c.Query("keyword"),
 		Page:          queryInt(c, "page", 1),
 		PageSize:      queryIntMax(c, "page_size", 20, 100),
 	})

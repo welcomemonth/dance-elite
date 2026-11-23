@@ -39,6 +39,7 @@ type Deps struct {
 	Players             *service.PlayerService
 	AdminOrders         *service.AdminOrderQueryService
 	AdminRegs           *service.AdminRegistrationQueryService
+	AdminRegActions     *service.AdminRegistrationActionService
 	MaterialMissing     *service.MaterialCollectionService
 	Dashboard           *service.DashboardService
 	Accounts            *service.AdminAccountService
@@ -48,6 +49,10 @@ type Deps struct {
 	AudioReview         *service.AudioReviewService
 	Lottery             *service.LotteryService
 	LotteryAdmin        *service.AdminLotteryService
+	Scores              *service.ScoreService
+	Rankings            *service.RankingAdminService
+	Prizes              *service.PrizeService
+	PublicRanking       *service.PublicRankingService
 	Tokens              *token.Signer
 
 	// UploadDir 是上传文件物理根目录（配置 storage.upload_dir）。非空时把
@@ -130,6 +135,11 @@ func New(deps Deps) *gin.Engine {
 		registerWaitlistRoutes(api, deps.Waitlists, deps.Tokens)
 	}
 
+	// 小程序榜单只读（T29，免鉴权）。
+	if deps.PublicRanking != nil {
+		registerPublicRankingRoutes(api, deps.PublicRanking)
+	}
+
 	// 后台端认证（T5）
 	registerAdminAuthRoutes(api, deps.AdminAuth, deps.Tokens)
 
@@ -165,7 +175,7 @@ func New(deps Deps) *gin.Engine {
 			registerAdminOrderRoutes(admin, deps.AdminOrders)
 		}
 		if deps.AdminRegs != nil {
-			registerAdminRegistrationRoutes(admin, deps.AdminRegs)
+			registerAdminRegistrationRoutes(admin, deps.AdminRegs, deps.AdminRegActions)
 		}
 		// 后台资料催收（T17）：名单与标记已联系 cs/admin 均可。
 		if deps.MaterialMissing != nil {
@@ -186,6 +196,10 @@ func New(deps Deps) *gin.Engine {
 		// 后台赛事抽签（API 文档 7.3）：导入 Excel、维护链接与导出结果。
 		if deps.LotteryAdmin != nil {
 			registerAdminLotteryRoutes(admin, deps.LotteryAdmin)
+		}
+		// 后台榜单中心（T28/T29/T31）。
+		if deps.Scores != nil && deps.Rankings != nil && deps.Prizes != nil {
+			registerAdminRankingRoutes(admin, deps.Scores, deps.Rankings, deps.Prizes)
 		}
 	}
 

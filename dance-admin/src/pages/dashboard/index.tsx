@@ -6,6 +6,7 @@ import { Button, Card, Col, List, Progress, Row, Space, Typography } from 'antd'
 import React from 'react';
 import { getDashboard } from '@/services/youwumeng/dashboard';
 import { formatMoney } from '@/services/youwumeng/format';
+import { DANCE_TYPE_LABELS } from '@/services/youwumeng/labels';
 
 /**
  * 数据看板：核心指标卡 + 待办事项 + 报名监控 + 近 30 日趋势 + 快捷操作。
@@ -14,14 +15,24 @@ import { formatMoney } from '@/services/youwumeng/format';
 const Dashboard: React.FC = () => {
   const { data, loading } = useService(getDashboard);
 
+  const trendData = data?.trend ?? [];
   const trendConfig = {
-    data: data?.trend ?? [],
+    data: trendData,
     xField: 'date',
     yField: 'registrations',
     smooth: true,
-    height: 280,
+    height: 240,
     point: { size: 0 },
     area: { style: { fill: 'l(270) 0:#ffffff 1:#b08d5733' } },
+  };
+  const revenueTrendConfig = {
+    data: trendData,
+    xField: 'date',
+    yField: 'revenue',
+    smooth: true,
+    height: 240,
+    point: { size: 0 },
+    area: { style: { fill: 'l(270) 0:#ffffff 1:#5423e733' } },
   };
 
   return (
@@ -75,6 +86,12 @@ const Dashboard: React.FC = () => {
             onClick={() => history.push('/operation/materials')}
           />
         </Col>
+        <Col span={4}>
+          <StatisticCard
+            statistic={{ title: '进行中赛事', value: data?.metrics.active_events ?? 0 }}
+            onClick={() => history.push('/event/list')}
+          />
+        </Col>
       </Row>
 
       <Row gutter={16} style={{ marginTop: 16 }}>
@@ -107,7 +124,7 @@ const Dashboard: React.FC = () => {
             }
           >
             <ProTable
-              rowKey={(r) => `${r.event_id}-${r.level}`}
+              rowKey={(r) => `${r.event_id}-${r.level}-${r.dance_type}`}
               size="small"
               search={false}
               options={false}
@@ -125,7 +142,12 @@ const Dashboard: React.FC = () => {
                     </Typography.Link>
                   ),
                 },
-                { title: '组别', dataIndex: 'level', width: 140 },
+                {
+                  title: '组别',
+                  width: 160,
+                  render: (_, r) => `${r.level}·${DANCE_TYPE_LABELS[r.dance_type as keyof typeof DANCE_TYPE_LABELS] ?? r.dance_type}`,
+                },
+                 { title: '候补', dataIndex: 'waitlist_count', width: 70 },
                 {
                   title: '报名进度',
                   hideInTable: true,
@@ -164,9 +186,18 @@ const Dashboard: React.FC = () => {
         </Col>
       </Row>
 
-      <Card title="近 30 日报名趋势" size="small" style={{ marginTop: 16 }}>
-        <Line {...trendConfig} />
-      </Card>
+      <Row gutter={16} style={{ marginTop: 16 }}>
+        <Col span={12}>
+          <Card title="近 30 日报名趋势" size="small">
+            <Line {...trendConfig} />
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card title="近 30 日实收趋势" size="small">
+            <Line {...revenueTrendConfig} />
+          </Card>
+        </Col>
+      </Row>
     </PageContainer>
   );
 };

@@ -20,7 +20,7 @@ import {
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { formatDateTime, formatMoney } from '@/services/youwumeng/format';
-import { ORDER_STATUS_LABELS } from '@/services/youwumeng/labels';
+import { ORDER_STATUS_LABELS, REFUND_TICKET_STATUS_LABELS } from '@/services/youwumeng/labels';
 import {
   approveRefundTicket,
   getRefundTicket,
@@ -124,11 +124,17 @@ const RefundDetail: React.FC = () => {
                 <Descriptions.Item label="工单号">{data?.ticket_no}</Descriptions.Item>
                 <Descriptions.Item label="状态">
                   <Tag color={data?.status === 'pending' ? 'warning' : data?.status === 'approved' ? 'success' : data?.status === 'refund_failed' ? 'error' : 'default'}>
-                    {data?.status}
+                    {data?.status
+                      ? REFUND_TICKET_STATUS_LABELS[
+                          data.status as keyof typeof REFUND_TICKET_STATUS_LABELS
+                        ] ?? data.status
+                      : '-'}
                   </Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label="诉求摘要">{data?.reason}</Descriptions.Item>
-                <Descriptions.Item label="登记来源">{data?.applicant}</Descriptions.Item>
+                <Descriptions.Item label="登记来源">
+                  {data?.applicant || '—'}
+                </Descriptions.Item>
                 <Descriptions.Item label="登记时间">
                   {formatDateTime(data?.created_at)}
                 </Descriptions.Item>

@@ -1,8 +1,7 @@
-import { InboxOutlined } from '@ant-design/icons';
+
 import type { ProColumns } from '@ant-design/pro-components';
 import {
   PageContainer,
-  ProForm,
   ProFormList,
   ProFormSelect,
   ProFormSwitch,
@@ -10,16 +9,33 @@ import {
   ProTable,
   StepsForm,
 } from '@ant-design/pro-components';
-import { App, Alert, Card, Col, Row, Space, Typography, Upload } from 'antd';
+import {
+  Alert,
+  App,
+  Card,
+  Form,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Typography,
+} from 'antd';
 import React, { useState } from 'react';
 import { listEvents } from '@/services/youwumeng/events';
 import { AWARD_OPTIONS, boardLabel } from '@/services/youwumeng/labels';
 import {
+  correctScore,
+  listScoreEntries,
   listSeasons,
   previewScores,
   publishScores,
 } from '@/services/youwumeng/seasons';
-import type { AgeLevel, DanceType, ScorePreview } from '@/services/youwumeng/typings';
+import type {
+  AgeLevel,
+  DanceType,
+  ScoreEntry as ScoreEntryRow,
+  ScorePreview,
+} from '@/services/youwumeng/typings';
 
 const BOARDS: { level: AgeLevel; dance_type: DanceType }[] = [
   { level: 'U11', dance_type: 'classical' },
@@ -33,10 +49,20 @@ const BOARDS: { level: AgeLevel; dance_type: DanceType }[] = [
 /** 成绩录入向导（设计文档 8.2）：选择赛事与榜单 → 录入/导入 → 确认发布 */
 const ScoreEntry: React.FC = () => {
   const { message } = App.useApp();
-  const [seasons, setSeasons] = useState<{ label: string; value: number }[]>([]);
-  const [eventOptions, setEventOptions] = useState<{ label: string; value: number }[]>([]);
-  const [selection, setSelection] = useState<{ eventId: number; level: AgeLevel; danceType: DanceType } | null>(null);
+  const [_seasons, setSeasons] = useState<{ label: string; value: number }[]>(
+    [],
+  );
+  const [eventOptions, setEventOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+  const [selection, setSelection] = useState<{
+    eventId: number;
+    level: AgeLevel;
+    danceType: DanceType;
+  } | null>(null);
   const [preview, setPreview] = useState<ScorePreview | null>(null);
+  const [correctTarget, setCorrectTarget] = useState<ScoreEntryRow | null>(null);
+  const [correctForm] = Form.useForm<{ award?: string; remark?: string }>();
 
   const previewColumns: ProColumns<ScorePreview['rows'][number]>[] = [
     { title: '行号', dataIndex: 'row_no', width: 70 },
@@ -47,14 +73,23 @@ const ScoreEntry: React.FC = () => {
       dataIndex: 'match_status',
       width: 90,
       render: (_, r) =>
-        r.match_status === 'matched' ? <Typography.Text type="success">成功</Typography.Text> : <Typography.Text type="danger">未匹配</Typography.Text>,
+        r.match_status === 'matched' ? (
+          <Typography.Text type="success">成功</Typography.Text>
+        ) : (
+          <Typography.Text type="danger">未匹配</Typography.Text>
+        ),
     },
     {
       title: '奖项',
       dataIndex: 'award',
-      render: (_, r) => AWARD_OPTIONS.find((a) => a.value === r.award)?.label ?? '-',
+      render: (_, r) =>
+        AWARD_OPTIONS.find((a) => a.value === r.award)?.label ?? '-',
     },
-    { title: '晋级决赛', dataIndex: 'advanced_to_final', render: (_, r) => (r.advanced_to_final ? '是' : '-') },
+    {
+      title: '晋级决赛',
+      dataIndex: 'advanced_to_final',
+      render: (_, r) => (r.advanced_to_final ? '是' : '-'),
+    },
     { title: '备注', dataIndex: 'remark' },
   ];
 
@@ -64,7 +99,12 @@ const ScoreEntry: React.FC = () => {
         <StepsForm
           onFinish={async () => {
             if (!selection || !preview) return false;
-            await publishScores(selection.eventId, selection.level, selection.danceType, preview.rows);
+            await publishScores(
+              selection.eventId,
+              selection.level,
+              selection.danceType,
+              preview.rows,
+            );
             message.success('已发布，小程序端榜单即时更新');
             return true;
           }}
@@ -75,9 +115,17 @@ const ScoreEntry: React.FC = () => {
             onFinish={async (values) => {
               const seasonId = values.season_id as number;
               const list = await listEvents({ page: 1, page_size: 100 });
-              setEventOptions(list.list.filter((e) => e.season_id === seasonId).map((e) => ({ label: e.name, value: e.id })));
+              setEventOptions(
+                list.list
+                  .filter((e) => e.season_id === seasonId)
+                  .map((e) => ({ label: e.name, value: e.id })),
+              );
               const board = BOARDS[values.board_index as number];
-              setSelection({ eventId: values.event_id as number, level: board.level, danceType: board.dance_type });
+              setSelection({
+                eventId: values.event_id as number,
+                level: board.level,
+                danceType: board.dance_type,
+              });
               return true;
             }}
           >
@@ -103,9 +151,16 @@ const ScoreEntry: React.FC = () => {
               name="board_index"
               label="榜单"
               rules={[{ required: true }]}
-              options={BOARDS.map((b, i) => ({ label: boardLabel(b.level, b.dance_type), value: i }))}
+              options={BOARDS.map((b, i) => ({
+                label: boardLabel(b.level, b.dance_type),
+                value: i,
+              }))}
             />
-            <Alert type="info" showIcon message="同一场赛事 6 个榜单需分别录入；每天只比一个舞种，实际每场只需 3 个榜单。" />
+            <Alert
+              type="info"
+              showIcon
+              message="同一场赛事 6 个榜单需分别录入；每天只比一个舞种，实际每场只需 3 个榜单。"
+            />
           </StepsForm.StepForm>
 
           <StepsForm.StepForm
@@ -123,15 +178,23 @@ const ScoreEntry: React.FC = () => {
                 message.warning('请至少录入一行成绩');
                 return false;
               }
-              const result = await previewScores(selection.eventId, selection.level, selection.danceType, { rows });
+              const result = await previewScores(
+                selection.eventId,
+                selection.level,
+                selection.danceType,
+                { rows },
+              );
               setPreview(result);
               return true;
             }}
           >
-            <Typography.Title level={5}>在线逐行录入（辅助方式）</Typography.Title>
+            <Typography.Title level={5}>
+              在线逐行录入（辅助方式）
+            </Typography.Title>
             <Typography.Paragraph type="secondary">
-              主要方式为上传固定格式成绩 Excel（模板列：姓名、证件号、奖项），按证件号唯一匹配选手；
-              mock 阶段请使用在线录入，Excel 解析在接入真实后端后启用。
+              主要方式为上传固定格式成绩
+              Excel（模板列：姓名、证件号、奖项），按证件号唯一匹配选手； mock
+              阶段请使用在线录入，Excel 解析在接入真实后端后启用。
             </Typography.Paragraph>
             <ProFormList
               name="rows"
@@ -139,9 +202,21 @@ const ScoreEntry: React.FC = () => {
               creatorButtonProps={{ creatorButtonText: '添加一行' }}
             >
               <Space align="baseline" wrap>
-                <ProFormText name="player_name" placeholder="选手姓名" rules={[{ required: true }]} />
-                <ProFormText name="id_card_no" placeholder="证件号（唯一匹配键）" />
-                <ProFormSelect name="award" placeholder="奖项" options={AWARD_OPTIONS} width="sm" />
+                <ProFormText
+                  name="player_name"
+                  placeholder="选手姓名"
+                  rules={[{ required: true }]}
+                />
+                <ProFormText
+                  name="id_card_no"
+                  placeholder="证件号（唯一匹配键）"
+                />
+                <ProFormSelect
+                  name="award"
+                  placeholder="奖项"
+                  options={AWARD_OPTIONS}
+                  width="sm"
+                />
                 <ProFormSwitch name="advanced_to_final" label="晋级决赛" />
                 <ProFormText name="remark" placeholder="备注" />
               </Space>
@@ -177,6 +252,98 @@ const ScoreEntry: React.FC = () => {
           </StepsForm.StepForm>
         </StepsForm>
       </Card>
+
+      {selection && (
+        <Card title="已发布成绩（纠错）" size="small" style={{ marginTop: 16 }}>
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            title="修改已发布成绩会把旧记录标记为已纠错并写入新记录，积分与排名自动重算。"
+          />
+          <ProTable<ScoreEntryRow>
+            rowKey="entry_id"
+            size="small"
+            search={false}
+            options={false}
+            pagination={false}
+            request={async () => {
+              const list = await listScoreEntries(
+                selection.eventId,
+                selection.level,
+                selection.danceType,
+              );
+              return { data: list, success: true };
+            }}
+            columns={[
+              { title: '选手', dataIndex: 'player_name', width: 140 },
+              { title: '编号', dataIndex: 'player_no', width: 120 },
+              {
+                title: '奖项',
+                dataIndex: 'award',
+                width: 120,
+                render: (_, r) =>
+                  AWARD_OPTIONS.find((a) => a.value === r.award)?.label ?? '-',
+              },
+              { title: '积分', dataIndex: 'points', width: 90 },
+              {
+                title: '晋级决赛',
+                dataIndex: 'advanced_to_final',
+                width: 100,
+                render: (_, r) => (r.advanced_to_final ? '是' : '-'),
+              },
+              { title: '备注', dataIndex: 'remark' },
+              {
+                title: '操作',
+                valueType: 'option',
+                width: 90,
+                render: (_, r) => (
+                  <Typography.Link
+                    onClick={() => {
+                      setCorrectTarget(r);
+                      correctForm.setFieldsValue({
+                        award: r.award ?? undefined,
+                        remark: r.remark ?? undefined,
+                      });
+                    }}
+                  >
+                    纠错
+                  </Typography.Link>
+                ),
+              },
+            ]}
+          />
+        </Card>
+      )}
+
+      <Modal
+        title={correctTarget ? `成绩纠错：${correctTarget.player_name}` : ''}
+        open={!!correctTarget}
+        onCancel={() => setCorrectTarget(null)}
+        onOk={() => correctForm.submit()}
+      >
+        <Form
+          form={correctForm}
+          layout="vertical"
+          onFinish={async (values) => {
+            if (!correctTarget) return;
+            await correctScore(correctTarget.entry_id, {
+              award: values.award,
+              remark: values.remark,
+            });
+            message.success('已纠错并重算积分');
+            setCorrectTarget(null);
+            return true;
+          }}
+        >
+          <Form.Item name="award" label="奖项">
+            <Select allowClear placeholder="保持不变" options={AWARD_OPTIONS} />
+          </Form.Item>
+          <Form.Item name="remark" label="纠错说明">
+            <Input.TextArea rows={3} placeholder="建议填写纠错原因（留痕）" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </PageContainer>
   );
 };

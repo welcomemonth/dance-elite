@@ -66,6 +66,7 @@ type UpdateCSTicketResponse struct {
 type AdminCSTicketListQuery struct {
 	Type      string
 	Status    string
+	Keyword   string // 用户标识 / 手机号 / 诉求内容
 	CreatedBy int64
 	Page      int
 	PageSize  int

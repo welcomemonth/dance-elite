@@ -59,6 +59,20 @@ func (s *OrderStore) GetByRequest(ctx context.Context, userID int64, requestID s
 	return order, nil
 }
 
+// GetByRegistrationTx 在事务内按报名单查询订单（订单与报名单 1:1）。
+// 不存在返回 ErrNotFound。
+func (s *OrderStore) GetByRegistrationTx(ctx context.Context, tx *sql.Tx, registrationID int64) (*model.Order, error) {
+	order, err := scanOrder(tx.QueryRowContext(ctx,
+		`SELECT `+orderQualifiedColumns+` FROM orders o WHERE o.registration_id = ?`, registrationID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query order of registration %d: %w", registrationID, err)
+	}
+	return order, nil
+}
+
 // GetByOrderNo 按商户订单号查询订单（T11 支付回调以 out_trade_no 定位）。
 // 不存在返回 ErrNotFound。
 func (s *OrderStore) GetByOrderNo(ctx context.Context, orderNo string) (*model.Order, error) {
@@ -74,6 +88,12 @@ func (s *OrderStore) GetByOrderNoTx(ctx context.Context, tx *sql.Tx, orderNo str
 // queryer 是 *sql.DB 与 *sql.Tx 的公共查询接口（读路径保持一致）。
 type queryer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// querier 是 QueryRowContext + QueryContext 的查询接口（*sql.DB / *sql.Tx 均满足）。
+type querier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
 func (s *OrderStore) getByOrderNo(ctx context.Context, q queryer, orderNo string) (*model.Order, error) {

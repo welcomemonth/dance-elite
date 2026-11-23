@@ -116,6 +116,7 @@ func (s *CSTicketStore) LinkRegistrationTx(ctx context.Context, tx *sql.Tx, id, 
 type AdminCSTicketFilter struct {
 	Type      string
 	Status    string
+	Keyword   string
 	CreatedBy int64
 	Page      int
 	PageSize  int
@@ -153,6 +154,11 @@ func (s *CSTicketStore) ListAdmin(ctx context.Context, f AdminCSTicketFilter) ([
 	if f.CreatedBy > 0 {
 		where = append(where, "t.created_by = ?")
 		args = append(args, f.CreatedBy)
+	}
+	if f.Keyword != "" {
+		like := "%" + f.Keyword + "%"
+		where = append(where, "(COALESCE(t.user_name, '') LIKE ? OR t.phone LIKE ? OR t.content LIKE ?)")
+		args = append(args, like, like, like)
 	}
 	cond := strings.Join(where, " AND ")
 

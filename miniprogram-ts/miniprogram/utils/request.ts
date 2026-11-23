@@ -21,16 +21,21 @@ export interface RequestConfig {
   timeout?: number;
 }
 
-let unauthorizedHandler: (() => void) | null = null;
+type UnauthorizedHandler = () => void | Promise<void>;
 
-/** 注册 40101 的统一处理（例如清理登录态并跳转登录页）。 */
-export function setUnauthorizedHandler(handler: (() => void) | null): void {
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+/**
+ * 注册 40101 的统一处理（例如清理登录态并重新静默登录）。
+ * 返回 Promise 时，请求层会在其完成后自动重试一次原请求。
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
   unauthorizedHandler = handler;
 }
 
 /** 供 upload 等其他请求通道在检测到 40101 时复用统一处理。 */
 export function notifyUnauthorized(): void {
-  unauthorizedHandler?.();
+  void Promise.resolve(unauthorizedHandler?.()).catch(() => undefined);
 }
 
 function buildUrl(path: string, query?: QueryParams): string {
@@ -51,7 +56,7 @@ function buildUrl(path: string, query?: QueryParams): string {
  * - 解包 `{ code, message, data }`，只把 data 返回给调用方；
  * - 统一抛 ApiError，40101 触发全局 unauthorized 处理。
  */
-export function request<T>(path: string, config: RequestConfig = {}): Promise<T> {
+function send<T>(path: string, config: RequestConfig = {}): Promise<T> {
   const { method = "GET", query, data, auth = true, header = {}, timeout = REQUEST_TIMEOUT } = config;
   const token = readToken();
   const url = buildUrl(path, query);
@@ -81,9 +86,6 @@ export function request<T>(path: string, config: RequestConfig = {}): Promise<T>
         try {
           resolve(unwrapEnvelope<T>(response.data, response.statusCode));
         } catch (error) {
-          if (error instanceof ApiError && error.code === ERROR_CODE.UNAUTHORIZED) {
-            unauthorizedHandler?.();
-          }
           reject(error);
         }
       },
@@ -94,6 +96,24 @@ export function request<T>(path: string, config: RequestConfig = {}): Promise<T>
         reject(new ApiError(-1, error.errMsg || "网络异常，请稍后重试"));
       },
     });
+  });
+}
+
+/**
+ * 统一请求入口：40101 时先走统一的重新登录处理，成功后自动重试一次，
+ * 避免 token 过期后用户必须手动进入「我的」页才恢复登录。
+ */
+export function request<T>(path: string, config: RequestConfig = {}): Promise<T> {
+  return send<T>(path, config).catch((error: unknown) => {
+    if (
+      error instanceof ApiError &&
+      error.code === ERROR_CODE.UNAUTHORIZED &&
+      config.auth !== false &&
+      unauthorizedHandler
+    ) {
+      return Promise.resolve(unauthorizedHandler()).then(() => send<T>(path, config));
+    }
+    throw error;
   });
 }
 

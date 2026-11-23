@@ -2,23 +2,130 @@
   <nav-bar bare="{{true}}" bg="#5423e7" />
 
   <view class="ranking-hero">
-    <view class="ranking-hero__badge">优舞盟 · 年度榜单</view>
-    <view class="ranking-hero__title">每一份坚持，</view>
-    <view class="ranking-hero__title ranking-hero__title--second">都值得被看见。</view>
-    <view class="ranking-hero__desc">直通榜 · 积分榜 · 机构年度榜</view>
+    <view class="ranking-hero__badge">{{seasonText || '优舞盟 · 年度榜单'}}</view>
+    <view class="ranking-hero__title">{{titleText}}</view>
+    <view class="ranking-hero__desc">{{subtitleText}}</view>
   </view>
 
-  <view class="ranking-body">
-    <view class="ranking-placeholder">
-      <image class="ranking-placeholder__icon" src="/assets/icons/tab-trophy.svg" />
-      <view class="ranking-placeholder__title">榜单即将上线</view>
-      <view class="ranking-placeholder__text">
-        成绩发布后，这里将展示各年龄组与舞种的直通榜、积分榜和机构年度榜。
+  <view class="ranking-filters">
+    <view class="ranking-levels">
+      <view
+        wx:for="{{levels}}"
+        wx:key="value"
+        class="level-chip {{!institutionMode && item.value === activeLevel ? 'level-chip--active' : ''}}"
+        data-value="{{item.value}}"
+        bind:tap="onLevelTap"
+      >
+        {{item.label}}
       </view>
-      <view class="ranking-placeholder__link" bind:tap="onRulesTap">
-        查看积分与赛事规则说明
-        <text class="ranking-placeholder__link-arrow">›</text>
+      <view
+        class="level-chip level-chip--inst {{institutionMode ? 'level-chip--active' : ''}}"
+        bind:tap="onInstitutionTap"
+      >
+        机构排名
       </view>
     </view>
+
+    <view wx:if="{{!institutionMode}}" class="ranking-dances">
+      <view
+        wx:for="{{danceStyles}}"
+        wx:key="value"
+        class="dance-tab {{item.value === activeDance ? 'dance-tab--active' : ''}}"
+        data-value="{{item.value}}"
+        bind:tap="onDanceTap"
+      >
+        {{item.label}}
+      </view>
+    </view>
+
+    <input
+      class="ranking-search"
+      value="{{keyword}}"
+      placeholder="{{institutionMode ? '搜索机构名称' : '搜索选手姓名'}}"
+      bindinput="onKeywordInput"
+    />
   </view>
+
+  <view wx:if="{{loading}}" class="app-loading">正在加载榜单…</view>
+  <view wx:elif="{{loadError}}" class="ranking-error">
+    <view class="app-error">{{loadError}}</view>
+    <button class="app-btn app-btn--primary" bind:tap="onRetry">重新加载</button>
+  </view>
+
+  <block wx:else>
+    <empty-state wx:if="{{isEmpty}}" text="未找到相关记录" />
+
+    <block wx:elif="{{institutionMode}}">
+      <view class="rank-list">
+        <view class="rank-row rank-row--head">
+          <text class="rank-row__rank">排名</text>
+          <text class="rank-row__name">机构</text>
+          <text class="rank-row__points">年度积分</text>
+        </view>
+        <view wx:for="{{filteredInstitutions}}" wx:key="name" class="rank-row">
+          <view class="rank-row__rank {{item.rank <= 3 ? 'rank-row__rank--top' : ''}}">
+            {{item.rank}}
+          </view>
+          <view class="rank-row__name">
+            <view>{{item.name}}</view>
+            <view wx:if="{{item.honorText}}" class="rank-row__sub">{{item.honorText}}</view>
+            <view class="rank-row__sub">上榜选手 {{item.player_count}} 人</view>
+          </view>
+          <text class="rank-row__points">{{item.total_points}}</text>
+        </view>
+      </view>
+    </block>
+
+    <block wx:else>
+      <view wx:if="{{filteredDirect.length > 0}}" class="ranking-section">
+        <view class="ranking-section__title">直通榜</view>
+        <view
+          wx:for="{{filteredDirect}}"
+          wx:key="id"
+          class="direct-row"
+          data-id="{{item.id}}"
+          bind:tap="onDancerTap"
+        >
+          <image class="direct-row__avatar" src="{{item.avatar_url || '/assets/avatar/avatar.png'}}" />
+          <view class="direct-row__body">
+            <view class="direct-row__name">{{item.name}}</view>
+            <view class="direct-row__awards">{{item.awardText}}</view>
+          </view>
+          <view class="direct-row__tag">直通晋级</view>
+        </view>
+      </view>
+
+      <view class="ranking-section">
+        <view class="ranking-section__title">正式积分榜</view>
+        <view class="rank-list">
+          <view class="rank-row rank-row--head">
+            <text class="rank-row__rank">排名</text>
+            <text class="rank-row__name">选手</text>
+            <text class="rank-row__change">变化</text>
+            <text class="rank-row__points">总积分</text>
+          </view>
+          <block wx:for="{{filteredRanking}}" wx:key="id">
+            <view class="rank-row" data-id="{{item.id}}" bind:tap="onDancerTap">
+              <view class="rank-row__rank {{item.rank <= 3 ? 'rank-row__rank--top' : ''}}">
+                {{item.rank}}
+              </view>
+              <view class="rank-row__name">
+                <image class="rank-row__avatar" src="{{item.avatar_url || '/assets/avatar/avatar.png'}}" />
+                <text>{{item.name}}</text>
+                <text wx:if="{{item.is_direct}}" class="rank-row__badge">直通</text>
+              </view>
+              <text class="rank-row__change rank-row__change--{{item.changeTone}}">
+                {{item.changeText}}
+              </text>
+              <text class="rank-row__points">{{item.total_points}}</text>
+            </view>
+            <view wx:if="{{item.showAdvanceLine}}" class="advance-line">晋级区上方为积分晋级名额</view>
+          </block>
+        </view>
+      </view>
+
+      <view wx:if="{{updatedText}}" class="ranking-updated">榜单更新于 {{updatedText}}</view>
+      <view class="ranking-rules" bind:tap="onRulesTap">积分与赛事规则说明 ›</view>
+    </block>
+  </block>
 </view>

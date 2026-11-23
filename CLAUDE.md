@@ -7,9 +7,11 @@ This file provides guidance to Claude Code when working with code in this reposi
 **优舞盟（dance-elite）** — 少儿中国舞赛事系统：微信小程序端（报名/支付/资料上传/榜单）、PC 后台管理端、免登录音频审核 H5。
 
 配套设计文档（在 `docs/` 下，改动涉及业务规则时必须先读）：
-- `docs/API接口设计.md` — 接口规范、错误码、三类端（小程序 `/api/v1`、后台 `/api/v1/admin`、H5 `/h5`）
-- `docs/数据库表结构设计.md` — ER 关系与设计决策（先读第 0 节）
-- `docs/优舞盟报名功能.md` — 报名流程与状态机、已确认的关键业务决策
+- `docs/优舞盟报名功能/API接口设计.md` — 接口规范、错误码、三类端（小程序 `/api/v1`、后台 `/api/v1/admin`、H5 `/h5`）
+- `docs/优舞盟报名功能/数据库表结构设计.md` — ER 关系与设计决策（先读第 0 节）
+- `docs/优舞盟报名功能/优舞盟报名功能.md` — 报名流程与状态机、已确认的关键业务决策
+- `docs/文档与实现差异清单.md` — 文档与代码的差异、待决策项
+- `docs/后续开发计划.md` — 后续开发顺序与验收标准
 - `docs/日志规范.md` — 日志字段字典、错误分级、业务事件与脱敏规则（新增日志前必读）
 - `docs/小程序页面/优舞盟小程序页面与功能设计.md`、`docs/后台管理/优舞盟后台管理页面与功能设计.md`
 
@@ -19,7 +21,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 |-------|------------|---------|
 | Language | Go | 1.26.x |
 | HTTP | Gin | v1.12 |
-| ORM | GORM | v2（driver: sqlite） |
+| Data access | `database/sql` + 手写 SQL（`modernc.org/sqlite`） | — |
 | Database | SQLite | 单机部署，数据量小 |
 | Frontend（后台/H5） | React + TypeScript + Umi Max | 19.x / 5.x |
 | Config | godotenv + 环境变量 | — |
@@ -153,7 +155,7 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 - 不存储证件号明文、不把 JWT secret / 微信支付密钥等提交入库（密钥只经环境变量注入，`.env` 与 `data/` 不入库）。
 - 不手改前端构建生成的产物（改 `dance-admin/` 源码后重新构建）。
 - 不做旧 JSON 数据迁移（docs 决策 #10），`data/` 下旧数据仅作历史参考。
-- 不新增与已锁定技术栈重复的主要依赖（不使用 echo/chi、不使用 sqlx/raw sql 替代 GORM、不引入其他 ORM）。
+- 不新增与已锁定技术栈重复的主要依赖（不使用 echo/chi、不引入 ORM/查询构建器；数据访问保持 `database/sql` + 手写 SQL）。
 
 ## Current State Notes
 
@@ -162,4 +164,4 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 - 抽签时间窗口与短信：session 含 `start_at`/`end_at`/`remind_before_minutes`/`sms_*_template`；未到开始时间禁止抽签，截止后未抽选手由 `LotterySweeper`（定时任务）自动分配；截止前提醒、截止后自动分配结果通过阿里云短信通知。实现集中在 `internal/service/lottery_{service,schedule,notify,sweeper,admin,admin_export}.go`、`internal/router/{lottery,admin_lottery}.go`、`internal/store/lottery_store.go` 与 `internal/pkg/sms/`。旧 JSON 抽签数据不做迁移（`data/lottery/` 仅作历史参考）。
 - 现有基础：SQLite 数据层（`store/db.go` WAL 单连接池、`migrate.go` 版本化迁移、`tx.go` 事务）、`pkg/httpx` 统一响应与错误码、`middleware`（RequestID/AccessLog/Recovery）、`server` 优雅关闭。测试基线：`go test ./...` 全绿。
 - 小程序工程模板位于 `miniprogram-ts/`（Annil + TypeScript + MobX）：TypeScript 由微信开发者工具的 `useCompilerPlugins` 编译，`pnpm typecheck` 做类型检查；已含统一请求层、登录态 store、全局注入，以及缓存、分页列表（下拉刷新/上拉加载）、格式化、上传/图片工具与示例页面/组件。后续小程序页面在此基础上新增。
-- 业务代码（model/service/各端 handler）按开发计划 T2 起落地，模型以 `docs/数据库表结构设计.md` v3 为准。
+- 业务代码（model/service/各端 handler）已完成报名/支付/退款/候补/资料/后台查询主链路（T1–T19、T32、T34、T35）；管理端 22 页主体完成（T22–T27），小程序主链路完成（T18–T21），榜单模块（T28–T31）未开始。逐项差异见 `docs/文档与实现差异清单.md`，后续顺序见 `docs/后续开发计划.md`。模型以 `docs/优舞盟报名功能/数据库表结构设计.md` v3 为准；数据访问为 `database/sql` 手写 SQL，不是 GORM。

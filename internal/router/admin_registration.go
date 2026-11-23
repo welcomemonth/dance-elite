@@ -1,7 +1,9 @@
 package router
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -15,17 +17,21 @@ import (
 
 // adminRegistrationHandler 承载后台报名名单接口（开发计划 T17）。
 type adminRegistrationHandler struct {
-	svc *service.AdminRegistrationQueryService
+	svc     *service.AdminRegistrationQueryService
+	actions *service.AdminRegistrationActionService
 }
 
 // registerAdminRegistrationRoutes 注册 /api/v1/admin/registrations 下的接口与
 // 赛事名单导出接口（API 文档 12.5）。
 // 列表对 admin/super_admin/cs 全部只读；导出仅 admin / super_admin。
-func registerAdminRegistrationRoutes(group *gin.RouterGroup, svc *service.AdminRegistrationQueryService) {
-	h := &adminRegistrationHandler{svc: svc}
+func registerAdminRegistrationRoutes(group *gin.RouterGroup, svc *service.AdminRegistrationQueryService, actions *service.AdminRegistrationActionService) {
+	h := &adminRegistrationHandler{svc: svc, actions: actions}
 	group.Group("/registrations").GET("", h.list)
-	export := group.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
-	export.GET("/events/:id/registrations/export", h.export)
+	write := group.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
+	write.GET("/events/:id/registrations/export", h.export)
+	if actions != nil {
+		write.POST("/registrations/:registration_id/withdraw", h.withdraw)
+	}
 }
 
 // list 报名名单分页列表（赛事/组别/舞种/状态/资料完成度筛选）。
@@ -52,6 +58,31 @@ func (h *adminRegistrationHandler) list(c *gin.Context) {
 		Page:          queryInt(c, "page", 1),
 		PageSize:      queryIntMax(c, "page_size", 20, 100),
 	})
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	httpx.OK(c, resp)
+}
+
+// withdraw 人工退赛（仅 admin / super_admin）：仅释放名额，不触发退款。
+func (h *adminRegistrationHandler) withdraw(c *gin.Context) {
+	adminID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	registrationID, err := strconv.ParseInt(c.Param("registration_id"), 10, 64)
+	if err != nil || registrationID <= 0 {
+		httpx.AbortError(c, httpx.ErrBadRequest("报名 ID 非法"))
+		return
+	}
+	var req model.AdminWithdrawRegistrationRequest
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：reason 最长 200 字").WithCause(err))
+		return
+	}
+	resp, err := h.actions.Withdraw(c.Request.Context(), adminID, registrationID, req.Reason)
 	if err != nil {
 		httpx.AbortError(c, err)
 		return

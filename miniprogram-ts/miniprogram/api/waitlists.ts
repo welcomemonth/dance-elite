@@ -1,6 +1,18 @@
 import type { PagedList } from "../types/api";
-import type { WaitlistItem } from "../types/models";
+import type {
+  SubmitWaitlistPayload,
+  SubmitWaitlistResult,
+  WaitlistItem,
+} from "../types/models";
 import { http } from "../utils/request";
+
+/** 提交候补（POST /api/v1/events/{event_id}/waitlists，API 文档 5.1）。 */
+export function submitWaitlist(
+  eventId: number,
+  payload: SubmitWaitlistPayload,
+): Promise<SubmitWaitlistResult> {
+  return http.post<SubmitWaitlistResult>(`/api/v1/events/${eventId}/waitlists`, payload);
+}
 
 /** 我的候补列表（GET /api/v1/waitlists，API 文档 5.2）。 */
 export function listWaitlists(params: {

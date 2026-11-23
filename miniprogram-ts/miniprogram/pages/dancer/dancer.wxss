@@ -1,0 +1,106 @@
+.dancer-page {
+  padding-bottom: calc(80rpx + env(safe-area-inset-bottom));
+}
+
+.dancer-error {
+  padding: 96rpx 32rpx;
+}
+
+.dancer-hero {
+  padding: 48rpx 40rpx;
+  border-bottom: 2rpx solid #121217;
+  background: #5423e7;
+  color: #ffffff;
+  text-align: center;
+}
+
+.dancer-hero__avatar {
+  width: 140rpx;
+  height: 140rpx;
+  border: 2rpx solid #ffffff;
+  border-radius: 50%;
+}
+
+.dancer-hero__name {
+  margin-top: 20rpx;
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.dancer-hero__board {
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  opacity: 0.85;
+}
+
+.dancer-hero__stats {
+  display: flex;
+  justify-content: center;
+  gap: 80rpx;
+  margin-top: 32rpx;
+}
+
+.dancer-stat__value {
+  font-size: 44rpx;
+  font-weight: 700;
+}
+
+.dancer-stat__label {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  opacity: 0.8;
+}
+
+.dancer-hero__qual {
+  display: inline-block;
+  margin-top: 24rpx;
+  padding: 10rpx 20rpx;
+  border: 2rpx solid #ffffff;
+  font-size: 22rpx;
+}
+
+.dancer-section {
+  padding: 36rpx 40rpx;
+  border-bottom: 2rpx solid rgba(18, 18, 23, 0.12);
+}
+
+.dancer-note {
+  margin: 12rpx 0 20rpx;
+  color: #6c6c89;
+  font-size: 22rpx;
+}
+
+.event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 2rpx solid rgba(18, 18, 23, 0.08);
+}
+
+.event-row:last-child {
+  border-bottom: none;
+}
+
+.event-row__name {
+  font-size: 26rpx;
+  font-weight: 700;
+}
+
+.event-row__meta {
+  margin-top: 4rpx;
+  color: #6c6c89;
+  font-size: 22rpx;
+}
+
+.event-row__points {
+  color: #5423e7;
+  font-size: 30rpx;
+  font-weight: 700;
+}
+
+.dancer-honors {
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  line-height: 1.8;
+}

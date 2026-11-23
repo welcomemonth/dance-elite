@@ -1,28 +1,28 @@
-import { history, useAccess } from '@umijs/max';
+import { history, useAccess, useParams } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
 import { useService } from '@/services/youwumeng/useService';
 import {
   App,
   Button,
   Card,
-  Col,
   Descriptions,
   Empty,
   Image,
-  Row,
+  Popconfirm,
   Space,
   Table,
   Tag,
   Typography,
 } from 'antd';
 import React, { useState } from 'react';
-import { useParams } from '@umijs/max';import { formatDateTime, formatMoney } from '@/services/youwumeng/format';
+import { formatDateTime, formatMoney } from '@/services/youwumeng/format';
 import {
   DANCE_TYPE_LABELS,
   ORDER_SOURCE_LABELS,
   ORDER_STATUS_LABELS,
 } from '@/services/youwumeng/labels';
 import { getOrder, revealPhone } from '@/services/youwumeng/orders';
+import { withdrawRegistration } from '@/services/youwumeng/registrations';
 
 /**
  * 订单详情：报名信息 / 支付信息 / 资料信息 / 操作记录 四区。
@@ -38,6 +38,14 @@ const OrderDetail: React.FC = () => {
     () => getOrder(orderNo as string),
     { ready: !!orderNo },
   );
+
+  const { run: runWithdraw, loading: withdrawing } = useService(withdrawRegistration, {
+    manual: true,
+    onSuccess: () => {
+      message.success('已退赛，名额即时释放（未退款）');
+      window.location.reload();
+    },
+  });
 
   const { run: runReveal, loading: revealing } = useService(revealPhone, {
     manual: true,
@@ -60,7 +68,11 @@ const OrderDetail: React.FC = () => {
     { label: '证件照', value: materials?.photo_url, type: 'photo' as const },
     { label: '音频', value: materials?.audio_url, type: 'audio' as const },
     { label: '节目名称', value: materials?.program_name, type: 'text' as const },
+    { label: '指导教师', value: materials?.teacher_name, type: 'text' as const },
     { label: '联系电话', value: materials?.contact_phone, type: 'text' as const },
+    { label: '快递地址', value: materials?.express_address, type: 'text' as const },
+    { label: '作品说明', value: materials?.work_intro, type: 'text' as const },
+    { label: '特殊要求', value: materials?.special_req, type: 'text' as const },
   ];
 
   return (
@@ -101,8 +113,28 @@ const OrderDetail: React.FC = () => {
             </Descriptions.Item>
             <Descriptions.Item label="状态">
               <Tag>{ORDER_STATUS_LABELS[order?.status as 'paid'] ?? order?.status}</Tag>
+              {registration?.status === 'withdrawn' && (
+                <Tag color="default" style={{ marginLeft: 8 }}>
+                  已退赛
+                </Tag>
+              )}
             </Descriptions.Item>
           </Descriptions>
+          {access.canAdmin && order?.status === 'paid' && registration?.status === 'active' && (
+            <Space style={{ marginTop: 12 }}>
+              <Popconfirm
+                title="确认人工退赛？"
+                description="仅释放名额并结束报名，不触发退款；退款请另走退款工单。"
+                onConfirm={() =>
+                  runWithdraw(registration.registration_id, '后台人工退赛')
+                }
+              >
+                <Button danger loading={withdrawing}>
+                  人工退赛
+                </Button>
+              </Popconfirm>
+            </Space>
+          )}
         </Card>
 
         <Card title="支付信息" size="small">

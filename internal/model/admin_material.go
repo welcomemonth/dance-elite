@@ -10,6 +10,7 @@ type AdminMissingMaterialQuery struct {
 	DanceType     string
 	MissingItem   string
 	DeadlineState string
+	Keyword       string // 选手姓名 / player_no / 联系电话
 	Page          int
 	PageSize      int
 }

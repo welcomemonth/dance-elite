@@ -8,7 +8,7 @@ import {
   ProFormText,
   ProFormTextArea,
 } from '@ant-design/pro-components';
-import { history, useParams } from '@umijs/max';
+import { history, useParams, useSearchParams } from '@umijs/max';
 import { Alert, App, Button, Card, DatePicker, Form, Space, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import React, { useEffect, useState } from 'react';
@@ -68,6 +68,8 @@ interface FormValues {
   work_duration_limit?: string;
   process_desc?: string;
   honor_desc?: string;
+  score_rules?: string;
+  prize_rules?: string;
   exclude_from_prize?: boolean;
 }
 
@@ -75,7 +77,11 @@ const toIso = (d: Dayjs): string => d.format('YYYY-MM-DDTHH:mm:ssZ');
 
 const EventEditForm: React.FC = () => {
   const params = useParams<{ id?: string }>();
+  const [searchParams] = useSearchParams();
   const eventId = params.id ? Number(params.id) : undefined;
+  const copyFromId = searchParams.get('copyFrom')
+    ? Number(searchParams.get('copyFrom'))
+    : undefined;
   const isEdit = eventId !== undefined;
   const { message } = App.useApp();
   const [form] = ProForm.useForm<FormValues>();
@@ -125,6 +131,8 @@ const EventEditForm: React.FC = () => {
           work_duration_limit: event.work_duration_limit,
           process_desc: event.process_desc,
           honor_desc: event.honor_desc,
+          score_rules: event.score_rules ?? undefined,
+          prize_rules: event.prize_rules ?? undefined,
           exclude_from_prize: event.exclude_from_prize,
         });
       })
@@ -133,6 +141,51 @@ const EventEditForm: React.FC = () => {
         history.replace('/event/list');
       });
   }, [eventId, form, isEdit, message]);
+
+  // 复制新建：以现有赛事为模板预填，组别不带 group_id（创建时按 level+dance_type 新增）。
+  useEffect(() => {
+    if (isEdit || !copyFromId || Number.isNaN(copyFromId)) return;
+    getEvent(copyFromId)
+      .then((event) => {
+        form.setFieldsValue({
+          name: `${event.name}（复制）`,
+          season_id: event.season_id,
+          level: event.level,
+          city: event.city,
+          venue: event.venue,
+          event_date: dayjs(event.event_date),
+          fee_yuan: event.fee / 100,
+          reg_start_at: dayjs(event.reg_start_at),
+          reg_end_at: dayjs(event.reg_end_at),
+          lottery_at: dayjs(event.lottery_at),
+          material_check_at: dayjs(event.material_check_at),
+          start_at: dayjs(event.start_at),
+          groups: event.groups.map((g) => ({
+            level: g.level,
+            dance_type: g.dance_type,
+            quota: g.quota,
+          })),
+          refund_policy: event.refund_policy,
+          work_duration_limit: event.work_duration_limit,
+          process_desc: event.process_desc,
+          honor_desc: event.honor_desc,
+          score_rules: event.score_rules ?? undefined,
+          prize_rules: event.prize_rules ?? undefined,
+          exclude_from_prize: event.exclude_from_prize,
+        });
+      })
+      .catch(() => message.error('模板赛事加载失败'));
+  }, [copyFromId, form, isEdit, message]);
+
+  const validateJson = (_: unknown, value?: string) => {
+    if (!value?.trim()) return Promise.resolve();
+    try {
+      JSON.parse(value);
+      return Promise.resolve();
+    } catch {
+      return Promise.reject(new Error('必须是合法 JSON'));
+    }
+  };
 
   const validateTimeline = (values: FormValues): string | null => {
     for (let i = 1; i < TIMELINE_FIELDS.length; i += 1) {
@@ -186,6 +239,8 @@ const EventEditForm: React.FC = () => {
       work_duration_limit: values.work_duration_limit,
       process_desc: values.process_desc,
       honor_desc: values.honor_desc,
+      score_rules: values.score_rules,
+      prize_rules: values.prize_rules,
       exclude_from_prize: values.exclude_from_prize,
     };
 
@@ -397,6 +452,20 @@ const EventEditForm: React.FC = () => {
             name="honor_desc"
             label="荣誉与奖金说明"
             rows={2}
+          />
+          <ProFormTextArea
+            name="score_rules"
+            label="积分规则 JSON"
+            rows={3}
+            placeholder='如 {"champion":100,"runner_up":80}；留空使用系统默认模板'
+            rules={[{ validator: validateJson }]}
+          />
+          <ProFormTextArea
+            name="prize_rules"
+            label="奖金规则 JSON"
+            rows={3}
+            placeholder='如 {"champion":2000,"runner_up":1000}；留空使用系统默认模板'
+            rules={[{ validator: validateJson }]}
           />
           <ProFormRadio.Group
             name="exclude_from_prize"

@@ -2,6 +2,7 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import {
   ModalForm,
   PageContainer,
+  ProFormSelect,
   ProFormText,
   ProFormTextArea,
   ProTable,
@@ -153,7 +154,7 @@ const RefundList: React.FC = () => {
             key="create"
             title="登记退款工单"
             trigger={<Button type="primary">登记退款</Button>}
-            onFinish={async (values: { order_no: string; reason: string }) => {
+            onFinish={async (values: { order_no: string; reason: string; applicant?: string }) => {
               await createRefundTicket(values);
               message.success('退款工单已登记');
               actionRef.current?.reload();
@@ -164,6 +165,17 @@ const RefundList: React.FC = () => {
               name="order_no"
               label="订单号"
               rules={[{ required: true, message: '请输入订单号' }]}
+            />
+            <ProFormSelect
+              name="applicant"
+              label="登记来源"
+              initialValue="phone"
+              options={[
+                { label: '客服会话', value: 'cs_chat' },
+                { label: '电话', value: 'phone' },
+                { label: '微信', value: 'wechat' },
+                { label: '其他', value: 'other' },
+              ]}
             />
             <ProFormTextArea
               name="reason"
