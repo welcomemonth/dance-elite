@@ -34,7 +34,11 @@ func (h *adminSeasonHandler) list(c *gin.Context) {
 		httpx.AbortError(c, err)
 		return
 	}
-	httpx.OK(c, gin.H{"list": list})
+	pageSize := len(list)
+	if pageSize == 0 {
+		pageSize = 1
+	}
+	httpx.OK(c, gin.H{"list": list, "total": len(list), "page": 1, "page_size": pageSize})
 }
 
 // create 创建赛季（恒为 upcoming，组别规则从系统设置复制）。
@@ -107,9 +111,15 @@ func registerAdminEventRoutes(group *gin.RouterGroup, svc *service.EventService)
 
 // list 赛事分页列表（status/level/keyword 筛选）。
 func (h *adminEventHandler) list(c *gin.Context) {
+	seasonID, ok := optionalInt64Query(c, "season_id")
+	if !ok {
+		httpx.AbortError(c, httpx.ErrBadRequest("season_id 不合法"))
+		return
+	}
 	q := model.AdminEventListQuery{
 		Status:   c.Query("status"),
 		Level:    c.Query("level"),
+		SeasonID: seasonID,
 		Keyword:  c.Query("keyword"),
 		Page:     queryInt(c, "page", 1),
 		PageSize: queryIntMax(c, "page_size", 20, 100),

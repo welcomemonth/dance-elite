@@ -56,6 +56,7 @@ func (s *EventService) List(ctx context.Context, q model.AdminEventListQuery) (*
 	events, total, err := s.stores.Events.List(ctx, store.EventFilter{
 		Status:   q.Status,
 		Level:    q.Level,
+		SeasonID: q.SeasonID,
 		Keyword:  q.Keyword,
 		Page:     q.Page,
 		PageSize: q.PageSize,

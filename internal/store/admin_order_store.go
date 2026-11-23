@@ -81,17 +81,19 @@ func (s *OrderStore) ListAdmin(ctx context.Context, f AdminOrderFilter) ([]Admin
 	}
 	if f.Keyword != "" {
 		like := "%" + f.Keyword + "%"
-		where = append(where, `(pl.name LIKE ? OR o.order_no LIKE ?
+		where = append(where, `(pl.name LIKE ? OR pl.player_no LIKE ? OR o.order_no LIKE ?
+			OR COALESCE(r.contact_phone, u.phone) LIKE ?
 			OR EXISTS (SELECT 1 FROM payments p
 			           WHERE p.order_id = o.id AND p.type = 'pay' AND p.transaction_id LIKE ?))`)
-		args = append(args, like, like, like)
+		args = append(args, like, like, like, like, like)
 	}
 	cond := strings.Join(where, " AND ")
 	from := `FROM orders o
 		JOIN registrations r ON r.id = o.registration_id
 		JOIN events e ON e.id = r.event_id
 		JOIN event_groups g ON g.id = r.group_id
-		JOIN players pl ON pl.id = r.player_id`
+		JOIN players pl ON pl.id = r.player_id
+		LEFT JOIN users u ON u.id = r.user_id`
 
 	var total int64
 	if err := s.db.sql.QueryRowContext(ctx,

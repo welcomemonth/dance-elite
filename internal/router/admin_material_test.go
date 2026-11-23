@@ -54,7 +54,7 @@ func TestAdminMissingMaterialsHTTP(t *testing.T) {
 	assertCode(t, postJSON(t, engine, http.MethodGet,
 		"/api/v1/admin/materials/missing?deadline_state=locked", "", adminHeaders), 40001)
 
-	// 标记已联系：cs 可操作；响应字段收敛。
+	// 标记已联系：cs 只读（40301），admin 可操作；响应字段收敛。
 	contactPath := fmt.Sprintf("/api/v1/admin/materials/missing/%d/contacted", registrationID)
 	assertCode(t, postJSON(t, engine, http.MethodPost, contactPath, `{"note":"已电话提醒"}`, nil), 40101)
 	assertCode(t, postJSON(t, engine, http.MethodPost, contactPath,
@@ -62,7 +62,10 @@ func TestAdminMissingMaterialsHTTP(t *testing.T) {
 	assertCode(t, postJSON(t, engine, http.MethodPost,
 		"/api/v1/admin/materials/missing/999999/contacted", `{"note":"x"}`, adminHeaders), 40401)
 
-	w = postJSON(t, engine, http.MethodPost, contactPath, `{"note":"已电话提醒"}`, csHeaders)
+	assertCode(t, postJSON(t, engine, http.MethodPost, contactPath,
+		`{"note":"已电话提醒"}`, csHeaders), 40301)
+
+	w = postJSON(t, engine, http.MethodPost, contactPath, `{"note":"已电话提醒"}`, adminHeaders)
 	if w.Code != http.StatusOK {
 		t.Fatalf("contacted status = %d, body = %s", w.Code, w.Body)
 	}

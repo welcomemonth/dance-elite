@@ -6,6 +6,7 @@ const (
 	MiniappRegistrationStatusPaid      = "paid"      // 已支付
 	MiniappRegistrationStatusRefunding = "refunding" // 退款处理中
 	MiniappRegistrationStatusRefunded  = "refunded"  // 已退款
+	MiniappRegistrationStatusWithdrawn = "withdrawn" // 已退赛（名额已释放，未退款）
 )
 
 // MiniappRegistrationItem 是「我的报名」列表项（API 文档 3.3）。

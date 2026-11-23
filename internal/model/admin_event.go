@@ -185,6 +185,7 @@ type AdminEventListResponse struct {
 type AdminEventListQuery struct {
 	Status   string
 	Level    string
+	SeasonID int64
 	Keyword  string
 	Page     int
 	PageSize int

@@ -56,7 +56,7 @@ func (s *RegistrationQueryService) Detail(ctx context.Context, userID, registrat
 		return nil, httpx.ErrInternal(err, "加载报名详情失败，请稍后重试")
 	}
 
-	status, ok := miniappRegistrationStatusOf(row.Order.Status)
+	status, ok := miniappRegistrationStatusOf(row.Order.Status, row.Registration.Status)
 	if !ok {
 		return nil, httpx.ErrNotFound("报名不存在或非本人")
 	}
@@ -106,10 +106,14 @@ func (s *RegistrationQueryService) latestRefund(ctx context.Context, orderID int
 	return miniappRefundOf(ticket), nil
 }
 
-// miniappRegistrationStatusOf 把订单状态映射为小程序报名展示状态（API 文档 3.3）。
-func miniappRegistrationStatusOf(orderStatus string) (string, bool) {
+// miniappRegistrationStatusOf 把订单/报名状态映射为小程序报名展示状态（API 文档 3.3）。
+// 报名已退赛但订单仍 paid（后台人工退赛、未退款）时展示 withdrawn。
+func miniappRegistrationStatusOf(orderStatus, registrationStatus string) (string, bool) {
 	switch orderStatus {
 	case model.OrderStatusPaid:
+		if registrationStatus == model.RegistrationStatusWithdrawn {
+			return model.MiniappRegistrationStatusWithdrawn, true
+		}
 		return model.MiniappRegistrationStatusPaid, true
 	case model.OrderStatusRefunding:
 		return model.MiniappRegistrationStatusRefunding, true

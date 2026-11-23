@@ -35,6 +35,7 @@ func (h *adminCSTicketHandler) list(c *gin.Context) {
 	resp, err := h.svc.List(c.Request.Context(), adminID, role, model.AdminCSTicketListQuery{
 		Type:     c.Query("type"),
 		Status:   c.Query("status"),
+		Keyword:  c.Query("keyword"),
 		Page:     queryInt(c, "page", 1),
 		PageSize: queryIntMax(c, "page_size", 20, 100),
 	})

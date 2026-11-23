@@ -55,6 +55,7 @@ func (s *MaterialCollectionService) List(ctx context.Context, q model.AdminMissi
 		DanceType:     q.DanceType,
 		MissingItem:   q.MissingItem,
 		DeadlineState: q.DeadlineState,
+		Keyword:       strings.TrimSpace(q.Keyword),
 		Now:           utils.FormatISO(s.now()),
 		Page:          page,
 		PageSize:      pageSize,
