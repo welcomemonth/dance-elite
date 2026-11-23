@@ -1,6 +1,7 @@
 import {
   PageContainer,
   ProForm,
+  ProFormDatePicker,
   ProFormDigit,
   ProFormRadio,
   ProFormSelect,
@@ -66,6 +67,7 @@ const ManualCreate: React.FC = () => {
         player_name: values.player_name,
         id_type: values.id_type,
         id_card_no: values.id_card_no,
+        birth_date: values.birth_date,
         nationality: values.nationality,
         institution: values.institution,
         contact_phone: values.contact_phone,
@@ -129,6 +131,16 @@ const ManualCreate: React.FC = () => {
           label="证件号"
           tooltip="加密存储，不与大陆身份证判重库混用"
           rules={[{ required: true, message: '请输入证件号' }]}
+        />
+        <ProFormDatePicker
+          name="birth_date"
+          label="出生日期"
+          tooltip="护照/港澳台/其他证件必填；服务端据此校验组别年龄"
+          fieldProps={{ format: 'YYYY-MM-DD' }}
+          transform={(value: string | { format: (p: string) => string } | undefined) =>
+            value && typeof value !== 'string' ? value.format('YYYY-MM-DD') : value
+          }
+          rules={[{ required: true, message: '请选择出生日期' }]}
         />
         <ProFormText name="nationality" label="国籍/地区" />
         <ProFormText name="institution" label="机构名称" />

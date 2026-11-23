@@ -76,6 +76,12 @@ const ManualList: React.FC = () => {
       render: (_, record) => formatDateTime(record.created_at),
     },
     {
+      title: '关键字',
+      dataIndex: 'keyword',
+      hideInTable: true,
+      fieldProps: { placeholder: '选手姓名 / 订单号' },
+    },
+    {
       title: '操作',
       valueType: 'option',
       width: 100,
@@ -96,10 +102,13 @@ const ManualList: React.FC = () => {
         headerTitle="人工报名"
         rowKey="order_no"
         columns={columns}
-        search={false}
+        search={{ labelWidth: 'auto' }}
         request={async (params) => {
           const data = await listOrders({
             source: 'manual',
+            event_id: params.event_id as number | undefined,
+            status: params.status as OrderStatus | undefined,
+            keyword: params.keyword as string | undefined,
             page: params.current,
             page_size: params.pageSize,
           });

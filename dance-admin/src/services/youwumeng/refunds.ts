@@ -27,6 +27,7 @@ export async function listRefundTickets(
 export async function createRefundTicket(data: {
   order_no: string;
   reason: string;
+  applicant?: string;
 }): Promise<{ ticket_no: string; status: string }> {
   return request('/api/v1/admin/refund-tickets', { method: 'POST', data });
 }

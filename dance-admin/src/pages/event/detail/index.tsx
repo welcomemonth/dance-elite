@@ -7,14 +7,11 @@ import {
   App,
   Button,
   Card,
-  Col,
   InputNumber,
   Modal,
   Popconfirm,
-  Row,
   Space,
   Steps,
-  Table,
   Tabs,
   Tag,
   Typography,
@@ -35,7 +32,18 @@ import {
   DANCE_TYPE_LABELS,
 } from '@/services/youwumeng/labels';
 import { formatDate, formatDateTime, formatMoney } from '@/services/youwumeng/format';
-import type { EventBrief, EventGroup } from '@/services/youwumeng/typings';
+import {
+  exportEventRegistrations,
+  listAdminRegistrations,
+} from '@/services/youwumeng/registrations';
+import type { AdminRegistrationItem, EventGroup } from '@/services/youwumeng/typings';
+
+const REGISTRATION_STATUS_LABELS: Record<AdminRegistrationItem['status'], string> = {
+  pending_payment: '待支付',
+  active: '有效',
+  canceled: '已取消',
+  withdrawn: '已退赛',
+};
 
 /** 赛事详情页：顶部信息 + 时间线 + 音频审核链接 + Tab（设计文档 2.3） */
 const EventDetail: React.FC = () => {
@@ -269,14 +277,120 @@ const EventDetail: React.FC = () => {
                 key: 'orders',
                 label: '报名名单',
                 children: (
-                  <Space direction="vertical">
-                    <Typography.Text type="secondary">
-                      该赛事全部有效报名请在订单管理中查看（自动按本赛事筛选）。
-                    </Typography.Text>
-                    <Button onClick={() => history.push(`/order/list?event_id=${event.id}`)}>
-                      前往订单管理
-                    </Button>
-                  </Space>
+                  <ProTable<AdminRegistrationItem>
+                    rowKey="registration_id"
+                    size="small"
+                    search={false}
+                    options={false}
+                    pagination={{ defaultPageSize: 20 }}
+                    columns={[
+                      {
+                        title: '选手',
+                        width: 150,
+                        render: (_, r) => (
+                          <Space direction="vertical" size={0}>
+                            <Typography.Text strong>{r.player_name}</Typography.Text>
+                            <Typography.Text type="secondary">{r.player_no}</Typography.Text>
+                          </Space>
+                        ),
+                      },
+                      {
+                        title: '组别·舞种',
+                        width: 130,
+                        render: (_, r) => `${r.level}·${DANCE_TYPE_LABELS[r.dance_type]}`,
+                      },
+                      {
+                        title: '机构',
+                        dataIndex: 'institution',
+                        width: 160,
+                        ellipsis: true,
+                        render: (v) => v || '—',
+                      },
+                      {
+                        title: '联系电话',
+                        dataIndex: 'contact_phone',
+                        width: 130,
+                        render: (v) => v || '—',
+                      },
+                      {
+                        title: '资料',
+                        width: 110,
+                        render: (_, r) =>
+                          r.missing_items.length === 0 ? (
+                            <Tag color="success">已齐</Tag>
+                          ) : (
+                            <Tag color="warning">
+                              缺 {r.missing_items.length}/{r.material_total}
+                            </Tag>
+                          ),
+                      },
+                      {
+                        title: '状态',
+                        dataIndex: 'status',
+                        width: 90,
+                        render: (_, r) => (
+                          <Tag color={r.status === 'active' ? 'success' : 'default'}>
+                            {REGISTRATION_STATUS_LABELS[r.status] ?? r.status}
+                          </Tag>
+                        ),
+                      },
+                      {
+                        title: '来源',
+                        dataIndex: 'source',
+                        width: 90,
+                        render: (v) => (v === 'manual' ? '后台人工' : '小程序'),
+                      },
+                      {
+                        title: '订单号',
+                        dataIndex: 'order_no',
+                        width: 200,
+                        render: (_, r) =>
+                          r.order_no ? (
+                            <Typography.Link
+                              onClick={() => history.push(`/order/detail/${r.order_no}`)}
+                            >
+                              {r.order_no}
+                            </Typography.Link>
+                          ) : (
+                            '—'
+                          ),
+                      },
+                      {
+                        title: '报名时间',
+                        dataIndex: 'created_at',
+                        width: 150,
+                        render: (_, r) => formatDateTime(r.created_at),
+                      },
+                    ]}
+                    request={async (params) => {
+                      const data = await listAdminRegistrations({
+                        event_id: event.id,
+                        status: 'active',
+                        page: params.current,
+                        page_size: params.pageSize,
+                      });
+                      return { data: data.list, total: data.total, success: true };
+                    }}
+                    toolBarRender={() =>
+                      access.canAdmin
+                        ? [
+                            <Button
+                              key="export"
+                              onClick={async () => {
+                                try {
+                                  await exportEventRegistrations(event.id);
+                                  message.success('导出已开始，请查看浏览器下载');
+                                } catch {
+                                  message.error('导出失败，请稍后重试');
+                                }
+                              }}
+                            >
+                              导出选手名单
+                            </Button>,
+                          ]
+                        : []
+                    }
+                  />
                 ),
               },
               {
@@ -304,6 +418,18 @@ const EventDetail: React.FC = () => {
                   <Button onClick={() => history.push(`/order/refunds?event_id=${event.id}`)}>
                     前往退款工单
                   </Button>
+                ),
+              },
+              {
+                key: 'scores',
+                label: '成绩',
+                children: (
+                  <Alert
+                    type="info"
+                    showIcon
+                    title="成绩录入随榜单模块上线后开放。"
+                    description="榜单中心目前在首发范围外，成绩录入、积分重算与榜单发布将在 S4 一起开放。"
+                  />
                 ),
               },
             ]}

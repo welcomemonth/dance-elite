@@ -153,6 +153,8 @@ export interface EventBrief {
   work_duration_limit: string;
   process_desc: string;
   honor_desc: string;
+  score_rules: string | null;
+  prize_rules: string | null;
   exclude_from_prize: boolean;
   audio_review_token: string | null;
   created_at: string;
@@ -180,6 +182,8 @@ export interface EventInput {
   work_duration_limit?: string;
   process_desc?: string;
   honor_desc?: string;
+  score_rules?: string;
+  prize_rules?: string;
   exclude_from_prize?: boolean;
   publish?: boolean;
 }
@@ -371,6 +375,8 @@ export interface ManualRegistrationInput {
   player_name: string;
   id_type: IdType;
   id_card_no: string;
+  /** 出生日期（YYYY-MM-DD）；非身份证证件必填，服务端据此校验组别年龄 */
+  birth_date: string;
   nationality?: string;
   institution?: string;
   contact_phone: string;
@@ -704,4 +710,30 @@ export interface AudioReviewEntry {
 export interface AudioReviewData {
   event_name: string;
   entries: AudioReviewEntry[];
+}
+
+// ---------- 后台报名名单（T17 / S2） ----------
+
+export type RegistrationItemStatus = 'pending_payment' | 'active' | 'canceled' | 'withdrawn';
+
+export interface AdminRegistrationItem {
+  registration_id: number;
+  order_no: string | null;
+  event_id: number;
+  event_name: string;
+  group_id: number;
+  level: AgeLevel;
+  dance_type: DanceType;
+  player_no: string;
+  player_name: string;
+  id_type: 'id_card' | 'passport' | 'hk_macau' | 'other';
+  institution: string | null;
+  contact_phone: string | null;
+  status: RegistrationItemStatus;
+  source: 'miniapp' | 'manual';
+  material_completed: number;
+  material_total: number;
+  missing_items: string[];
+  material_updated_at: string | null;
+  created_at: string;
 }

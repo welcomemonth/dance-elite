@@ -12,6 +12,7 @@ import type {
 export interface EventListParams {
   status?: EventStatus;
   level?: EventLevel;
+  season_id?: number;
   keyword?: string;
   page?: number;
   page_size?: number;

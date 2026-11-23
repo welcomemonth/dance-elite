@@ -11,11 +11,13 @@ import {
 } from '@/services/youwumeng/labels';
 import { formatDate, formatMoney } from '@/services/youwumeng/format';
 import {
+  closeRegistration,
   generateAudioReviewToken,
   listEvents,
   offlineEvent,
   publishEvent,
 } from '@/services/youwumeng/events';
+import { listSeasons } from '@/services/youwumeng/seasons';
 import type { EventBrief, EventLevel, EventStatus } from '@/services/youwumeng/typings';
 
 const STATUS_COLORS: Record<EventStatus, string> = {
@@ -44,6 +46,13 @@ const EventList: React.FC = () => {
     manual: true,
     onSuccess: () => {
       message.success('已下架，小程序端立即不可见');
+      actionRef.current?.reload();
+    },
+  });
+  const { run: runCloseRegistration } = useService(closeRegistration, {
+    manual: true,
+    onSuccess: () => {
+      message.success('已截止报名，小程序端立即不可再报名');
       actionRef.current?.reload();
     },
   });
@@ -122,6 +131,16 @@ const EventList: React.FC = () => {
       },
     },
     {
+      title: '赛季',
+      dataIndex: 'season_id',
+      hideInTable: true,
+      valueType: 'select',
+      request: async () => {
+        const list = await listSeasons();
+        return list.map((s) => ({ label: s.name, value: s.id }));
+      },
+    },
+    {
       title: '操作',
       valueType: 'option',
       width: 240,
@@ -148,6 +167,15 @@ const EventList: React.FC = () => {
               <Typography.Link>发布</Typography.Link>
             </Popconfirm>
           )}
+          {access.canAdmin && record.status === 'registering' && (
+            <Popconfirm
+              title="截止报名"
+              description="截止后小程序端立即不可再报名，已支付报名不受影响；是否继续？"
+              onConfirm={() => runCloseRegistration(record.id)}
+            >
+              <Typography.Link>截止报名</Typography.Link>
+            </Popconfirm>
+          )}
           {access.canAdmin && ['registering', 'unpublished', 'draft', 'reg_closed'].includes(record.status) && (
             <Popconfirm
               title="下架赛事"
@@ -156,6 +184,13 @@ const EventList: React.FC = () => {
             >
               <Typography.Link type="danger">下架</Typography.Link>
             </Popconfirm>
+          )}
+          {access.canAdmin && (
+            <Typography.Link
+              onClick={() => history.push(`/event/create?copyFrom=${record.id}`)}
+            >
+              复制新建
+            </Typography.Link>
           )}
           {access.canAdmin && (
             <Popconfirm
@@ -187,6 +222,7 @@ const EventList: React.FC = () => {
           const data = await listEvents({
             status: params.status as EventStatus | undefined,
             level: params.level as EventLevel | undefined,
+            season_id: params.season_id as number | undefined,
             keyword: params.name,
             page: params.current,
             page_size: params.pageSize,

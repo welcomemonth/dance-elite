@@ -162,7 +162,7 @@ export interface BindPhoneResult {
 }
 
 /** 「我的报名」展示状态（API 文档 3.3/3.4，由订单状态映射）。 */
-export type RegistrationStatus = "paid" | "refunding" | "refunded";
+export type RegistrationStatus = "paid" | "refunding" | "refunded" | "withdrawn";
 
 /** 资料完成度（服务端实时计算，missing 为空即资料已齐）。 */
 export interface MaterialStatus {

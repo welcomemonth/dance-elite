@@ -19,6 +19,10 @@ export default [
     component: './audio-review',
   },
   {
+    path: '/account/password',
+    component: './account/password',
+  },
+  {
     path: '/dashboard',
     name: '数据看板',
     icon: 'dashboard',
