@@ -121,7 +121,7 @@ export const SEASON_STATUS_LABELS: Record<SeasonStatus, string> = {
 export const AWARD_LABELS: Record<Award, string> = {
   champion: '冠军',
   runner_up: '亚军',
-  third_place: '季军',
+  third: '季军',
   elite_dancer: '菁英舞者',
   special_gold: '特金奖',
   gold: '金奖',

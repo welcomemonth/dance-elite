@@ -579,7 +579,7 @@ export interface Season {
   updated_at: string;
 }
 
-export type Award = 'champion' | 'runner_up' | 'third_place' | 'elite_dancer' | 'special_gold' | 'gold' | 'silver';
+export type Award = 'champion' | 'runner_up' | 'third' | 'elite_dancer' | 'special_gold' | 'gold' | 'silver';
 
 export interface ScoreEntry {
   entry_id: number;
@@ -615,10 +615,10 @@ export interface ScorePreview {
 
 export interface ScoreRules {
   /** 名次基础分表 */
-  base_points: Record<Award, number>;
+  base_points: Partial<Record<Award, number>>;
   /** 级别权重 */
-  level_weights: { grade_a: number; super: number; final: number };
-  /** 人数系数分档（按榜单参赛人数） */
+  level_weights: Partial<Record<'grade_a' | 'super' | 'final', number>>;
+  /** 人数系数分档（按榜单参赛人数，降序匹配） */
   size_bands: { min_players: number; factor: number }[];
 }
 
@@ -637,6 +637,7 @@ export interface LeaderboardRow {
 }
 
 export interface Leaderboard {
+  board_id: number;
   level: AgeLevel;
   dance_type: DanceType;
   rows: LeaderboardRow[];

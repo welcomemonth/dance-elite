@@ -8,13 +8,18 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
-import { useService } from '@/services/youwumeng/useService';
 import { App, Button, Popconfirm, Tag } from 'antd';
 import React, { useState } from 'react';
 import { formatDate } from '@/services/youwumeng/format';
-import { SEASON_STATUS_LABELS, boardLabel } from '@/services/youwumeng/labels';
-import { archiveSeason, createSeason, listSeasons, updateSeason } from '@/services/youwumeng/seasons';
+import { boardLabel, SEASON_STATUS_LABELS } from '@/services/youwumeng/labels';
+import {
+  archiveSeason,
+  createSeason,
+  listSeasons,
+  updateSeason,
+} from '@/services/youwumeng/seasons';
 import type { Season } from '@/services/youwumeng/typings';
+import { useService } from '@/services/youwumeng/useService';
 
 const STATUS_COLORS: Record<Season['status'], string> = {
   upcoming: 'default',
@@ -69,14 +74,17 @@ const SeasonList: React.FC = () => {
     {
       title: '起止时间',
       width: 220,
-      render: (_, r) => `${formatDate(r.start_date)} ~ ${formatDate(r.end_date)}`,
+      render: (_, r) =>
+        `${formatDate(r.start_date)} ~ ${formatDate(r.end_date)}`,
     },
     {
       title: '状态',
       dataIndex: 'status',
       width: 100,
       render: (_, r) => (
-        <Tag color={STATUS_COLORS[r.status]}>{SEASON_STATUS_LABELS[r.status]}</Tag>
+        <Tag color={STATUS_COLORS[r.status]}>
+          {SEASON_STATUS_LABELS[r.status]}
+        </Tag>
       ),
     },
     {
@@ -93,11 +101,7 @@ const SeasonList: React.FC = () => {
       render: (_, r) =>
         access.canAdmin ? (
           <>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => setEditing(r)}
-            >
+            <Button type="link" size="small" onClick={() => setEditing(r)}>
               编辑
             </Button>
             {r.status !== 'archived' && (
@@ -138,7 +142,11 @@ const SeasonList: React.FC = () => {
                     </Button>
                   }
                   modalProps={{ destroyOnHidden: true }}
-                  onFinish={async (values: { name: string; start_date: string; end_date: string }) => {
+                  onFinish={async (values: {
+                    name: string;
+                    start_date: string;
+                    end_date: string;
+                  }) => {
                     await runCreate(values);
                     return true;
                   }}
@@ -173,7 +181,11 @@ const SeasonList: React.FC = () => {
         }}
         initialValues={editing ?? undefined}
         modalProps={{ destroyOnHidden: true }}
-        onFinish={async (values: { name: string; start_date: string; end_date: string }) => {
+        onFinish={async (values: {
+          name: string;
+          start_date: string;
+          end_date: string;
+        }) => {
           if (!editing) return false;
           await runUpdate(editing.id, values);
           return true;
