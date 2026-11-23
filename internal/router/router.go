@@ -39,6 +39,7 @@ type Deps struct {
 	Players             *service.PlayerService
 	AdminOrders         *service.AdminOrderQueryService
 	AdminRegs           *service.AdminRegistrationQueryService
+	AdminRegActions     *service.AdminRegistrationActionService
 	MaterialMissing     *service.MaterialCollectionService
 	Dashboard           *service.DashboardService
 	Accounts            *service.AdminAccountService
@@ -163,7 +164,7 @@ func New(deps Deps) *gin.Engine {
 			registerAdminOrderRoutes(admin, deps.AdminOrders)
 		}
 		if deps.AdminRegs != nil {
-			registerAdminRegistrationRoutes(admin, deps.AdminRegs)
+			registerAdminRegistrationRoutes(admin, deps.AdminRegs, deps.AdminRegActions)
 		}
 		// 后台资料催收（T17）：名单与标记已联系 cs/admin 均可。
 		if deps.MaterialMissing != nil {

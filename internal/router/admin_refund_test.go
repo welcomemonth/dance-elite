@@ -50,6 +50,7 @@ func newRefundTestEngine(t *testing.T) (*gin.Engine, *token.Signer, *store.DB) {
 		Players:         players,
 		AdminOrders:     service.NewAdminOrderQueryService(stores),
 		AdminRegs:       service.NewAdminRegistrationQueryService(stores),
+		AdminRegActions: service.NewAdminRegistrationActionService(stores),
 		MaterialMissing: service.NewMaterialCollectionService(stores),
 		Dashboard:       service.NewDashboardService(stores),
 		Accounts:        service.NewAdminAccountService(stores, signer),
