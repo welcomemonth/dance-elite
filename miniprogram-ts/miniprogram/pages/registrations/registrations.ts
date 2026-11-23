@@ -3,6 +3,7 @@ import { CustomComponent, DefineComponent, navigateTo, RootComponent } from "ann
 import { listAllRegistrations } from "../../api/registrations";
 import type { $EmptyState } from "../../components/empty-state/empty-state";
 import type { RegistrationListItem } from "../../types/models";
+import { reconcilePendingOrder } from "../../utils/pending-order";
 import {
   REGISTRATION_FILTERS,
   registrationCardView,
@@ -46,6 +47,8 @@ const rootComponent = RootComponent()({
     async loadData(stopPullDown = false): Promise<void> {
       this.setData({ loading: true, loadError: null });
       try {
+        // 回调丢失兜底：重进「我的报名」时先查一次遗留待支付订单。
+        await reconcilePendingOrder().catch(() => undefined);
         const list = await listAllRegistrations();
         this.setData({ list });
       } catch (error) {

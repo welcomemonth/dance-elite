@@ -57,6 +57,9 @@
           <image class="event-card__meta-icon" src="/assets/icons/calendar.svg" />
           <text>{{item.dateText}}</text>
         </view>
+        <view wx:if="{{item.countdownText}}" class="event-card__countdown">
+          距截止报名 {{item.countdownText}}
+        </view>
 
         <view class="event-card__bottom">
           <view>

@@ -6,6 +6,8 @@
     "pages/event-detail/event-detail",
     "pages/register/register",
     "pages/register-success/register-success",
+    "pages/waitlist/waitlist",
+    "pages/waitlist-success/waitlist-success",
     "pages/registrations/registrations",
     "pages/registration-detail/registration-detail",
     "pages/materials/materials",

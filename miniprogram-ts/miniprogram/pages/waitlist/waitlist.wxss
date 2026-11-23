@@ -1,0 +1,39 @@
+.waitlist-page {
+  padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
+}
+
+.waitlist-error {
+  padding: 96rpx 32rpx;
+}
+
+.waitlist-band {
+  padding: 32rpx 40rpx;
+  border-bottom: 2rpx solid #121217;
+  background: #ffc233;
+}
+
+.waitlist-band__title {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.waitlist-band__text {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+
+.waitlist-body {
+  padding: 40rpx;
+}
+
+.app-field + .app-field {
+  margin-top: 28rpx;
+}
+
+.app-field__input--readonly {
+  display: flex;
+  align-items: center;
+  background: rgba(18, 18, 23, 0.04);
+  color: #6c6c89;
+}

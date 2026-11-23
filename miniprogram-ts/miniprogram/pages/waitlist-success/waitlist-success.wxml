@@ -1,0 +1,43 @@
+<view class="app-page waitlist-success-page">
+  <nav-bar title="候补已提交" show-back="{{false}}" bg="#fffdf8" />
+
+  <view class="waitlist-success-hero">
+    <view class="waitlist-success-icon">
+      <image class="waitlist-success-icon__image" src="/assets/icons/check.svg" />
+    </view>
+    <view class="waitlist-success-title">候补已提交</view>
+    <view class="waitlist-success-desc">
+      如有选手退赛，工作人员将按提交顺序电话联系您。候补不收取费用，确认名额后需重新完成报名支付。
+    </view>
+  </view>
+
+  <view class="waitlist-success-card">
+    <view class="waitlist-success-row">
+      <text class="waitlist-success-row__label">赛事</text>
+      <text class="waitlist-success-row__value">{{eventName}}</text>
+    </view>
+    <view class="waitlist-success-row">
+      <text class="waitlist-success-row__label">组别 / 舞种</text>
+      <text class="waitlist-success-row__value">{{groupText}}</text>
+    </view>
+    <view class="waitlist-success-row">
+      <text class="waitlist-success-row__label">选手</text>
+      <text class="waitlist-success-row__value">{{playerName}}</text>
+    </view>
+    <view class="waitlist-success-row">
+      <text class="waitlist-success-row__label">排队序号</text>
+      <text class="waitlist-success-row__value waitlist-success-row__value--strong">
+        第 {{positionNo}} 位
+      </text>
+    </view>
+  </view>
+
+  <view class="waitlist-success-note">
+    可在「我的 - 我的候补」查看排队状态；排队中可自助取消，取消仅移出队列，不涉及退款。
+  </view>
+
+  <view class="waitlist-success-actions">
+    <button class="app-btn app-btn--primary" bind:tap="onGoWaitlists">查看我的候补</button>
+    <button class="app-btn" bind:tap="onGoEvents">返回赛事列表</button>
+  </view>
+</view>

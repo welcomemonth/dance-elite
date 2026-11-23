@@ -17,7 +17,12 @@
 
     <view class="register-body">
       <view class="register-section">
-        <view class="register-section__title">选手信息</view>
+        <view class="register-section__head">
+          <view class="register-section__title">选手信息</view>
+          <view wx:if="{{hasHistory}}" class="register-history" bind:tap="onHistoryTap">
+            从历史报名选择
+          </view>
+        </view>
 
         <view class="app-field">
           <view class="app-field__label">选手姓名<text class="app-field__required">*</text></view>
@@ -58,8 +63,9 @@
 
       <view class="register-section">
         <view class="register-section__title">组别判定</view>
-        <view class="register-note">
-          提交后由系统根据身份证出生年份自动匹配 U11 / U13 / U15 组别，无需手动选择。
+        <view class="register-group {{groupInfo ? 'register-group--matched' : ''}}">
+          <view class="register-group__hint">依据身份证号自动判定</view>
+          <view class="register-group__value">{{groupText}}</view>
         </view>
       </view>
 
@@ -69,7 +75,7 @@
           <view
             wx:for="{{danceOptions}}"
             wx:key="value"
-            class="dance-option {{item.value === danceType ? 'dance-option--active' : ''}}"
+            class="dance-option {{item.value === danceType ? 'dance-option--active' : ''}} {{item.disabled ? 'dance-option--disabled' : ''}}"
             data-value="{{item.value}}"
             bind:tap="onDanceTap"
           >
@@ -81,7 +87,7 @@
           </view>
         </view>
         <view class="register-note">
-          同一赛事一人只能报名一个组别，可报名多个舞种；名额以提交时服务端校验为准。
+          同一赛事一人只能报名一个组别，可报名多个舞种；名额以提交时服务端校验为准。名额已满时按钮会变为“提交候补”。
         </view>
       </view>
     </view>
@@ -94,6 +100,21 @@
       >
         {{submitText}}
       </button>
+    </view>
+
+    <view wx:if="{{noIdModal}}" class="register-mask">
+      <view class="register-modal">
+        <view class="register-modal__title">无法在线报名</view>
+        <view class="register-modal__text">
+          您暂无中国大陆身份证号，无法在线报名。请联系客服登记，由工作人员人工处理。
+        </view>
+        <view class="register-modal__actions">
+          <button class="app-btn" bind:tap="onNoIdClose">返回</button>
+          <button class="app-btn app-btn--primary" open-type="contact" bind:tap="onNoIdClose">
+            联系客服
+          </button>
+        </view>
+      </view>
     </view>
   </block>
 </view>

@@ -90,3 +90,12 @@
   gap: 20rpx;
   padding: 0 32rpx;
 }
+
+.success-link {
+  padding: 20rpx 0;
+  color: #6c6c89;
+  font-size: 24rpx;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 6rpx;
+}

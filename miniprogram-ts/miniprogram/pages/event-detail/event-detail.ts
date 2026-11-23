@@ -1,17 +1,19 @@
 import { DefineComponent, navigateTo, RootComponent } from "annil";
 
 import { getEventDetail } from "../../api/events";
-import type { EventDetail, GroupLevel } from "../../types/models";
+import type { DanceType, EventDetail, GroupLevel } from "../../types/models";
 import {
   danceTypeText,
   eventLevelText,
   eventStatusText,
+  formatCountdown,
   formatEventDate,
   formatEventDeadline,
   formatEventFee,
 } from "../../utils/event";
 import { formatDate } from "../../utils/format";
 import type { $Register } from "../register/register";
+import type { $Waitlist } from "../waitlist/waitlist";
 
 interface TimelineView {
   label: string;
@@ -21,6 +23,8 @@ interface TimelineView {
 
 interface GroupItemView {
   groupId: number;
+  level: GroupLevel;
+  danceType: DanceType;
   danceTypeText: string;
   registered: number;
   quota: number;
@@ -29,6 +33,7 @@ interface GroupItemView {
   tagClass: string;
   percent: number;
   enabled: boolean;
+  canWaitlist: boolean;
 }
 
 interface GroupSectionView {
@@ -38,6 +43,8 @@ interface GroupSectionView {
 }
 
 const LEVEL_ORDER: GroupLevel[] = ["U11", "U13", "U15"];
+
+let countdownTimer: number | null = null;
 
 function timelineView(event: EventDetail): TimelineView[] {
   const nodes: Array<{ label: string; value: string | null }> = [
@@ -65,8 +72,11 @@ function groupSections(event: EventDetail): GroupSectionView[] {
     const remaining = Math.max(0, group.remaining);
     const percent =
       group.quota > 0 ? Math.min(100, Math.round((group.registered / group.quota) * 100)) : 0;
+    const full = group.enabled && remaining === 0;
     const item: GroupItemView = {
       groupId: group.group_id,
+      level: group.level,
+      danceType: group.dance_type,
       danceTypeText: danceTypeText(group.dance_type),
       registered: group.registered,
       quota: group.quota,
@@ -81,6 +91,7 @@ function groupSections(event: EventDetail): GroupSectionView[] {
             : "",
       percent,
       enabled: group.enabled,
+      canWaitlist: full && event.status === "registering",
     };
     const items = byLevel.get(group.level) ?? [];
     items.push(item);
@@ -104,6 +115,7 @@ const rootComponent = RootComponent()({
     loading: true,
     loadError: null as string | null,
     honorsOpen: false,
+    nowTs: Date.now(),
   },
   computed: {
     levelText(): string {
@@ -129,14 +141,20 @@ const rootComponent = RootComponent()({
         return "";
       }
       if (this.data.event.status === "registering") {
-        return this.data.event.timeline.reg_end_at
-          ? `截止报名：${formatEventDeadline(this.data.event.timeline.reg_end_at)}`
-          : "报名进行中";
+        const deadline = this.data.event.timeline.reg_end_at;
+        const countdown = formatCountdown(deadline, this.data.nowTs);
+        if (countdown) {
+          return `距截止报名 ${countdown}`;
+        }
+        return deadline ? `截止报名：${formatEventDeadline(deadline)}` : "报名进行中";
       }
       if (this.data.event.status === "upcoming") {
-        return this.data.event.timeline.reg_start_at
-          ? `${formatEventDeadline(this.data.event.timeline.reg_start_at)} 开始报名`
-          : "暂未开始报名";
+        const start = this.data.event.timeline.reg_start_at;
+        const countdown = formatCountdown(start, this.data.nowTs);
+        if (countdown) {
+          return `距开始报名 ${countdown}`;
+        }
+        return start ? `${formatEventDeadline(start)} 开始报名` : "暂未开始报名";
       }
       return "报名已截止";
     },
@@ -187,15 +205,40 @@ const rootComponent = RootComponent()({
         this.setData({ loading: false, loadError: "赛事参数不正确" });
         return;
       }
+    },
+    onShow() {
+      if (!this.data.eventId || this.data.eventId <= 0) {
+        return;
+      }
       void this.loadEvent();
+      this.startTimer();
+    },
+    onHide() {
+      this.stopTimer();
+    },
+    onUnload() {
+      this.stopTimer();
     },
   },
   methods: {
+    startTimer() {
+      this.stopTimer();
+      this.setData({ nowTs: Date.now() });
+      countdownTimer = setInterval(() => {
+        this.setData({ nowTs: Date.now() });
+      }, 60 * 1000) as unknown as number;
+    },
+    stopTimer() {
+      if (countdownTimer !== null) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+    },
     async loadEvent(): Promise<void> {
       if (!this.data.eventId) {
         return;
       }
-      this.setData({ loading: true, loadError: null });
+      this.setData({ loading: !this.data.event, loadError: null });
       try {
         const event = await getEventDetail(this.data.eventId);
         this.setData({ event });
@@ -219,6 +262,25 @@ const rootComponent = RootComponent()({
       void navigateTo<$Register>({
         url: "/pages/register/register",
         data: { eventId: event.id },
+      });
+    },
+    onWaitlistTap(event: WechatMiniprogram.TouchEvent) {
+      const current = this.data.event;
+      const groupId = Number(event.currentTarget.dataset.groupId ?? 0);
+      const level = String(event.currentTarget.dataset.level ?? "") as GroupLevel;
+      const danceType = String(event.currentTarget.dataset.danceType ?? "") as DanceType;
+      if (!current || groupId <= 0 || !level || !danceType) {
+        return;
+      }
+      void navigateTo<$Waitlist>({
+        url: "/pages/waitlist/waitlist",
+        data: {
+          eventId: current.id,
+          eventName: current.name,
+          groupId,
+          level,
+          danceType,
+        },
       });
     },
   },

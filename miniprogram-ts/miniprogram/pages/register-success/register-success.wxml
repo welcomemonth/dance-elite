@@ -37,7 +37,8 @@
   </view>
 
   <view class="success-actions">
-    <button class="app-btn app-btn--primary" bind:tap="onGoMine">查看我的报名</button>
-    <button class="app-btn" bind:tap="onGoEvents">返回赛事列表</button>
+    <button class="app-btn app-btn--primary" bind:tap="onMaterials">上传参赛资料</button>
+    <button class="app-btn" bind:tap="onGoMine">查看我的报名</button>
+    <view class="success-link" bind:tap="onGoEvents">返回赛事列表</view>
   </view>
 </view>

@@ -269,3 +269,19 @@ export interface WaitlistItem {
   status: WaitlistStatus;
   created_at: string;
 }
+
+/** 提交候补请求体（POST /api/v1/events/{event_id}/waitlists，API 文档 5.1）。 */
+export interface SubmitWaitlistPayload {
+  group_id: number;
+  name: string;
+  id_card_no?: string;
+  institution?: string;
+  phone: string;
+}
+
+/** 提交候补响应（API 文档 5.1）。 */
+export interface SubmitWaitlistResult {
+  waitlist_id: number;
+  position_no: number;
+  status: "waiting";
+}
