@@ -80,7 +80,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
 /**
  * @name request 配置
  * 前端请求一律使用相对路径（/api/v1/admin/**、/h5/**）：
- * - mock 开发：`pnpm start`，由 mock/ 目录拦截；
+ * - mock 开发：`pnpm start:mock`，由 mock/ 目录拦截；
  * - 真实后端：`pnpm dev`（MOCK=none），由 config/proxy.ts 代理到 Go 服务。
  * @doc https://umijs.org/docs/max/request
  */
