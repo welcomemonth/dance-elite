@@ -62,7 +62,7 @@ func TestScorePublishComputesPointsAndSnapshot(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
-	// 3 人参赛 → 人数系数 0.8；冠军 100×1.0×0.8=80，亚军 80×0.8=64，季军 60×0.8=48。
+	// 3 人参赛 → 人数系数 0.8；冠军 100×1.0×0.8=80，亚军 85×0.8=68，季军 75×0.8=60。
 	boards, err := admin.ListLeaderboards(ctx, mustSeasonOf(t, f, eventID))
 	if err != nil {
 		t.Fatalf("leaderboards: %v", err)
@@ -102,7 +102,7 @@ func TestScorePublishComputesPointsAndSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("public ranking after hide: %v", err)
 	}
-	if len(pub.Ranking) != 2 || pub.Ranking[0].Rank != 1 || pub.Ranking[0].TotalPoints != 64 {
+	if len(pub.Ranking) != 2 || pub.Ranking[0].Rank != 1 || pub.Ranking[0].TotalPoints != 68 {
 		t.Fatalf("after hide ranking = %+v", pub.Ranking)
 	}
 }
@@ -150,7 +150,7 @@ func TestScorePublishPrizeAndCorrection(t *testing.T) {
 	}
 	for _, b := range boards.List {
 		if b.Level == "U13" && b.DanceType == "classical" {
-			if len(b.Rows) != 1 || b.Rows[0].TotalPoints != 64 {
+			if len(b.Rows) != 1 || b.Rows[0].TotalPoints != 68 {
 				t.Fatalf("after correction rows = %+v", b.Rows)
 			}
 		}

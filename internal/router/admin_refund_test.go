@@ -57,6 +57,10 @@ func newRefundTestEngine(t *testing.T) (*gin.Engine, *token.Signer, *store.DB) {
 		AdminLogs:       service.NewAdminLogQueryService(stores),
 		UserContents:    service.NewAdminUserQueryService(stores),
 		Contents:        service.NewContentService(stores),
+		Scores:          service.NewScoreService(stores, players),
+		Rankings:        service.NewRankingAdminService(stores),
+		Prizes:          service.NewPrizeService(stores),
+		PublicRanking:   service.NewPublicRankingService(stores),
 		Tokens:          signer,
 	}), signer, db
 }

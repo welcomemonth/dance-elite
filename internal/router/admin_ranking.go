@@ -24,26 +24,26 @@ func registerAdminRankingRoutes(group *gin.RouterGroup, scores *service.ScoreSer
 	write := group.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
 
 	// 赛季级规则。
-	group.GET("/seasons/:season_id/score-rules", h.getScoreRules)
-	write.PUT("/seasons/:season_id/score-rules", h.putScoreRules)
-	group.GET("/seasons/:season_id/prize-rules", h.getPrizeRules)
-	write.PUT("/seasons/:season_id/prize-rules", h.putPrizeRules)
+	group.GET("/seasons/:id/score-rules", h.getScoreRules)
+	write.PUT("/seasons/:id/score-rules", h.putScoreRules)
+	group.GET("/seasons/:id/prize-rules", h.getPrizeRules)
+	write.PUT("/seasons/:id/prize-rules", h.putPrizeRules)
 
 	// 成绩录入与纠错。
-	group.GET("/events/:event_id/scores", h.listScores)
-	write.POST("/events/:event_id/scores/preview", h.previewScores)
-	write.POST("/events/:event_id/scores", h.publishScores)
+	group.GET("/events/:id/scores", h.listScores)
+	write.POST("/events/:id/scores/preview", h.previewScores)
+	write.POST("/events/:id/scores", h.publishScores)
 	write.PUT("/scores/:entry_id", h.correctScore)
 
 	// 榜单与晋级。
-	group.GET("/seasons/:season_id/leaderboards", h.listLeaderboards)
-	write.PUT("/seasons/:season_id/leaderboards/:level/:dance_type/players/:player_id", h.updateLeaderboardRow)
-	group.GET("/seasons/:season_id/qualification-cards", h.listQualificationCards)
-	write.POST("/seasons/:season_id/qualification-cards", h.grantQualification)
-	write.DELETE("/seasons/:season_id/qualification-cards/:card_id", h.revokeQualification)
-	group.GET("/seasons/:season_id/finals-roster", h.finalsRoster)
-	write.POST("/seasons/:season_id/finals-roster/adjust", h.adjustFinalsRoster)
-	group.GET("/seasons/:season_id/institution-ranking", h.institutionRanking)
+	group.GET("/seasons/:id/leaderboards", h.listLeaderboards)
+	write.PUT("/seasons/:id/leaderboards/:level/:dance_type/players/:player_id", h.updateLeaderboardRow)
+	group.GET("/seasons/:id/qualification-cards", h.listQualificationCards)
+	write.POST("/seasons/:id/qualification-cards", h.grantQualification)
+	write.DELETE("/seasons/:id/qualification-cards/:card_id", h.revokeQualification)
+	group.GET("/seasons/:id/finals-roster", h.finalsRoster)
+	write.POST("/seasons/:id/finals-roster/adjust", h.adjustFinalsRoster)
+	group.GET("/seasons/:id/institution-ranking", h.institutionRanking)
 
 	// 奖金明细。
 	group.GET("/prize-statements", h.listPrizes)
@@ -61,7 +61,7 @@ func pathInt64(c *gin.Context, name string) (int64, bool) {
 }
 
 func (h *adminRankingHandler) getScoreRules(c *gin.Context) {
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -79,7 +79,7 @@ func (h *adminRankingHandler) putScoreRules(c *gin.Context) {
 		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
 		return
 	}
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -96,7 +96,7 @@ func (h *adminRankingHandler) putScoreRules(c *gin.Context) {
 }
 
 func (h *adminRankingHandler) getPrizeRules(c *gin.Context) {
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -114,7 +114,7 @@ func (h *adminRankingHandler) putPrizeRules(c *gin.Context) {
 		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
 		return
 	}
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -131,7 +131,7 @@ func (h *adminRankingHandler) putPrizeRules(c *gin.Context) {
 }
 
 func (h *adminRankingHandler) listScores(c *gin.Context) {
-	eventID, ok := pathInt64(c, "event_id")
+	eventID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -145,7 +145,7 @@ func (h *adminRankingHandler) listScores(c *gin.Context) {
 }
 
 func (h *adminRankingHandler) previewScores(c *gin.Context) {
-	eventID, ok := pathInt64(c, "event_id")
+	eventID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -169,7 +169,7 @@ func (h *adminRankingHandler) publishScores(c *gin.Context) {
 		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
 		return
 	}
-	eventID, ok := pathInt64(c, "event_id")
+	eventID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -211,7 +211,7 @@ func (h *adminRankingHandler) correctScore(c *gin.Context) {
 }
 
 func (h *adminRankingHandler) listLeaderboards(c *gin.Context) {
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -229,7 +229,7 @@ func (h *adminRankingHandler) updateLeaderboardRow(c *gin.Context) {
 		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
 		return
 	}
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -253,7 +253,7 @@ func decodeLeaderboardPatch(c *gin.Context) model.UpdateLeaderboardRowRequest {
 }
 
 func (h *adminRankingHandler) listQualificationCards(c *gin.Context) {
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -302,7 +302,7 @@ func (h *adminRankingHandler) revokeQualification(c *gin.Context) {
 }
 
 func (h *adminRankingHandler) finalsRoster(c *gin.Context) {
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}
@@ -333,7 +333,7 @@ func (h *adminRankingHandler) adjustFinalsRoster(c *gin.Context) {
 }
 
 func (h *adminRankingHandler) institutionRanking(c *gin.Context) {
-	seasonID, ok := pathInt64(c, "season_id")
+	seasonID, ok := pathInt64(c, "id")
 	if !ok {
 		return
 	}

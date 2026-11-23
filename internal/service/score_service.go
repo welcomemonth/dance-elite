@@ -337,7 +337,7 @@ func (s *ScoreService) recompute(ctx context.Context, tx *sql.Tx, seasonID, boar
 	if err := recomputeBoardPoints(ctx, s.stores, tx, seasonID, boardID, now); err != nil {
 		return err
 	}
-	boards, err := s.stores.Boards.ListBySeason(ctx, seasonID)
+	boards, err := s.stores.Boards.ListBySeasonTx(ctx, tx, seasonID)
 	if err != nil {
 		return err
 	}

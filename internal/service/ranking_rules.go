@@ -110,7 +110,7 @@ func computePrize(award, eventLevel string, participants int, rules model.PrizeR
 		if rank < 1 || rank > len(rules.Final.Amounts) {
 			return 0
 		}
-		return rules.Final.Amounts[rank-1] * 100
+		return rules.Final.Amounts[rank-1]
 	default:
 		return 0
 	}
@@ -134,7 +134,7 @@ func tierPrize(tier model.PrizeTier, rank, participants int) int {
 	if idx >= len(amounts) {
 		return 0
 	}
-	return amounts[idx] * 100
+	return amounts[idx]
 }
 
 // validateRankingRuleJSON 校验规则 JSON 是否合法（赛事表单保存时用）。
