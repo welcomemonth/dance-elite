@@ -92,8 +92,8 @@ USER root
 WORKDIR /opt/dance-elite
 VOLUME /opt/dance-elite
 
+# 非敏感配置不烘焙进镜像：运行时必须挂载 config.yaml（见 docker-compose.yml）。
 ENV TZ="UTC" \
-    PORT="8090" \
     DATA_DIR="/opt/dance-elite"
 
 EXPOSE 8090

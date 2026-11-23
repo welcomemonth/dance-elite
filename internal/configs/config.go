@@ -1,105 +1,129 @@
 // Package config 负责在启动时确定全部运行配置。
 //
-// 配置全部来自环境变量：本地开发由 godotenv 读取 .env（可选，已存在的
-// 环境变量优先），生产由容器运行时注入。不存在 YAML 配置文件，密钥永远
-// 不落文件入库；微信支付公钥与商户私钥还可只给文件路径（*_FILE），由启动
-// 时读取只读挂载的 PEM。必需项缺失时启动直接失败。
+// 配置来源分为两类，互不混用：
+//   - 非敏感运行参数：viper 读取 YAML（默认 config.yaml，可用 CONFIG_FILE 指定）；
+//   - 密钥与微信账户参数：只来自环境变量（本地由 godotenv 读取 .env）。
+//
+// APP_ENV=dev/prod 标记运行环境：dev 在支付密钥缺失或不可读时自动回退
+// mock；prod 要求支付材料完整，否则启动失败。不存在 PAY_MOCK / DEBUG 开关。
 package config
 
-// Config 是全部运行配置。字段名与环境变量一一对应（见 load.go）。
+// EnvDev / EnvProd 是 APP_ENV 的合法取值。
+const (
+	EnvDev  = "dev"
+	EnvProd = "prod"
+)
+
+// 支付模式：由支付材料是否完整推导，不可手工配置。
+const (
+	PaymentModeWechat = "wechat"
+	PaymentModeMock   = "mock"
+)
+
+// Config 是全部运行配置。非敏感字段来自 YAML，密钥字段来自环境变量。
 type Config struct {
-	// 服务
-	Port      string
-	Debug     bool
-	DBPath    string
-	UploadDir string
-	// LotteryDir 是抽签 JSON 文件目录（一个赛事一个 <token>.json）。
-	LotteryDir string
-	PayMock    bool
-	// 日志（T36）：级别 debug/info/warn/error、格式 json/console；
-	// 未显式配置时随 DEBUG 推导（debug → debug+console，否则 info+json）。
-	LogLevel      string
-	LogFormat     string
-	SlowRequestMS int // 慢请求阈值（毫秒），超过时访问日志升为 WARN；0 表示关闭
-	// PublicBaseURL 是对外可访问的服务地址（如 https://api.example.com），
-	// 用于拼接音频审核等外链；为空时接口返回相对路径。
-	PublicBaseURL string
+	// Env 是运行环境（APP_ENV），取值 dev/prod，默认 prod（安全的失败方向）。
+	Env string
 
-	// 鉴权与安全
-	JWTSecret        string
-	JWTExpireSeconds int
-	IDCardHMACKey    string
+	Server    ServerConfig
+	Storage   StorageConfig
+	Log       LogConfig
+	Auth      AuthConfig
+	Admin     AdminConfig
+	Scheduler SchedulerConfig
+	SMS       SMSConfig
 
-	// 微信小程序
-	WechatAppID  string
-	WechatSecret string
+	// Wechat 是微信账户标识（非密钥，但统一经环境变量注入）。
+	Wechat WechatConfig
 
-	// 微信支付
-	WechatMchID       string
-	WechatPayKey      string
-	WechatMchSerialNo string
-	// 微信支付公钥模式（本项目唯一支持的回调验签方式）：公钥 ID + 公钥 PEM。
-	// PEM 文本与只读挂载文件二选一；文件方式下 *File 记录来源路径。
-	WechatPayPublicKeyID   string
-	WechatPayPublicKey     string
+	// Secrets 是密钥材料，只经环境变量注入。
+	Secrets Secrets
+
+	// Payment 是启动时推导出的支付通道状态，不可从配置直接设置。
+	Payment PaymentConfig
+}
+
+// ServerConfig 是 HTTP 服务配置。
+type ServerConfig struct {
+	Port          int    `mapstructure:"port"`
+	PublicBaseURL string `mapstructure:"public_base_url"` // 对外地址（音频审核/抽签外链、微信支付回调），末尾斜杠已去除
+	SlowRequestMS int    `mapstructure:"slow_request_ms"` // 慢请求阈值（毫秒），0 关闭
+}
+
+// StorageConfig 是本地存储路径。
+type StorageConfig struct {
+	DBPath    string `mapstructure:"db_path"`
+	UploadDir string `mapstructure:"upload_dir"`
+	// LotteryDir 是赛事抽签 JSON 所在目录；留空时派生为 <db_path 目录>/lottery。
+	LotteryDir string `mapstructure:"lottery_dir"`
+}
+
+// LogConfig 是日志配置；Level 同时决定 Gin 运行模式（debug → debug，否则 release）。
+type LogConfig struct {
+	Level  string `mapstructure:"level"`  // debug/info/warn/error
+	Format string `mapstructure:"format"` // json/console
+}
+
+// AuthConfig 是登录态配置。
+type AuthConfig struct {
+	JWTExpireSeconds int `mapstructure:"jwt_expire_seconds"`
+}
+
+// AdminConfig 是后台账号初始化配置。
+type AdminConfig struct {
+	InitUsername string `mapstructure:"init_username"`
+}
+
+// SchedulerConfig 是定时任务配置。
+type SchedulerConfig struct {
+	StatusTickSeconds     int `mapstructure:"status_tick_seconds"`
+	OrderExpireMinutes    int `mapstructure:"order_expire_minutes"`
+	RefundWatchdogMinutes int `mapstructure:"refund_watchdog_minutes"`
+}
+
+// SMSConfig 是抽签短信的非敏感开关；阿里云凭据只从环境变量读取。
+//
+// Mock=true 时不调用阿里云，只记录脱敏日志（本地联调）。凭据三项齐全
+// 才启用真实发送；只配一部分视为配置错误。
+type SMSConfig struct {
+	Mock bool `mapstructure:"mock"`
+}
+
+// WechatConfig 是微信账户标识（全部来自环境变量）。
+type WechatConfig struct {
+	AppID          string
+	MchID          string
+	MchSerialNo    string
+	PayPublicKeyID string
+}
+
+// Secrets 是密钥材料（全部来自环境变量）；PEM 内容由 *_FILE 指向的文件读取。
+type Secrets struct {
+	JWTSecret         string
+	IDCardHMACKey     string
+	WechatSecret      string
+	WechatPayAPIv3Key string
+	// 微信支付密钥只接受文件路径（只读挂载），不接受内联 PEM 文本。
+	WechatPrivateKeyFile   string
 	WechatPayPublicKeyFile string
-	// 商户 API 私钥：请求签名用。
-	WechatPrivateKey      string
-	WechatPrivateKeyFile  string
-	WechatNotifyURL       string
-	WechatRefundNotifyURL string
-
-	// 后台初始超管（仅首次启动建档，已存在账号不覆盖）
-	AdminInitUsername string
-	AdminInitPassword string
-
-	// 定时任务（T34）：调度器轮询间隔、待支付订单超时、退款卡死判定窗口（分钟）
-	StatusTickSeconds     int
-	OrderExpireMinutes    int
-	RefundWatchdogMinutes int
-
-	// 短信（阿里云）：抽签提醒/结果通知等复用同一通道。
-	// 三项齐全才启用；SMS_MOCK=true 时只记录日志，不调用阿里云。
-	SMSMock            bool
+	// WechatPayPrivateKeyPEM / WechatPayPublicKeyPEM 是上述文件的内容，
+	// 启动时读取，不落库、不写日志。
+	WechatPayPrivateKeyPEM string
+	WechatPayPublicKeyPEM  string
+	AdminInitPassword      string
+	// 阿里云短信凭据（抽签提醒/结果通知）；三项齐全才启用。
 	SMSAccessKeyID     string
 	SMSAccessKeySecret string
 	SMSSignName        string
 }
 
-// requirement 是一个必需配置项及其当前值。
-type requirement struct {
-	env   string
-	value string
+// PaymentConfig 是支付通道的推导结果。
+type PaymentConfig struct {
+	Mode            string // wechat / mock
+	MockReason      string // mock 时说明回退原因，启动日志输出
+	NotifyURL       string // = PublicBaseURL + /api/v1/payments/wechat/notify
+	RefundNotifyURL string // = PublicBaseURL + /api/v1/payments/wechat/refund-notify
 }
 
-// MissingSecrets 返回缺失的必需环境变量名（按固定顺序，便于日志阅读）。
-// 返回空切片表示自检通过。
-func (c *Config) MissingSecrets() []string {
-	required := []requirement{
-		{"JWT_SECRET", c.JWTSecret},
-		{"ID_CARD_HMAC_KEY", c.IDCardHMACKey},
-		{"WECHAT_APPID", c.WechatAppID},
-		{"WECHAT_SECRET", c.WechatSecret},
-		{"ADMIN_INIT_PASSWORD", c.AdminInitPassword},
-	}
-	if !c.PayMock {
-		required = append(required,
-			requirement{"WECHAT_MCHID", c.WechatMchID},
-			requirement{"WECHAT_PAY_KEY", c.WechatPayKey},
-			requirement{"WECHAT_MCH_SERIAL_NO", c.WechatMchSerialNo},
-			requirement{"WECHAT_PAY_PRIVATE_KEY", c.WechatPrivateKey},
-			requirement{"WECHAT_PAY_PUBLIC_KEY_ID", c.WechatPayPublicKeyID},
-			requirement{"WECHAT_PAY_PUBLIC_KEY", c.WechatPayPublicKey},
-			requirement{"WECHAT_PAY_NOTIFY_URL", c.WechatNotifyURL},
-			requirement{"WECHAT_REFUND_NOTIFY_URL", c.WechatRefundNotifyURL},
-		)
-	}
-
-	var missing []string
-	for _, item := range required {
-		if item.value == "" {
-			missing = append(missing, item.env)
-		}
-	}
-	return missing
-}
+// IsDev 报告当前是否为本地开发环境。
+func (c *Config) IsDev() bool { return c.Env == EnvDev }

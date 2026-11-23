@@ -12,7 +12,7 @@ import (
 
 // RefundWatchdog 兜底卡死的退款工单（T34）：processing/approved 超过窗口仍无回调时
 // 主动查询微信退款单——SUCCESS 完成退款；CLOSED/ABNORMAL 置失败并回退订单；
-// PROCESSING 或查询失败留待下轮。PAY_MOCK=true 时整体跳过（mock 无真实退款单）。
+// PROCESSING 或查询失败留待下轮。mock 网关下整体跳过（无真实退款单）。
 type RefundWatchdog struct {
 	stores  *store.Store
 	refunds *RefundService

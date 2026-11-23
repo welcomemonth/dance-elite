@@ -49,7 +49,7 @@ type Deps struct {
 	Lottery             *service.LotteryService
 	Tokens              *token.Signer
 
-	// UploadDir 是上传文件物理根目录（配置 UPLOAD_DIR）。非空时把
+	// UploadDir 是上传文件物理根目录（配置 storage.upload_dir）。非空时把
 	// /static/materials、/static/avatars 映射到磁盘对应目录（T13）。
 	UploadDir string
 
@@ -102,8 +102,8 @@ func New(deps Deps) *gin.Engine {
 		registerMaterialRoutes(api, deps.Materials, deps.Tokens)
 	}
 
-	// 上传文件静态访问（T13）：/static/materials → UPLOAD_DIR，
-	// /static/avatars → UPLOAD_DIR/avatars；关闭目录列表。
+	// 上传文件静态访问（T13）：/static/materials → storage.upload_dir，
+	// /static/avatars → storage.upload_dir/avatars；关闭目录列表。
 	if deps.UploadDir != "" {
 		engine.StaticFS("/static/materials", gin.Dir(deps.UploadDir, false))
 		engine.StaticFS("/static/avatars", gin.Dir(filepath.Join(deps.UploadDir, "avatars"), false))

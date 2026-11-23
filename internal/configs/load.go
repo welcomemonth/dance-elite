@@ -5,226 +5,148 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
 )
 
-// Load 在启动时一次性确定全部配置，并在必需项缺失时直接失败。
+// defaultConfigPath 是未设置 CONFIG_FILE 时读取的配置文件。
+const defaultConfigPath = "config.yaml"
+
+// Load 在启动时一次性确定全部配置，并在校验失败时直接返回错误。
 //
-// 来源：代码默认值 → .env（本地开发，可选）→ 环境变量。
-// godotenv 不会覆盖已存在的环境变量，因此生产/容器注入的值始终优先。
+// 顺序：默认值 → YAML（CONFIG_FILE，默认 config.yaml）→ 环境变量中的
+// APP_ENV 与密钥。YAML 只承载非敏感参数；不提供按 key 的环境变量覆盖，
+// 避免配置来源再次混用。
 func Load() (*Config, error) {
-	cfg, err := read()
+	if err := loadDotEnv(); err != nil {
+		return nil, err
+	}
+	cfg, err := loadYAML()
 	if err != nil {
 		return nil, err
 	}
-	if missing := cfg.MissingSecrets(); len(missing) > 0 {
-		return nil, fmt.Errorf("启动自检失败，缺少必需环境变量: %s", strings.Join(missing, ", "))
+	cfg.Env = strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+	if cfg.Env == "" {
+		cfg.Env = EnvProd
 	}
-	if cfg.JWTExpireSeconds <= 0 {
-		return nil, fmt.Errorf("环境变量 JWT_EXPIRE_SECONDS=%d 必须为正整数（秒）", cfg.JWTExpireSeconds)
+	readSecrets(cfg)
+	deriveStorage(cfg)
+	if err := validate(cfg); err != nil {
+		return nil, err
 	}
-	if cfg.StatusTickSeconds <= 0 {
-		return nil, fmt.Errorf("环境变量 STATUS_TICK_SECONDS=%d 必须为正整数（秒）", cfg.StatusTickSeconds)
+	if err := validateSMS(cfg); err != nil {
+		return nil, err
 	}
-	if cfg.OrderExpireMinutes <= 0 {
-		return nil, fmt.Errorf("环境变量 ORDER_EXPIRE_MINUTES=%d 必须为正整数（分钟）", cfg.OrderExpireMinutes)
-	}
-	if cfg.RefundWatchdogMinutes <= 0 {
-		return nil, fmt.Errorf("环境变量 REFUND_WATCHDOG_MINUTES=%d 必须为正整数（分钟）", cfg.RefundWatchdogMinutes)
-	}
-	switch cfg.LogLevel {
-	case "debug", "info", "warn", "error":
-	default:
-		return nil, fmt.Errorf("环境变量 LOG_LEVEL=%q 不合法（可用 debug/info/warn/error）", cfg.LogLevel)
-	}
-	switch cfg.LogFormat {
-	case "json", "console":
-	default:
-		return nil, fmt.Errorf("环境变量 LOG_FORMAT=%q 不合法（可用 json/console）", cfg.LogFormat)
-	}
-	if cfg.SlowRequestMS < 0 {
-		return nil, fmt.Errorf("环境变量 SLOW_REQUEST_MS=%d 不能为负数（0 表示关闭慢请求告警）", cfg.SlowRequestMS)
-	}
-	// 短信配置：允许整体不配置（功能关闭），但不允许只配一部分（易造成静默失败）。
-	if !cfg.SMSMock {
-		missingSMS := 0
-		for _, value := range []string{cfg.SMSAccessKeyID, cfg.SMSAccessKeySecret, cfg.SMSSignName} {
-			if value == "" {
-				missingSMS++
-			}
-		}
-		if missingSMS > 0 && missingSMS < 3 {
-			return nil, fmt.Errorf("短信配置不完整：SMS_ACCESS_KEY_ID、SMS_ACCESS_KEY_SECRET、SMS_SIGN_NAME 需同时提供，或设置 SMS_MOCK=true")
-		}
+	if err := derivePayment(cfg); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }
 
-// read 只负责加载 .env 与读取环境变量，不做必需项校验（便于测试）。
-func read() (*Config, error) {
+// loadDotEnv 读取本地 .env（可选）；已存在的环境变量优先，生产由容器注入。
+func loadDotEnv() error {
 	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("读取 .env: %w", err)
+		return fmt.Errorf("读取 .env: %w", err)
 	}
+	return nil
+}
 
-	debug, err := envBool("DEBUG", false)
-	if err != nil {
-		return nil, err
+// loadYAML 用 viper 读取非敏感配置，未出现在文件中的字段保留代码默认值。
+func loadYAML() (*Config, error) {
+	path := strings.TrimSpace(os.Getenv("CONFIG_FILE"))
+	if path == "" {
+		path = defaultConfigPath
 	}
-	payMock, err := envBool("PAY_MOCK", false)
-	if err != nil {
-		return nil, err
+	v := viper.New()
+	v.SetConfigFile(path)
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("读取配置文件 %s: %w", path, err)
 	}
-	smsMock, err := envBool("SMS_MOCK", false)
-	if err != nil {
-		return nil, err
+	cfg := defaultConfig()
+	if err := v.Unmarshal(cfg); err != nil {
+		return nil, fmt.Errorf("解析配置文件 %s: %w", path, err)
 	}
-	jwtExpire, err := envInt("JWT_EXPIRE_SECONDS", 7200)
-	if err != nil {
-		return nil, err
-	}
-	statusTick, err := envInt("STATUS_TICK_SECONDS", 60)
-	if err != nil {
-		return nil, err
-	}
-	orderExpire, err := envInt("ORDER_EXPIRE_MINUTES", 15)
-	if err != nil {
-		return nil, err
-	}
-	refundWatchdog, err := envInt("REFUND_WATCHDOG_MINUTES", 10)
-	if err != nil {
-		return nil, err
-	}
-	slowRequestMS, err := envInt("SLOW_REQUEST_MS", 500)
-	if err != nil {
-		return nil, err
-	}
-	// 日志级别/格式未显式配置时随 DEBUG 推导，保持本地开发体验不变。
-	logLevel := strings.ToLower(strings.TrimSpace(envOr("LOG_LEVEL", "")))
-	if logLevel == "" {
-		logLevel = "info"
-		if debug {
-			logLevel = "debug"
-		}
-	}
-	logFormat := strings.ToLower(strings.TrimSpace(envOr("LOG_FORMAT", "")))
-	if logFormat == "" {
-		logFormat = "json"
-		if debug {
-			logFormat = "console"
-		}
-	}
-	wechatPublicKey, wechatPublicKeyFile, err := secretValue("WECHAT_PAY_PUBLIC_KEY", "WECHAT_PAY_PUBLIC_KEY_FILE")
-	if err != nil {
-		return nil, err
-	}
-	wechatPrivateKey, wechatPrivateKeyFile, err := secretValue("WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_PRIVATE_KEY_FILE")
-	if err != nil {
-		return nil, err
-	}
+	return cfg, nil
+}
 
-	dbPath := envOr("DB_PATH", "data/dance-elite.db")
+// defaultConfig 是 YAML 缺省时的安全默认值（不含任何密钥）。
+func defaultConfig() *Config {
 	return &Config{
-		Port:       envOr("PORT", "8080"),
-		Debug:      debug,
-		DBPath:     dbPath,
-		UploadDir:  envOr("UPLOAD_DIR", "uploads"),
-		LotteryDir: envOr("LOTTERY_DIR", filepath.Join(filepath.Dir(dbPath), "lottery")),
-		PayMock:    payMock,
-
-		SMSMock:            smsMock,
-		SMSAccessKeyID:     os.Getenv("SMS_ACCESS_KEY_ID"),
-		SMSAccessKeySecret: os.Getenv("SMS_ACCESS_KEY_SECRET"),
-		SMSSignName:        os.Getenv("SMS_SIGN_NAME"),
-
-		LogLevel:      logLevel,
-		LogFormat:     logFormat,
-		SlowRequestMS: slowRequestMS,
-
-		PublicBaseURL: os.Getenv("PUBLIC_BASE_URL"),
-
-		JWTSecret:        os.Getenv("JWT_SECRET"),
-		JWTExpireSeconds: jwtExpire,
-		IDCardHMACKey:    os.Getenv("ID_CARD_HMAC_KEY"),
-
-		WechatAppID:  os.Getenv("WECHAT_APPID"),
-		WechatSecret: os.Getenv("WECHAT_SECRET"),
-
-		WechatMchID:            os.Getenv("WECHAT_MCHID"),
-		WechatPayKey:           os.Getenv("WECHAT_PAY_KEY"),
-		WechatMchSerialNo:      os.Getenv("WECHAT_MCH_SERIAL_NO"),
-		WechatPayPublicKeyID:   strings.TrimSpace(os.Getenv("WECHAT_PAY_PUBLIC_KEY_ID")),
-		WechatPayPublicKey:     wechatPublicKey,
-		WechatPayPublicKeyFile: wechatPublicKeyFile,
-		WechatPrivateKey:       wechatPrivateKey,
-		WechatPrivateKeyFile:   wechatPrivateKeyFile,
-		WechatNotifyURL:        os.Getenv("WECHAT_PAY_NOTIFY_URL"),
-		WechatRefundNotifyURL:  os.Getenv("WECHAT_REFUND_NOTIFY_URL"),
-
-		AdminInitUsername: envOr("ADMIN_INIT_USERNAME", "admin"),
-		AdminInitPassword: os.Getenv("ADMIN_INIT_PASSWORD"),
-
-		StatusTickSeconds:     statusTick,
-		OrderExpireMinutes:    orderExpire,
-		RefundWatchdogMinutes: refundWatchdog,
-	}, nil
+		Server: ServerConfig{
+			Port:          8080,
+			SlowRequestMS: 500,
+		},
+		Storage: StorageConfig{
+			DBPath:    "data/dance-elite.db",
+			UploadDir: "uploads",
+		},
+		Log: LogConfig{
+			Level:  "info",
+			Format: "json",
+		},
+		Auth: AuthConfig{
+			JWTExpireSeconds: 7200,
+		},
+		Admin: AdminConfig{
+			InitUsername: "admin",
+		},
+		Scheduler: SchedulerConfig{
+			StatusTickSeconds:     60,
+			OrderExpireMinutes:    15,
+			RefundWatchdogMinutes: 10,
+		},
+	}
 }
 
-// secretValue 解析「直接 PEM 文本 / 只读挂载文件」二选一的密钥配置。
-// 设置 *_FILE 时读取文件内容（推荐：容器挂载 secret，值不进环境变量），
-// 与直接值同时设置视为配置错误；文件读取失败或内容为空时启动即失败。
-func secretValue(envKey, fileKey string) (value, file string, err error) {
-	value = os.Getenv(envKey)
-	file = os.Getenv(fileKey)
-	if value != "" && file != "" {
-		return "", "", fmt.Errorf("环境变量 %s 与 %s 不能同时设置，请二选一", envKey, fileKey)
+// readSecrets 读取全部密钥与微信账户参数；只从环境变量读取，不读 YAML。
+func readSecrets(cfg *Config) {
+	cfg.Wechat = WechatConfig{
+		AppID:          strings.TrimSpace(os.Getenv("WECHAT_APPID")),
+		MchID:          strings.TrimSpace(os.Getenv("WECHAT_MCHID")),
+		MchSerialNo:    strings.TrimSpace(os.Getenv("WECHAT_MCH_SERIAL_NO")),
+		PayPublicKeyID: strings.TrimSpace(os.Getenv("WECHAT_PAY_PUBLIC_KEY_ID")),
 	}
-	if file == "" {
-		return value, "", nil
+	cfg.Secrets = Secrets{
+		JWTSecret:              os.Getenv("JWT_SECRET"),
+		IDCardHMACKey:          os.Getenv("ID_CARD_HMAC_KEY"),
+		WechatSecret:           os.Getenv("WECHAT_SECRET"),
+		WechatPayAPIv3Key:      strings.TrimSpace(os.Getenv("WECHAT_PAY_API_V3_KEY")),
+		WechatPrivateKeyFile:   strings.TrimSpace(os.Getenv("WECHAT_PAY_PRIVATE_KEY_FILE")),
+		WechatPayPublicKeyFile: strings.TrimSpace(os.Getenv("WECHAT_PAY_PUBLIC_KEY_FILE")),
+		AdminInitPassword:      os.Getenv("ADMIN_INIT_PASSWORD"),
+		SMSAccessKeyID:         strings.TrimSpace(os.Getenv("SMS_ACCESS_KEY_ID")),
+		SMSAccessKeySecret:     strings.TrimSpace(os.Getenv("SMS_ACCESS_KEY_SECRET")),
+		SMSSignName:            strings.TrimSpace(os.Getenv("SMS_SIGN_NAME")),
 	}
-	raw, err := os.ReadFile(file)
-	if err != nil {
-		return "", "", fmt.Errorf("读取密钥文件 %s=%s: %w", fileKey, file, err)
-	}
-	value = strings.TrimSpace(string(raw))
-	if value == "" {
-		return "", "", fmt.Errorf("密钥文件 %s=%s 内容为空", fileKey, file)
-	}
-	return value, file, nil
 }
 
-// envOr 读取字符串环境变量，未设置或为空时返回默认值。
-func envOr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+// deriveStorage 为未显式配置的抽签目录补默认值：与数据库同目录的 lottery/。
+// 本地即 data/lottery，容器内即 /opt/dance-elite/lottery。
+func deriveStorage(cfg *Config) {
+	if strings.TrimSpace(cfg.Storage.LotteryDir) != "" {
+		return
 	}
-	return def
+	cfg.Storage.LotteryDir = filepath.Join(filepath.Dir(cfg.Storage.DBPath), "lottery")
 }
 
-// envBool 读取布尔环境变量，未设置时返回默认值；非法值返回错误而非静默忽略。
-func envBool(key string, def bool) (bool, error) {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return def, nil
+// validateSMS 校验短信凭据：允许整体不配置（功能关闭），但不允许只配一部分
+// （易造成静默失败）；mock 模式忽略凭据。
+func validateSMS(cfg *Config) error {
+	if cfg.SMS.Mock {
+		return nil
 	}
-	v, err := strconv.ParseBool(raw)
-	if err != nil {
-		return false, fmt.Errorf("环境变量 %s=%q 不是合法布尔值（可用 true/false/1/0）", key, raw)
+	missing := 0
+	for _, value := range []string{
+		cfg.Secrets.SMSAccessKeyID, cfg.Secrets.SMSAccessKeySecret, cfg.Secrets.SMSSignName,
+	} {
+		if value == "" {
+			missing++
+		}
 	}
-	return v, nil
-}
-
-// envInt 读取整数环境变量，未设置时返回默认值；非法值返回错误而非静默忽略。
-func envInt(key string, def int) (int, error) {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return def, nil
+	if missing > 0 && missing < 3 {
+		return fmt.Errorf("短信配置不完整：SMS_ACCESS_KEY_ID、SMS_ACCESS_KEY_SECRET、SMS_SIGN_NAME 需同时提供，或在 config.yaml 设置 sms.mock=true")
 	}
-	v, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("环境变量 %s=%q 不是合法整数", key, raw)
-	}
-	return v, nil
+	return nil
 }

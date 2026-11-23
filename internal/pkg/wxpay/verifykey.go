@@ -29,7 +29,7 @@ func parsePublicKey(raw string) (*rsa.PublicKey, error) {
 	normalized := strings.ReplaceAll(raw, `\n`, "\n")
 	block, _ := pem.Decode([]byte(normalized))
 	if block == nil {
-		return nil, errors.New("PEM 块缺失（检查 WECHAT_PAY_PUBLIC_KEY 是否完整）")
+		return nil, errors.New("PEM 块缺失（检查 WECHAT_PAY_PUBLIC_KEY_FILE 指向的公钥文件是否完整）")
 	}
 	if block.Type == "RSA PUBLIC KEY" {
 		key, err := x509.ParsePKCS1PublicKey(block.Bytes)

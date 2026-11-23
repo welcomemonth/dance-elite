@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	config "github.com/meetmonth/dance-elite/internal/configs"
@@ -24,13 +25,13 @@ import (
 // run 是组合根：在这里装配数据库、种子、路由与 HTTP 服务，并随 ctx 优雅退出。
 // 返回错误由 main 统一记录，业务装配过程不 panic。
 func run(ctx context.Context, cfg *config.Config) error {
-	if dir := filepath.Dir(cfg.DBPath); dir != "." {
+	if dir := filepath.Dir(cfg.Storage.DBPath); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("创建数据库目录: %w", err)
 		}
 	}
 
-	db, err := store.Open(cfg.DBPath)
+	db, err := store.Open(cfg.Storage.DBPath)
 	if err != nil {
 		return fmt.Errorf("打开数据库: %w", err)
 	}
@@ -44,38 +45,38 @@ func run(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("数据库迁移: %w", err)
 	}
 	if err := db.Seed(ctx, store.SeedOptions{
-		AdminUsername: cfg.AdminInitUsername,
-		AdminPassword: cfg.AdminInitPassword,
+		AdminUsername: cfg.Admin.InitUsername,
+		AdminPassword: cfg.Secrets.AdminInitPassword,
 	}); err != nil {
 		return fmt.Errorf("写入种子数据: %w", err)
 	}
 
 	stores := store.New(db)
-	tokens := token.NewSigner(cfg.JWTSecret, time.Duration(cfg.JWTExpireSeconds)*time.Second)
-	wxClient := wechat.NewClient(cfg.WechatAppID, cfg.WechatSecret)
+	tokens := token.NewSigner(cfg.Secrets.JWTSecret, time.Duration(cfg.Auth.JWTExpireSeconds)*time.Second)
+	wxClient := wechat.NewClient(cfg.Wechat.AppID, cfg.Secrets.WechatSecret)
 	authService := service.NewAuthService(stores, wxClient, tokens)
 	adminAuthService := service.NewAdminAuthService(stores, tokens)
 	seasonService := service.NewSeasonService(stores)
 	eventService := service.NewEventService(stores)
 	publicEventService := service.NewPublicEventService(stores)
-	playerService := service.NewPlayerService(stores, cfg.IDCardHMACKey)
-	registrationService := service.NewRegistrationService(stores, playerService, cfg.OrderExpireMinutes)
+	playerService := service.NewPlayerService(stores, cfg.Secrets.IDCardHMACKey)
+	registrationService := service.NewRegistrationService(stores, playerService, cfg.Scheduler.OrderExpireMinutes)
 	registrationQueryService := service.NewRegistrationQueryService(stores)
 	waitlistService := service.NewWaitlistService(stores, playerService)
-	fileStore, err := storage.New(cfg.UploadDir)
+	fileStore, err := storage.New(cfg.Storage.UploadDir)
 	if err != nil {
 		return fmt.Errorf("初始化上传目录: %w", err)
 	}
 	materialService := service.NewMaterialService(stores, fileStore)
-	// 支付网关：PAY_MOCK=true 走 fake 通道（无商户证书可联调，R2）；
-	// 否则加载商户私钥构造真实微信支付 V3 客户端，密钥缺失/解析失败在启动时报错。
+	// 支付模式在 config.Load 时推导：APP_ENV=dev 且支付材料缺失/不可读时走
+	// mock；APP_ENV=prod 时材料缺失即启动失败，不会静默使用假支付。
 	payGateway, err := newPayGateway(cfg)
 	if err != nil {
 		return err
 	}
 	paymentService := service.NewPaymentService(stores, payGateway, payGateway)
 	refundService := service.NewRefundService(stores, payGateway, payGateway)
-	orderService := service.NewOrderService(stores, payGateway, paymentService, cfg.OrderExpireMinutes)
+	orderService := service.NewOrderService(stores, payGateway, paymentService, cfg.Scheduler.OrderExpireMinutes)
 	adminRefundQueryService := service.NewAdminRefundQueryService(stores)
 	csTicketService := service.NewCSTicketService(stores)
 	manualRegService := service.NewManualRegistrationService(stores, playerService)
@@ -87,13 +88,13 @@ func run(ctx context.Context, cfg *config.Config) error {
 	adminLogQueryService := service.NewAdminLogQueryService(stores)
 	userContentQueryService := service.NewAdminUserQueryService(stores)
 	contentService := service.NewContentService(stores)
-	audioReviewService := service.NewAudioReviewService(stores, cfg.PublicBaseURL)
+	audioReviewService := service.NewAudioReviewService(stores, cfg.Server.PublicBaseURL)
 	// 抽签 H5：数据在独立 JSON 文件；短信未配置时为 nil，提醒/通知自动跳过。
 	smsClient, err := sms.New(sms.Config{
-		AccessKeyID:     cfg.SMSAccessKeyID,
-		AccessKeySecret: cfg.SMSAccessKeySecret,
-		SignName:        cfg.SMSSignName,
-		Mock:            cfg.SMSMock,
+		AccessKeyID:     cfg.Secrets.SMSAccessKeyID,
+		AccessKeySecret: cfg.Secrets.SMSAccessKeySecret,
+		SignName:        cfg.Secrets.SMSSignName,
+		Mock:            cfg.SMS.Mock,
 	})
 	if err != nil {
 		return fmt.Errorf("初始化短信客户端: %w", err)
@@ -101,9 +102,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 	if smsClient == nil {
 		logger.Log.Warn("短信通道未配置，抽签提醒与结果通知不会发送")
 	}
-	lotteryStore := store.NewLotteryStore(cfg.LotteryDir)
+	lotteryStore := store.NewLotteryStore(cfg.Storage.LotteryDir)
 	lotteryService := service.NewLotteryService(lotteryStore)
-	lotterySweeper := service.NewLotterySweeper(lotteryStore, smsClient, cfg.PublicBaseURL)
+	lotterySweeper := service.NewLotterySweeper(lotteryStore, smsClient, cfg.Server.PublicBaseURL)
 
 	// 前端构建产物在编译期嵌入；未构建时（只有 .gitkeep）跳过页面托管，
 	// 本地开发请使用 dance-admin 的 pnpm dev（代理到本服务）。
@@ -145,16 +146,16 @@ func run(ctx context.Context, cfg *config.Config) error {
 		AudioReview:         audioReviewService,
 		Lottery:             lotteryService,
 		Tokens:              tokens,
-		UploadDir:           cfg.UploadDir,
-		SlowRequestMS:       cfg.SlowRequestMS,
+		UploadDir:           cfg.Storage.UploadDir,
+		SlowRequestMS:       cfg.Server.SlowRequestMS,
 		WebAssets:           webAssets,
 	})
 	// 定时任务（T34）：应用级单调度器串行执行，ctx 取消后随 HTTP 服务一起退出。
 	scheduler := service.NewStatusScheduler(
-		time.Duration(cfg.StatusTickSeconds)*time.Second,
+		time.Duration(cfg.Scheduler.StatusTickSeconds)*time.Second,
 		service.NewEventStatusAdvancer(stores),
-		service.NewOrderExpirySweeper(stores, paymentService, cfg.OrderExpireMinutes),
-		service.NewRefundWatchdog(stores, refundService, payGateway, cfg.RefundWatchdogMinutes, cfg.PayMock),
+		service.NewOrderExpirySweeper(stores, paymentService, cfg.Scheduler.OrderExpireMinutes),
+		service.NewRefundWatchdog(stores, refundService, payGateway, cfg.Scheduler.RefundWatchdogMinutes, isMockGateway(payGateway)),
 		lotterySweeper,
 	)
 	schedulerCtx, stopScheduler := context.WithCancel(ctx)
@@ -164,7 +165,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		scheduler.Run(schedulerCtx)
 	}()
 
-	srv := server.NewServer(":"+cfg.Port, engine)
+	srv := server.NewServer(":"+strconv.Itoa(cfg.Server.Port), engine)
 	runErr := srv.Run(ctx)
 	// 等在途一轮定时任务结束（最多 5 秒），避免退出瞬间留下半轮写入。
 	stopScheduler()

@@ -189,7 +189,7 @@ const result = await uploadFile<{ url: string }>({
 
 ### 本地支付联调
 
-后端 `PAY_MOCK=true` 时，预下单返回 `paySign = "MOCK-SIGN"`。小程序在 `develop` 环境会跳过 `wx.requestPayment`，直接向 `POST /api/v1/payments/wechat/notify` 提交 mock 成功报文，再轮询 `GET /api/v1/orders/{order_id}` 确认报名生效。`trial` / `release` 不会走该分支。
+后端为 `APP_ENV=dev` 且支付材料不完整（mock 通道）时，预下单返回 `paySign = "MOCK-SIGN"`。小程序在 `develop` 环境会跳过 `wx.requestPayment`，直接向 `POST /api/v1/payments/wechat/notify` 提交 mock 成功报文，再轮询 `GET /api/v1/orders/{order_id}` 确认报名生效。`trial` / `release` 不会走该分支。
 
 ## 新增页面清单
 

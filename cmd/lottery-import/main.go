@@ -5,8 +5,10 @@
 //	go run ./cmd/lottery-import -excel "报名资料.xlsx" -event "优舞盟12月赛事抽签"
 //
 // 列按表头名称定位，报名表调整列顺序不影响导入；生成的 JSON 写入
-// LOTTERY_DIR（默认 data/lottery），文件名即访问 token。重复导入已存在的
-// 赛事需要 -reset，避免误清空已抽签结果。
+// -out 指定的目录（默认 data/lottery，需与 config.yaml 的 storage.lottery_dir
+// 一致），文件名即访问 token。重复导入已存在的赛事需要 -reset，避免误清空
+// 已抽签结果。日常导入与导出已可在后台「赛事抽签」页完成，本命令保留给
+// 无后台访问权限的运维场景和批量脚本使用。
 package main
 
 import (
@@ -30,8 +32,6 @@ import (
 const tokenAlphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func main() {
-	// 可选读取 .env，让 PUBLIC_BASE_URL / LOTTERY_DIR 与后端配置一致；
-	// 已存在的环境变量优先，文件不存在不报错。
 	_ = godotenv.Load()
 
 	excelPath := flag.String("excel", "", "报名 Excel 文件路径（必填）")
@@ -41,10 +41,9 @@ func main() {
 	reset := flag.Bool("reset", false, "覆盖已存在的抽签数据（会清空已有抽签结果与短信发送记录）")
 	startAt := flag.String("start-at", "", "抽签开始时间，如 \"2026-11-25 10:00\" 或 ISO 8601；留空不限制")
 	endAt := flag.String("end-at", "", "抽签截止时间；到点后未抽选手由系统自动分配；留空不限制")
-	remindTemplate := flag.String("remind-template", os.Getenv("SMS_REMIND_TEMPLATE"),
-		"阿里云提醒短信模板 CODE；默认取 SMS_REMIND_TEMPLATE，留空表示不发提醒短信")
-	resultTemplate := flag.String("result-template", os.Getenv("SMS_RESULT_TEMPLATE"),
-		"阿里云结果短信模板 CODE；默认取 SMS_RESULT_TEMPLATE，留空表示不发结果短信")
+	baseURL := flag.String("base-url", "", "对外访问地址，用于打印抽签链接与短信模板；留空时打印相对路径")
+	remindTemplate := flag.String("remind-template", "", "阿里云提醒短信模板 CODE；留空表示不发提醒短信")
+	resultTemplate := flag.String("result-template", "", "阿里云结果短信模板 CODE；留空表示不发结果短信")
 	flag.Parse()
 
 	if strings.TrimSpace(*excelPath) == "" {
@@ -101,9 +100,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "提示："+warning)
 	}
 	fmt.Printf("已写入：%s\n", filepath.Join(*outDir, token+".json"))
-	fmt.Printf("页面地址：%s\n", baseURL()+"/lottery/"+token)
+	fmt.Printf("页面地址：%s\n", strings.TrimRight(*baseURL, "/")+"/lottery/"+token)
 	printSchedule(data)
-	printSMSTemplates(data, token)
+	printSMSTemplates(data, token, *baseURL)
 }
 
 // resolveWindow 解析 -start-at / -end-at 并校验先后顺序，统一转成 ISO 本地时间。
@@ -172,7 +171,7 @@ func printSchedule(data *model.LotteryData) {
 
 // printSMSTemplates 输出当前模板配置；有缺失时打印可直接提交阿里云审核的文案。
 // 阿里云不允许把链接放进变量，链接必须写死在模板正文，因此每个赛事单独提审。
-func printSMSTemplates(data *model.LotteryData, token string) {
+func printSMSTemplates(data *model.LotteryData, token, baseURL string) {
 	if data.EndAt == "" {
 		return
 	}
@@ -185,13 +184,13 @@ func printSMSTemplates(data *model.LotteryData, token string) {
 	if !missingRemind && !missingResult {
 		return
 	}
-	link := strings.TrimRight(os.Getenv("PUBLIC_BASE_URL"), "/")
+	link := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if link == "" {
 		link = "http://<请先配置 PUBLIC_BASE_URL>"
 	}
 	link += "/lottery/" + token
 	fmt.Println("以下模板需在阿里云短信控制台提交审核（链接写死在正文，每赛事单独提审），")
-	fmt.Println("通过后用 -remind-template / -result-template 重新导入，或手填 JSON 对应字段：")
+	fmt.Println("通过后用 -remind-template / -result-template 重新导入，或在后台抽签页的赛事设置中填写：")
 	if missingRemind {
 		fmt.Println("  [提醒] 尊敬的${name}家长您好，${event}的抽签将于${deadline}截止，请点击链接完成抽签：" + link)
 		fmt.Println("         变量：name/event/deadline")
@@ -275,16 +274,8 @@ func groupLines(data *model.LotteryData) []string {
 	return lines
 }
 
-// baseURL 读取对外访问地址；未配置时返回空串，输出相对路径。
-func baseURL() string {
-	return strings.TrimRight(os.Getenv("PUBLIC_BASE_URL"), "/")
-}
-
-// defaultDir 与后端配置保持一致：LOTTERY_DIR，默认 data/lottery。
+// defaultDir 与 config.yaml 的 storage.lottery_dir 默认值保持一致。
 func defaultDir() string {
-	if dir := os.Getenv("LOTTERY_DIR"); dir != "" {
-		return dir
-	}
 	return "data/lottery"
 }
 

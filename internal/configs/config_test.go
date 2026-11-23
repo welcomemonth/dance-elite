@@ -3,10 +3,24 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
+
+// envKeys 是 config 读取的全部环境变量；每个用例开始前清空，避免本机干扰。
+var envKeys = []string{
+	"APP_ENV", "CONFIG_FILE",
+	"JWT_SECRET", "ID_CARD_HMAC_KEY", "ADMIN_INIT_PASSWORD",
+	"WECHAT_APPID", "WECHAT_SECRET", "WECHAT_MCHID", "WECHAT_MCH_SERIAL_NO",
+	"WECHAT_PAY_PUBLIC_KEY_ID", "WECHAT_PAY_API_V3_KEY",
+	"WECHAT_PAY_PRIVATE_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_FILE",
+	// 已移除的旧配置：必须不再生效
+	"DEBUG", "PAY_MOCK", "PORT", "DB_PATH", "UPLOAD_DIR", "LOG_LEVEL", "LOG_FORMAT",
+	"SLOW_REQUEST_MS", "JWT_EXPIRE_SECONDS", "STATUS_TICK_SECONDS",
+	"ORDER_EXPIRE_MINUTES", "REFUND_WATCHDOG_MINUTES",
+	"WECHAT_PAY_KEY", "WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_PUBLIC_KEY",
+	"WECHAT_PAY_NOTIFY_URL", "WECHAT_REFUND_NOTIFY_URL",
+}
 
 // clearEnv 清空指定环境变量，测试结束后恢复原值。
 func clearEnv(t *testing.T, keys ...string) {
@@ -24,386 +38,387 @@ func clearEnv(t *testing.T, keys ...string) {
 	}
 }
 
-func TestLoadDefaults(t *testing.T) {
-	clearEnv(t, "PORT", "DEBUG", "DB_PATH", "UPLOAD_DIR", "PAY_MOCK", "JWT_EXPIRE_SECONDS", "ADMIN_INIT_USERNAME")
-
-	cfg, err := read()
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if cfg.Port != "8080" {
-		t.Errorf("Port = %q, want 8080", cfg.Port)
-	}
-	if cfg.Debug {
-		t.Error("Debug = true, want false")
-	}
-	if cfg.DBPath != "data/dance-elite.db" {
-		t.Errorf("DBPath = %q", cfg.DBPath)
-	}
-	if cfg.UploadDir != "uploads" {
-		t.Errorf("UploadDir = %q, want uploads", cfg.UploadDir)
-	}
-	if cfg.PayMock {
-		t.Error("PayMock = true, want false")
-	}
-	if cfg.JWTExpireSeconds != 7200 {
-		t.Errorf("JWTExpireSeconds = %d, want 7200", cfg.JWTExpireSeconds)
-	}
-	if cfg.AdminInitUsername != "admin" {
-		t.Errorf("AdminInitUsername = %q, want admin", cfg.AdminInitUsername)
-	}
-}
-
-func TestEnvOverridesDefaults(t *testing.T) {
-	t.Setenv("PORT", "9090")
-	t.Setenv("DEBUG", "true")
-	t.Setenv("DB_PATH", "/tmp/dance.db")
-	t.Setenv("UPLOAD_DIR", "/data/uploads")
-	t.Setenv("PAY_MOCK", "1")
-	t.Setenv("WECHAT_APPID", "wx_from_env")
-	t.Setenv("ID_CARD_HMAC_KEY", "hmac_from_env")
-	t.Setenv("ADMIN_INIT_PASSWORD", "admin_from_env")
-
-	cfg, err := read()
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if cfg.Port != "9090" {
-		t.Errorf("Port = %q, want env value", cfg.Port)
-	}
-	if !cfg.Debug {
-		t.Error("Debug = false, want true")
-	}
-	if cfg.DBPath != "/tmp/dance.db" {
-		t.Errorf("DBPath = %q", cfg.DBPath)
-	}
-	if cfg.UploadDir != "/data/uploads" {
-		t.Errorf("UploadDir = %q", cfg.UploadDir)
-	}
-	if !cfg.PayMock {
-		t.Error("PayMock = false, want true")
-	}
-	if cfg.WechatAppID != "wx_from_env" {
-		t.Errorf("WechatAppID = %q", cfg.WechatAppID)
-	}
-	if cfg.IDCardHMACKey != "hmac_from_env" {
-		t.Errorf("IDCardHMACKey = %q", cfg.IDCardHMACKey)
-	}
-	if cfg.AdminInitPassword != "admin_from_env" {
-		t.Errorf("AdminInitPassword = %q", cfg.AdminInitPassword)
-	}
-}
-
-func TestInvalidBoolEnvReturnsError(t *testing.T) {
-	t.Setenv("PAY_MOCK", "yes-please")
-
-	_, err := read()
-	if err == nil || !strings.Contains(err.Error(), "PAY_MOCK") {
-		t.Fatalf("read error = %v, want invalid PAY_MOCK error", err)
-	}
-}
-
-// TestLogDefaultsFollowDebug 验证日志级别/格式未配置时随 DEBUG 推导。
-func TestLogDefaultsFollowDebug(t *testing.T) {
-	clearEnv(t, "DEBUG", "LOG_LEVEL", "LOG_FORMAT")
-
-	cfg, err := read()
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if cfg.LogLevel != "info" || cfg.LogFormat != "json" {
-		t.Fatalf("prod defaults = %s/%s, want info/json", cfg.LogLevel, cfg.LogFormat)
-	}
-
-	t.Setenv("DEBUG", "true")
-	cfg, err = read()
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if cfg.LogLevel != "debug" || cfg.LogFormat != "console" {
-		t.Fatalf("debug defaults = %s/%s, want debug/console", cfg.LogLevel, cfg.LogFormat)
-	}
-}
-
-// TestInvalidLogEnvRejected 验证非法日志配置启动即失败。
-func TestInvalidLogEnvRejected(t *testing.T) {
-	for _, key := range []string{"LOG_LEVEL", "LOG_FORMAT"} {
-		t.Run(key, func(t *testing.T) {
-			for k, v := range map[string]string{
-				"JWT_SECRET": "jwt", "ID_CARD_HMAC_KEY": "hmac",
-				"WECHAT_APPID": "wx", "WECHAT_SECRET": "secret", "ADMIN_INIT_PASSWORD": "pass",
-				"PAY_MOCK": "true", key: "invalid-value",
-			} {
-				t.Setenv(k, v)
-			}
-			_, err := Load()
-			if err == nil || !strings.Contains(err.Error(), key) {
-				t.Fatalf("Load error = %v, want invalid %s error", err, key)
-			}
-		})
-	}
-}
-
-func TestInvalidIntEnvReturnsError(t *testing.T) {
-	t.Setenv("JWT_EXPIRE_SECONDS", "two-hours")
-
-	_, err := read()
-	if err == nil || !strings.Contains(err.Error(), "JWT_EXPIRE_SECONDS") {
-		t.Fatalf("read error = %v, want invalid JWT_EXPIRE_SECONDS error", err)
-	}
-}
-
-func TestNonPositiveJWTExpireRejected(t *testing.T) {
-	t.Setenv("JWT_EXPIRE_SECONDS", "0")
-	t.Setenv("PAY_MOCK", "true")
-	for key, value := range map[string]string{
-		"JWT_SECRET": "jwt", "ID_CARD_HMAC_KEY": "hmac",
-		"WECHAT_APPID": "wx", "WECHAT_SECRET": "secret", "ADMIN_INIT_PASSWORD": "pass",
-	} {
-		t.Setenv(key, value)
-	}
-
-	_, err := Load()
-	if err == nil || !strings.Contains(err.Error(), "JWT_EXPIRE_SECONDS") {
-		t.Fatalf("Load error = %v, want non-positive JWT_EXPIRE_SECONDS error", err)
-	}
-}
-
-// TestLoadFailsFastOnMissingSecrets 验证启动自检在缺项时返回错误并列出全部缺失项。
-func TestLoadFailsFastOnMissingSecrets(t *testing.T) {
-	required := []string{"JWT_SECRET", "ID_CARD_HMAC_KEY", "WECHAT_APPID", "WECHAT_SECRET", "ADMIN_INIT_PASSWORD"}
-	clearEnv(t, required...)
-	t.Setenv("PAY_MOCK", "true")
-
-	_, err := Load()
-	if err == nil {
-		t.Fatal("Load should fail without required secrets")
-	}
-	for _, want := range required {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not list %s", err, want)
-		}
-	}
-}
-
-// TestLoadReadsDotEnv 验证本地 .env 会被读取，且已存在的环境变量优先。
-func TestLoadReadsDotEnv(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	body := "PORT=8081\nJWT_SECRET=jwt\nID_CARD_HMAC_KEY=hmac\n" +
-		"WECHAT_APPID=wx\nWECHAT_SECRET=secret\nADMIN_INIT_PASSWORD=pass\nPAY_MOCK=true\n"
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(body), 0o600); err != nil {
-		t.Fatalf("write .env: %v", err)
-	}
-	clearEnv(t, "PORT", "JWT_SECRET", "ID_CARD_HMAC_KEY", "WECHAT_APPID", "WECHAT_SECRET", "ADMIN_INIT_PASSWORD", "PAY_MOCK")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Port != "8081" {
-		t.Errorf("Port = %q, want value from .env", cfg.Port)
-	}
-	if cfg.JWTSecret != "jwt" {
-		t.Errorf("JWTSecret = %q, want value from .env", cfg.JWTSecret)
-	}
-}
-
-func TestRealEnvWinsOverDotEnv(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	body := "PORT=8081\nJWT_SECRET=jwt\nID_CARD_HMAC_KEY=hmac\n" +
-		"WECHAT_APPID=wx\nWECHAT_SECRET=secret\nADMIN_INIT_PASSWORD=pass\nPAY_MOCK=true\n"
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(body), 0o600); err != nil {
-		t.Fatalf("write .env: %v", err)
-	}
-	clearEnv(t, "PORT", "JWT_SECRET", "ID_CARD_HMAC_KEY", "WECHAT_APPID", "WECHAT_SECRET", "ADMIN_INIT_PASSWORD", "PAY_MOCK")
-	t.Setenv("PORT", "9090")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.Port != "9090" {
-		t.Errorf("Port = %q, want existing env to win", cfg.Port)
-	}
-}
-
-func TestMissingSecretsOrder(t *testing.T) {
-	got := (&Config{PayMock: true}).MissingSecrets()
-	want := []string{"JWT_SECRET", "ID_CARD_HMAC_KEY", "WECHAT_APPID", "WECHAT_SECRET", "ADMIN_INIT_PASSWORD"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("MissingSecrets = %v, want %v", got, want)
-	}
-}
-
-func TestMissingSecretsAllPresent(t *testing.T) {
-	cfg := &Config{
-		JWTSecret:         "jwt",
-		IDCardHMACKey:     "hmac",
-		WechatAppID:       "wx",
-		WechatSecret:      "secret",
-		PayMock:           true,
-		AdminInitPassword: "pass",
-	}
-	if got := cfg.MissingSecrets(); len(got) != 0 {
-		t.Fatalf("MissingSecrets = %v, want none", got)
-	}
-}
-
-func TestMissingSecretsRealPay(t *testing.T) {
-	cfg := &Config{
-		JWTSecret:         "jwt",
-		IDCardHMACKey:     "hmac",
-		WechatAppID:       "wx",
-		WechatSecret:      "secret",
-		PayMock:           false,
-		AdminInitPassword: "pass",
-	}
-	got := cfg.MissingSecrets()
-	if len(got) != 8 {
-		t.Fatalf("MissingSecrets = %v, want 8 pay-related items", got)
-	}
-	for _, item := range got {
-		if !strings.HasPrefix(item, "WECHAT_") {
-			t.Errorf("unexpected missing item %q", item)
-		}
-	}
-}
-
-// writeSecretFile 写入测试用密钥文件并返回路径。
-func writeSecretFile(t *testing.T, name, body string) string {
+// prepare 创建隔离工作目录与配置文件，设置始终必需的密钥，默认 APP_ENV=dev。
+func prepare(t *testing.T, yaml string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), name)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	clearEnv(t, envKeys...)
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+	t.Setenv("CONFIG_FILE", path)
+	t.Setenv("APP_ENV", EnvDev)
+	setRequiredSecrets(t)
+	return dir
+}
+
+func setRequiredSecrets(t *testing.T) {
+	t.Helper()
+	t.Setenv("JWT_SECRET", "jwt")
+	t.Setenv("ID_CARD_HMAC_KEY", "hmac")
+	t.Setenv("WECHAT_APPID", "wx")
+	t.Setenv("WECHAT_SECRET", "secret")
+	t.Setenv("ADMIN_INIT_PASSWORD", "pass")
+}
+
+func writeSecretFile(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write %s: %v", name, err)
 	}
 	return path
 }
 
-// TestWechatPEMFromFiles 验证 *_FILE 方式读取只读挂载的 PEM 内容。
-func TestWechatPEMFromFiles(t *testing.T) {
-	keyPEM := "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n"
-	pubPEM := "-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----\n"
-	keyPath := writeSecretFile(t, "apiclient_key.pem", keyPEM)
-	pubPath := writeSecretFile(t, "wechatpay_pub_key.pem", pubPEM)
-	clearEnv(t, "WECHAT_PAY_PRIVATE_KEY", "WECHAT_PAY_PUBLIC_KEY",
-		"WECHAT_PAY_PRIVATE_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_FILE")
+// setPaymentEnv 配置一整套真实支付材料（默认值可被调用方覆盖）。
+func setPaymentEnv(t *testing.T, dir string) {
+	t.Helper()
+	keyPath := writeSecretFile(t, dir, "apiclient_key.pem",
+		"-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n")
+	pubPath := writeSecretFile(t, dir, "wechatpay_pub_key.pem",
+		"-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----\n")
+	t.Setenv("WECHAT_MCHID", "mch")
+	t.Setenv("WECHAT_MCH_SERIAL_NO", "serial")
+	t.Setenv("WECHAT_PAY_PUBLIC_KEY_ID", "PUB_KEY_ID_0114232134912410000000000000")
+	t.Setenv("WECHAT_PAY_API_V3_KEY", strings.Repeat("k", 32))
 	t.Setenv("WECHAT_PAY_PRIVATE_KEY_FILE", keyPath)
 	t.Setenv("WECHAT_PAY_PUBLIC_KEY_FILE", pubPath)
-
-	cfg, err := read()
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
-	if cfg.WechatPrivateKey != strings.TrimSpace(keyPEM) {
-		t.Errorf("WechatPrivateKey = %q, want file content", cfg.WechatPrivateKey)
-	}
-	if cfg.WechatPrivateKeyFile != keyPath {
-		t.Errorf("WechatPrivateKeyFile = %q, want %q", cfg.WechatPrivateKeyFile, keyPath)
-	}
-	if cfg.WechatPayPublicKey != strings.TrimSpace(pubPEM) {
-		t.Errorf("WechatPayPublicKey = %q, want file content", cfg.WechatPayPublicKey)
-	}
-	if cfg.WechatPayPublicKeyFile != pubPath {
-		t.Errorf("WechatPayPublicKeyFile = %q, want %q", cfg.WechatPayPublicKeyFile, pubPath)
-	}
 }
 
-// TestWechatPEMFileConflictsWithInline 验证直接值与该文件路径不能同时配置。
-func TestWechatPEMFileConflictsWithInline(t *testing.T) {
-	t.Setenv("WECHAT_PAY_PRIVATE_KEY", "inline-pem")
-	t.Setenv("WECHAT_PAY_PRIVATE_KEY_FILE", filepath.Join(t.TempDir(), "unused.pem"))
-
-	_, err := read()
-	if err == nil || !strings.Contains(err.Error(), "WECHAT_PAY_PRIVATE_KEY") {
-		t.Fatalf("read error = %v, want conflict error", err)
-	}
-}
-
-// TestWechatPEMFileUnreadable 验证密钥文件不存在时启动报错并带上路径。
-func TestWechatPEMFileUnreadable(t *testing.T) {
-	clearEnv(t, "WECHAT_PAY_PUBLIC_KEY")
-	path := filepath.Join(t.TempDir(), "missing.pem")
-	t.Setenv("WECHAT_PAY_PUBLIC_KEY_FILE", path)
-
-	_, err := read()
-	if err == nil || !strings.Contains(err.Error(), "WECHAT_PAY_PUBLIC_KEY_FILE") || !strings.Contains(err.Error(), path) {
-		t.Fatalf("read error = %v, want unreadable file error with path", err)
-	}
-}
-
-// TestWechatPEMFileEmpty 验证空白密钥文件视为配置错误。
-func TestWechatPEMFileEmpty(t *testing.T) {
-	clearEnv(t, "WECHAT_PAY_PUBLIC_KEY")
-	path := writeSecretFile(t, "empty.pem", " \n")
-	t.Setenv("WECHAT_PAY_PUBLIC_KEY_FILE", path)
-
-	_, err := read()
-	if err == nil || !strings.Contains(err.Error(), "内容为空") {
-		t.Fatalf("read error = %v, want empty file error", err)
-	}
-}
-
-// setRealPayEnv 设置真实支付通道的基础环境变量，overrides 覆盖或补充。
-func setRealPayEnv(t *testing.T, overrides map[string]string) {
-	t.Helper()
-	base := map[string]string{
-		"JWT_SECRET":               "jwt",
-		"ID_CARD_HMAC_KEY":         "hmac",
-		"WECHAT_APPID":             "wx",
-		"WECHAT_SECRET":            "secret",
-		"ADMIN_INIT_PASSWORD":      "pass",
-		"PAY_MOCK":                 "false",
-		"WECHAT_MCHID":             "mch",
-		"WECHAT_PAY_KEY":           strings.Repeat("k", 32),
-		"WECHAT_MCH_SERIAL_NO":     "serial",
-		"WECHAT_PAY_NOTIFY_URL":    "https://example.com/notify",
-		"WECHAT_REFUND_NOTIFY_URL": "https://example.com/refund",
-	}
-	for key, value := range base {
-		t.Setenv(key, value)
-	}
-	for key, value := range overrides {
-		t.Setenv(key, value)
-	}
-}
-
-// TestLoadAcceptsPublicKeyMode 验证公钥模式配置可通过启动自检。
-func TestLoadAcceptsPublicKeyMode(t *testing.T) {
-	clearEnv(t, "WECHAT_PAY_PUBLIC_KEY", "WECHAT_PAY_PUBLIC_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_ID")
-	pubPath := writeSecretFile(t, "wechatpay_pub_key.pem",
-		"-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----\n")
-	keyPath := writeSecretFile(t, "apiclient_key.pem", "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n")
-	setRealPayEnv(t, map[string]string{
-		"WECHAT_PAY_PRIVATE_KEY_FILE": keyPath,
-		"WECHAT_PAY_PUBLIC_KEY_FILE":  pubPath,
-		"WECHAT_PAY_PUBLIC_KEY_ID":    "PUB_KEY_ID_0114232134912410000000000000",
-	})
+func TestLoadDefaultsAndDevMock(t *testing.T) {
+	prepare(t, "{}\n")
 
 	cfg, err := Load()
 	if err != nil {
-		t.Fatalf("Load with public key mode: %v", err)
+		t.Fatalf("Load: %v", err)
 	}
-	if !strings.Contains(cfg.WechatPayPublicKey, "BEGIN PUBLIC KEY") {
-		t.Fatalf("WechatPayPublicKey = %q, want file content", cfg.WechatPayPublicKey)
+	if cfg.Server.Port != 8080 {
+		t.Errorf("Port = %d, want 8080", cfg.Server.Port)
 	}
-	if cfg.WechatPayPublicKeyFile != pubPath {
-		t.Fatalf("WechatPayPublicKeyFile = %q, want %q", cfg.WechatPayPublicKeyFile, pubPath)
+	if cfg.Storage.DBPath != "data/dance-elite.db" {
+		t.Errorf("DBPath = %q", cfg.Storage.DBPath)
+	}
+	if cfg.Storage.UploadDir != "uploads" {
+		t.Errorf("UploadDir = %q", cfg.Storage.UploadDir)
+	}
+	if cfg.Log.Level != "info" || cfg.Log.Format != "json" {
+		t.Errorf("log = %s/%s, want info/json", cfg.Log.Level, cfg.Log.Format)
+	}
+	if cfg.Auth.JWTExpireSeconds != 7200 {
+		t.Errorf("JWTExpireSeconds = %d, want 7200", cfg.Auth.JWTExpireSeconds)
+	}
+	if cfg.Admin.InitUsername != "admin" {
+		t.Errorf("InitUsername = %q, want admin", cfg.Admin.InitUsername)
+	}
+	if cfg.Scheduler.StatusTickSeconds != 60 || cfg.Scheduler.OrderExpireMinutes != 15 || cfg.Scheduler.RefundWatchdogMinutes != 10 {
+		t.Errorf("scheduler = %d/%d/%d", cfg.Scheduler.StatusTickSeconds, cfg.Scheduler.OrderExpireMinutes, cfg.Scheduler.RefundWatchdogMinutes)
+	}
+	if cfg.Payment.Mode != PaymentModeMock {
+		t.Errorf("Payment.Mode = %q, want mock", cfg.Payment.Mode)
+	}
+	if cfg.Payment.MockReason == "" {
+		t.Error("MockReason is empty")
 	}
 }
 
-// TestLoadRequiresPublicKeyID 验证必须同时配置公钥 ID。
-func TestLoadRequiresPublicKeyID(t *testing.T) {
-	clearEnv(t, "WECHAT_PAY_PUBLIC_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_ID")
-	keyPath := writeSecretFile(t, "apiclient_key.pem", "key-pem")
-	setRealPayEnv(t, map[string]string{
-		"WECHAT_PAY_PRIVATE_KEY_FILE": keyPath,
-		"WECHAT_PAY_PUBLIC_KEY":       "-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----\n",
-	})
+func TestYAMLValues(t *testing.T) {
+	prepare(t, `
+server:
+  port: 9090
+  slow_request_ms: 0
+storage:
+  db_path: /tmp/dance.db
+  upload_dir: /tmp/uploads
+log:
+  level: warn
+  format: json
+auth:
+  jwt_expire_seconds: 60
+admin:
+  init_username: root
+scheduler:
+  status_tick_seconds: 5
+  order_expire_minutes: 3
+  refund_watchdog_minutes: 4
+`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.Port != 9090 || cfg.Server.SlowRequestMS != 0 {
+		t.Errorf("server = %d/%d", cfg.Server.Port, cfg.Server.SlowRequestMS)
+	}
+	if cfg.Storage.DBPath != "/tmp/dance.db" || cfg.Storage.UploadDir != "/tmp/uploads" {
+		t.Errorf("storage = %s/%s", cfg.Storage.DBPath, cfg.Storage.UploadDir)
+	}
+	if cfg.Log.Level != "warn" || cfg.Log.Format != "json" {
+		t.Errorf("log = %s/%s", cfg.Log.Level, cfg.Log.Format)
+	}
+	if cfg.Auth.JWTExpireSeconds != 60 {
+		t.Errorf("JWTExpireSeconds = %d", cfg.Auth.JWTExpireSeconds)
+	}
+	if cfg.Admin.InitUsername != "root" {
+		t.Errorf("InitUsername = %q", cfg.Admin.InitUsername)
+	}
+	if cfg.Scheduler.StatusTickSeconds != 5 || cfg.Scheduler.OrderExpireMinutes != 3 || cfg.Scheduler.RefundWatchdogMinutes != 4 {
+		t.Errorf("scheduler = %d/%d/%d", cfg.Scheduler.StatusTickSeconds, cfg.Scheduler.OrderExpireMinutes, cfg.Scheduler.RefundWatchdogMinutes)
+	}
+}
+
+func TestDerivedNotifyURLs(t *testing.T) {
+	prepare(t, `
+server:
+  public_base_url: https://api.example.com/
+`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Server.PublicBaseURL != "https://api.example.com" {
+		t.Errorf("PublicBaseURL = %q, want trailing slash removed", cfg.Server.PublicBaseURL)
+	}
+	if cfg.Payment.NotifyURL != "https://api.example.com/api/v1/payments/wechat/notify" {
+		t.Errorf("NotifyURL = %q", cfg.Payment.NotifyURL)
+	}
+	if cfg.Payment.RefundNotifyURL != "https://api.example.com/api/v1/payments/wechat/refund-notify" {
+		t.Errorf("RefundNotifyURL = %q", cfg.Payment.RefundNotifyURL)
+	}
+}
+
+func TestPaymentMaterialFromFiles(t *testing.T) {
+	dir := prepare(t, `
+server:
+  public_base_url: https://api.example.com
+`)
+	setPaymentEnv(t, dir)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Payment.Mode != PaymentModeWechat {
+		t.Fatalf("Payment.Mode = %q, want wechat (reason: %s)", cfg.Payment.Mode, cfg.Payment.MockReason)
+	}
+	if !strings.Contains(cfg.Secrets.WechatPayPrivateKeyPEM, "BEGIN PRIVATE KEY") {
+		t.Errorf("private key PEM = %q", cfg.Secrets.WechatPayPrivateKeyPEM)
+	}
+	if !strings.Contains(cfg.Secrets.WechatPayPublicKeyPEM, "BEGIN PUBLIC KEY") {
+		t.Errorf("public key PEM = %q", cfg.Secrets.WechatPayPublicKeyPEM)
+	}
+}
+
+func TestDevFallsBackToMockWhenKeyFileUnreadable(t *testing.T) {
+	dir := prepare(t, "{}\n")
+	setPaymentEnv(t, dir)
+	missing := filepath.Join(dir, "missing.pem")
+	t.Setenv("WECHAT_PAY_PRIVATE_KEY_FILE", missing)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Payment.Mode != PaymentModeMock {
+		t.Fatalf("Payment.Mode = %q, want mock", cfg.Payment.Mode)
+	}
+	if !strings.Contains(cfg.Payment.MockReason, "读取失败") || !strings.Contains(cfg.Payment.MockReason, missing) {
+		t.Errorf("MockReason = %q, want unreadable file with path", cfg.Payment.MockReason)
+	}
+}
+
+func TestDevFallsBackToMockWhenAPIv3KeyInvalid(t *testing.T) {
+	dir := prepare(t, "{}\n")
+	setPaymentEnv(t, dir)
+	t.Setenv("WECHAT_PAY_API_V3_KEY", strings.Repeat("k", 31))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Payment.Mode != PaymentModeMock {
+		t.Fatalf("Payment.Mode = %q, want mock", cfg.Payment.Mode)
+	}
+	if !strings.Contains(cfg.Payment.MockReason, "32 字节") {
+		t.Errorf("MockReason = %q", cfg.Payment.MockReason)
+	}
+}
+
+func TestProdRequiresPaymentMaterial(t *testing.T) {
+	prepare(t, `
+server:
+  public_base_url: https://api.example.com
+`)
+	t.Setenv("APP_ENV", EnvProd)
 
 	_, err := Load()
-	if err == nil || !strings.Contains(err.Error(), "WECHAT_PAY_PUBLIC_KEY_ID") {
-		t.Fatalf("Load error = %v, want missing WECHAT_PAY_PUBLIC_KEY_ID", err)
+	if err == nil {
+		t.Fatal("Load should fail in prod without payment material")
+	}
+	for _, want := range []string{"WECHAT_MCHID", "不会回退 mock"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestProdRejectsUnreadableKeyFile(t *testing.T) {
+	dir := prepare(t, `
+server:
+  public_base_url: https://api.example.com
+`)
+	setPaymentEnv(t, dir)
+	t.Setenv("APP_ENV", EnvProd)
+	t.Setenv("WECHAT_PAY_PRIVATE_KEY_FILE", filepath.Join(dir, "missing.pem"))
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "读取失败") {
+		t.Fatalf("Load error = %v, want unreadable key file error", err)
+	}
+}
+
+func TestProdRequiresPublicBaseURL(t *testing.T) {
+	dir := prepare(t, "{}\n")
+	setPaymentEnv(t, dir)
+	t.Setenv("APP_ENV", EnvProd)
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "public_base_url") {
+		t.Fatalf("Load error = %v, want public_base_url error", err)
+	}
+}
+
+func TestProdRequiresHTTPSBaseURL(t *testing.T) {
+	dir := prepare(t, `
+server:
+  public_base_url: http://api.example.com
+`)
+	setPaymentEnv(t, dir)
+	t.Setenv("APP_ENV", EnvProd)
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("Load error = %v, want https error", err)
+	}
+}
+
+func TestAlwaysRequiredSecrets(t *testing.T) {
+	prepare(t, "{}\n")
+	for _, key := range []string{"JWT_SECRET", "ID_CARD_HMAC_KEY", "WECHAT_APPID", "WECHAT_SECRET", "ADMIN_INIT_PASSWORD"} {
+		t.Setenv(key, "")
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load should fail without required secrets")
+	}
+	for _, want := range []string{"JWT_SECRET", "ID_CARD_HMAC_KEY", "WECHAT_APPID", "WECHAT_SECRET", "ADMIN_INIT_PASSWORD"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not list %s", err, want)
+		}
+	}
+}
+
+func TestInvalidAppEnv(t *testing.T) {
+	prepare(t, "{}\n")
+	t.Setenv("APP_ENV", "staging")
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "APP_ENV") {
+		t.Fatalf("Load error = %v, want APP_ENV error", err)
+	}
+}
+
+func TestInlinePEMIsNotSupported(t *testing.T) {
+	dir := prepare(t, "{}\n")
+	setPaymentEnv(t, dir)
+	t.Setenv("WECHAT_PAY_PRIVATE_KEY_FILE", "")
+	t.Setenv("WECHAT_PAY_PRIVATE_KEY", "inline-pem")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Payment.Mode != PaymentModeMock {
+		t.Fatalf("Payment.Mode = %q, want mock", cfg.Payment.Mode)
+	}
+	if !strings.Contains(cfg.Payment.MockReason, "WECHAT_PAY_PRIVATE_KEY_FILE") {
+		t.Errorf("MockReason = %q, want missing file env", cfg.Payment.MockReason)
+	}
+}
+
+func TestInvalidYAMLValues(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{"port", "server:\n  port: 0\n", "server.port"},
+		{"slow request", "server:\n  slow_request_ms: -1\n", "slow_request_ms"},
+		{"log level", "log:\n  level: verbose\n", "log.level"},
+		{"log format", "log:\n  format: text\n", "log.format"},
+		{"jwt expire", "auth:\n  jwt_expire_seconds: 0\n", "jwt_expire_seconds"},
+		{"empty admin username", "admin:\n  init_username: \"\"\n", "init_username"},
+		{"status tick", "scheduler:\n  status_tick_seconds: 0\n", "status_tick_seconds"},
+		{"order expire", "scheduler:\n  order_expire_minutes: 0\n", "order_expire_minutes"},
+		{"refund watchdog", "scheduler:\n  refund_watchdog_minutes: 0\n", "refund_watchdog_minutes"},
+		{"empty db path", "storage:\n  db_path: \"\"\n", "db_path"},
+		{"empty upload dir", "storage:\n  upload_dir: \"\"\n", "upload_dir"},
+		{"bad base url", "server:\n  public_base_url: api.example.com\n", "public_base_url"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prepare(t, tt.yaml)
+			_, err := Load()
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Load error = %v, want %s error", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestMissingConfigFile(t *testing.T) {
+	prepare(t, "{}\n")
+	path := filepath.Join(t.TempDir(), "nope.yaml")
+	t.Setenv("CONFIG_FILE", path)
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), path) {
+		t.Fatalf("Load error = %v, want path %s", err, path)
+	}
+}
+
+func TestLoadReadsDotEnv(t *testing.T) {
+	dir := prepare(t, "{}\n")
+	body := "JWT_SECRET=from_dotenv\nAPP_ENV=dev\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	os.Unsetenv("JWT_SECRET")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Secrets.JWTSecret != "from_dotenv" {
+		t.Errorf("JWTSecret = %q, want value from .env", cfg.Secrets.JWTSecret)
+	}
+}
+
+func TestRealEnvWinsOverDotEnv(t *testing.T) {
+	dir := prepare(t, "{}\n")
+	body := "JWT_SECRET=from_dotenv\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(body), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Secrets.JWTSecret != "jwt" {
+		t.Errorf("JWTSecret = %q, want existing env to win", cfg.Secrets.JWTSecret)
 	}
 }

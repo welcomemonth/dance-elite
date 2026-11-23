@@ -21,7 +21,7 @@ func mustOrderNo(t *testing.T, db *store.DB, orderID int64) string {
 	return orderNo
 }
 
-// mockNotifyBody 构造 mock 通道的明文回调报文（PAY_MOCK 下不加密不验签）。
+// mockNotifyBody 构造 mock 通道的明文回调报文（mock 网关下不加密不验签）。
 func mockNotifyBody(orderNo, transactionID string, total int64) string {
 	return fmt.Sprintf(`{
 		"out_trade_no": %q,

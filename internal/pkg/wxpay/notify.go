@@ -306,7 +306,8 @@ func parseWechatError(status int, body []byte) *Error {
 }
 
 // ParseNotify 是 mock 通道的回调解析：直接读取明文交易 JSON，不做验签解密
-// （PAY_MOCK=true 仅供本地/联调，生产关闭）。报文格式与解密后的 resource 一致。
+// （仅 APP_ENV=dev 且未配置真实支付材料时启用，prod 不会进入 mock）。
+// 报文格式与解密后的 resource 一致。
 func (m *MockGateway) ParseNotify(_ NotifyHeaders, body []byte) (*Transaction, error) {
 	tx, err := parseTransaction(body)
 	if err != nil {
