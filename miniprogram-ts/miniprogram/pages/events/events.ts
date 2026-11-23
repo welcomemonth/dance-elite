@@ -2,6 +2,7 @@ import { CustomComponent, DefineComponent, navigateTo, RootComponent } from "ann
 
 import { listEvents } from "../../api/events";
 import type { $EmptyState } from "../../components/empty-state/empty-state";
+import { userStore } from "../../store/user";
 import type { EventItem, EventStatus } from "../../types/models";
 import {
   EVENT_STATUS_OPTIONS,
@@ -60,7 +61,12 @@ const rootComponent = RootComponent()({
     },
     onShow() {
       syncTabBar(this, 0);
-      void this.refreshList();
+      // 落地页兜底静默登录后再拉列表，确保“已报名”角标与报名状态一致；
+      // 登录失败也继续匿名加载，不阻塞赛事浏览。
+      void userStore
+        .ensureLogin()
+        .catch(() => undefined)
+        .then(() => this.refreshList());
     },
     onUnload() {
       unsubscribe?.();
