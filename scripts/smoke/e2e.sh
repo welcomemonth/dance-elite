@@ -158,5 +158,43 @@ STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/v1/payments/w
   -H 'Content-Type: application/json' -d '{"foo":1}')
 [ "$STATUS" = "401" ] && ok "wechat notify rejects bad signature (401)" || bad "wechat notify bad signature (status=$STATUS)"
 
+step "10. 榜单：成绩发布与小程序只读"
+RANK_EVENT=$(cat <<JSON
+{"name":"E2E 榜单赛事 $SUFFIX","season_id":$SEASON_ID,"level":"grade_a","city":"上海","venue":"E2E 榜单馆",
+ "event_date":"2027-04-15","fee":98000,
+ "timeline":{"reg_start_at":"2026-01-01T00:00:00+08:00","reg_end_at":"2027-03-01T18:00:00+08:00",
+   "lottery_at":"2027-03-10T10:00:00+08:00","material_check_at":"2027-03-20T18:00:00+08:00",
+   "start_at":"2027-04-15T09:00:00+08:00"},
+ "groups":[{"level":"U13","dance_type":"classical","quota":5}],"publish":true}
+JSON
+)
+RESP=$(call POST /api/v1/admin/events "$RANK_EVENT")
+RANK_EVENT_ID=$(printf '%s' "$RESP" | jq -r '.data.event_id // empty')
+RESP=$(call GET "/api/v1/admin/events/$RANK_EVENT_ID")
+RANK_GROUP_ID=$(printf '%s' "$RESP" | jq -r '.data.groups[0].group_id')
+for n in "榜单一号" "榜单二号"; do
+  call POST /api/v1/admin/manual-registrations "{\"event_id\":$RANK_EVENT_ID,\"group_id\":$RANK_GROUP_ID,\"player_name\":\"$n\",\"id_type\":\"passport\",\"id_card_no\":\"$n-$SUFFIX\",\"birth_date\":\"2014-05-01\",\"contact_phone\":\"13800000011\",\"charge_type\":\"free\"}" >/dev/null
+done
+
+PREVIEW=$(call POST "/api/v1/admin/events/$RANK_EVENT_ID/scores/preview?level=U13&dance_type=classical" \
+  '{"rows":[{"row_no":1,"player_name":"榜单一号","award":"champion"},{"row_no":2,"player_name":"榜单二号","award":"runner_up"}]}')
+[ "$(printf '%s' "$PREVIEW" | jq -r '.data.matched')" = "2" ] && ok "score preview matched" || bad "score preview: $PREVIEW"
+PUBLISH_BODY=$(printf '%s' "$PREVIEW" | jq -c '{rows: [.data.rows[] | {row_no,player_name,award,advanced_to_final,match_status,player_id,remark}]}')
+RESP=$(call POST "/api/v1/admin/events/$RANK_EVENT_ID/scores?level=U13&dance_type=classical" "$PUBLISH_BODY")
+[ "$(printf '%s' "$RESP" | jq -r '.data.published')" = "2" ] && ok "score publish" || bad "score publish: $RESP"
+
+RESP=$(curl -s "$BASE/api/v1/config")
+[ "$(printf '%s' "$RESP" | jq -r '.data.advance_quota')" = "20" ] && ok "public config" || bad "public config: $RESP"
+RESP=$(curl -s "$BASE/api/v1/ranking?level=U13&dance_type=classical")
+RANK_ROWS=$(printf '%s' "$RESP" | jq -r '.data.ranking | length')
+[ "$RANK_ROWS" = "2" ] && ok "public ranking rows=2" || bad "public ranking: $RESP"
+ENTRY_ID=$(printf '%s' "$RESP" | jq -r '.data.ranking[0].id')
+RESP=$(curl -s "$BASE/api/v1/dancers/$ENTRY_ID")
+[ "$(printf '%s' "$RESP" | jq -r '.data.total_points')" -gt 0 ] && ok "dancer detail" || bad "dancer detail: $RESP"
+RESP=$(curl -s "$BASE/api/v1/institution/ranking")
+[ "$(printf '%s' "$RESP" | jq -r '.data.institutions | length')" -ge 0 ] && ok "institution ranking" || bad "institution ranking: $RESP"
+RESP=$(call GET "/api/v1/admin/prize-statements?season_id=$SEASON_ID")
+[ "$(printf '%s' "$RESP" | jq -r '.data.list | length')" -ge 1 ] && ok "prize statements" || bad "prize statements: $RESP"
+
 printf '\n\033[1mSummary\033[0m: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

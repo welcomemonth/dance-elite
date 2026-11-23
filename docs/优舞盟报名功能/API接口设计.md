@@ -3046,6 +3046,69 @@ curl "https://api.example.com/api/v1/admin/logs?action=refund&page=1&page_size=5
 
 # 第三部分：附录
 
+## 15. 榜单中心（后台，S4 落地）
+
+> 与报名系统共用账号体系；写操作仅 admin / super_admin，读操作 cs 可用。
+> 规则优先级：**赛事级 `events.score_rules` / `events.prize_rules` 优先，缺省回落到赛季级规则（settings），再回落到内置默认值。**
+
+### 15.1 积分与奖金规则
+
+| 方法 + 路径 | 说明 |
+|---|---|
+| `GET/PUT /api/v1/admin/seasons/{id}/score-rules` | 赛季积分规则（名次基础分 / 级别权重 / 人数系数分档） |
+| `GET/PUT /api/v1/admin/seasons/{id}/prize-rules` | 赛季奖金规则（金额单位：分） |
+
+积分 = `base_points[award] × level_weights[event.level] × size_band(participants)`（四舍五入取整）。
+人数系数按 `min_players` 降序匹配第一个满足的分档。
+
+### 15.2 成绩录入与纠错
+
+| 方法 + 路径 | 说明 |
+|---|---|
+| `GET /api/v1/admin/events/{id}/scores?level=&dance_type=` | 已发布成绩列表 |
+| `POST /api/v1/admin/events/{id}/scores/preview?level=&dance_type=` | 解析预览：按 `id_card_no`（身份证/护照哈希）或姓名匹配选手，返回 `matched/unmatched` |
+| `POST /api/v1/admin/events/{id}/scores?level=&dance_type=` | 确认发布：写成绩 → 固化积分/奖金 → 重算榜单与资格 |
+| `PUT /api/v1/admin/scores/{entry_id}` | 纠错：旧记录置 `corrected`，写入新发布记录并重算 |
+
+请求体：
+- preview：`{"rows":[{"row_no":1,"player_name":"...","id_card_no":"...","award":"champion","advanced_to_final":false,"remark":""}]}`
+- publish：`{"rows":[<preview 返回的 rows，含 match_status/player_id>]}`
+- correct：`{"award":"runner_up","advanced_to_final":true,"remark":"纠错原因"}`
+
+奖项枚举：`champion / runner_up / third / elite_dancer / special_gold / gold / silver`（兼容旧写法 `third_place`）。
+
+### 15.3 榜单、晋级与机构榜
+
+| 方法 + 路径 | 说明 |
+|---|---|
+| `GET /api/v1/admin/seasons/{id}/leaderboards` | 赛季 6 个榜单（含隐藏选手、展示名、直通标记） |
+| `PUT /api/v1/admin/seasons/{id}/leaderboards/{level}/{dance_type}/players/{player_id}` | 设置展示名 / 隐藏（隐藏不占排名） |
+| `GET /api/v1/admin/seasons/{id}/qualification-cards` | 直通卡（自动 + 手动） |
+| `POST /api/v1/admin/seasons/{id}/qualification-cards` | 手动增补直通卡（`board_id/player_id/reason`） |
+| `DELETE /api/v1/admin/seasons/{id}/qualification-cards/{card_id}` | 取消直通卡 |
+| `GET /api/v1/admin/seasons/{id}/finals-roster` | 总决赛资格名单（直通 + 积分前 20 + 手动） |
+| `POST /api/v1/admin/seasons/{id}/finals-roster/adjust` | 手动增补/移除（`board_id/player_id/action/reason`） |
+| `GET /api/v1/admin/seasons/{id}/institution-ranking` | 机构年度榜（含荣誉与奖金） |
+
+### 15.4 奖金明细
+
+| 方法 + 路径 | 说明 |
+|---|---|
+| `GET /api/v1/admin/prize-statements?season_id=&status=` | 赛季奖金明细（`pending/granted/skipped`） |
+| `PUT /api/v1/admin/prize-statements/{item_id}` | 调整未发放金额（`amount` 分 + `reason`） |
+| `POST /api/v1/admin/prize-statements/{item_id}/pay` | 登记发放（`payee`、可选 `note`） |
+
+### 15.5 榜单计算口径
+
+- **选手积分**：每名选手在该榜单取本年度积分最高的 3 场之和（`used_event_ids` 记录实际计入场次）。
+- **排名**：按总积分降序，同分按 `player_id` 升序；**隐藏选手不占排名**。
+- **直通卡**：甲级赛冠军、超级赛前两名自动写入（`auto_direct`）；手动增补为 `manual_direct`。
+- **积分晋级**：每个榜单按快照排名取前 20（跳过已直通/手动资格）写入 `points`。
+- **机构积分**：每位选手取各榜单最高总积分，按成绩所属机构求和；机构榜前 3 获「年度菁英机构奖」，4–10 获「年度十佳机构奖」。
+- **奖金**：甲级赛冠军、超级赛前两名按参赛人数分档；总决赛按名次；`exclude_from_prize` 赛事不生成奖金。
+
+---
+
 ## A. 状态机对照
 
 ### A.1 订单状态机
