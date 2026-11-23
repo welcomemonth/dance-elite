@@ -20,10 +20,13 @@ export interface LotterySlot {
 /** 抽签页面状态：未开始 / 进行中 / 已截止。 */
 export type LotteryStatus = 'not_started' | 'ongoing' | 'ended';
 
+/** 抽签接口业务结果。 */
+export type LotteryOutcome = 'drawn' | 'already_drawn' | 'choose_genre';
+
 export interface LotteryMeta {
   /** 赛事名称（页面标题） */
   event_name: string;
-  /** 可选舞种 */
+  /** 赛事包含的舞种（仅展示用，不再要求手动选择） */
   genres: LotteryGenre[];
   /** 抽签开始时间（ISO 8601）；缺省表示不限制 */
   start_at?: string;
@@ -35,38 +38,43 @@ export interface LotteryMeta {
   status: LotteryStatus;
 }
 
-export interface LotteryResult {
-  /** 选手姓名 */
+/** 一名选手在某舞种下的抽签记录（同一人可报多个舞种）。 */
+export interface LotteryEntry {
   name: string;
-  /** 舞种枚举值 */
   genre: string;
-  /** 舞种展示名 */
   genre_label: string;
-  /** 年龄组（U11 / U13 / U15） */
   age_group: string;
-  /** 剧目名称 */
   program?: string;
-  /** 选送机构 */
   institution?: string;
   /** 抽签结果；null 表示尚未抽签 */
   slot: LotterySlot | null;
   /** 抽签时间（ISO 8601） */
   drawn_at?: string;
-  /** 本次请求是否实际完成了抽签 */
-  just_drawn: boolean;
   /** 槽位是否由系统在截止后自动分配 */
   auto_drawn: boolean;
+  drawn: boolean;
+}
+
+export interface LotteryLookupResult {
+  entries: LotteryEntry[];
+}
+
+export interface LotteryDrawResult {
+  status: LotteryOutcome;
+  entries: LotteryEntry[];
+  /** status=choose_genre 时可选舞种 */
+  choices?: LotteryGenre[];
 }
 
 export interface LotteryDrawPayload {
   name: string;
   id_card: string;
-  genre: string;
+  /** 留空由服务端判断：唯一舞种直接抽，多舞种返回 choose_genre */
+  genre?: string;
 }
 
 export interface LotteryQueryPayload {
   id_card: string;
-  genre: string;
 }
 
 interface ApiResponse<T> {
@@ -102,23 +110,34 @@ export async function fetchLotteryMeta(token: string): Promise<LotteryMeta> {
   return readData<LotteryMeta>(res);
 }
 
-/** POST /h5/lottery/{token}/draw：抽签（已抽过返回原结果）。 */
+/** POST /h5/lottery/{token}/lookup：按证件号（可选姓名）查全部记录。 */
+export async function lookupLottery(
+  token: string,
+  payload: LotteryQueryPayload & { name?: string },
+): Promise<LotteryLookupResult> {
+  return postJSON<LotteryLookupResult>(
+    `/h5/lottery/${encodeURIComponent(token)}/lookup`,
+    payload,
+  );
+}
+
+/** POST /h5/lottery/{token}/draw：抽签（已抽签返回原结果）。 */
 export async function drawLottery(
   token: string,
   payload: LotteryDrawPayload,
-): Promise<LotteryResult> {
-  return postJSON<LotteryResult>(
+): Promise<LotteryDrawResult> {
+  return postJSON<LotteryDrawResult>(
     `/h5/lottery/${encodeURIComponent(token)}/draw`,
     payload,
   );
 }
 
-/** POST /h5/lottery/{token}/query：按证件号 + 舞种查询。 */
+/** POST /h5/lottery/{token}/query：只凭证件号查询全部已抽签信息。 */
 export async function queryLottery(
   token: string,
   payload: LotteryQueryPayload,
-): Promise<LotteryResult> {
-  return postJSON<LotteryResult>(
+): Promise<LotteryLookupResult> {
+  return postJSON<LotteryLookupResult>(
     `/h5/lottery/${encodeURIComponent(token)}/query`,
     payload,
   );

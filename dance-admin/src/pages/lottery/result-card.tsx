@@ -1,28 +1,28 @@
 import React from 'react';
-import type { LotteryResult } from './service';
+import type { LotteryEntry } from './service';
+import { formatDrawnAt } from './time';
 
-/** 抽签结果卡片：展示「字母组 + 组内序号」，首次抽中时播放翻牌与盖章动画。 */
+/** 抽签结果卡片：一条记录（一个舞种）一张卡，展示「字母组 + 组内序号」与抽签时间。 */
 const ResultCard: React.FC<{
-  result: LotteryResult;
+  entry: LotteryEntry;
   fresh: boolean;
   onGoDraw: () => void;
-}> = ({ result, fresh, onGoDraw }) => {
-  const slot = result.slot;
+}> = ({ entry, fresh, onGoDraw }) => {
+  const slot = entry.slot;
   return (
     <section
       className={`lp-card${fresh ? ' is-fresh' : ''}`}
       aria-live="polite"
     >
       <div className="lp-card-strip">
-        <span>出场顺序</span>
-        <span className="lp-card-strip-en">Stage Call</span>
+        <span>{entry.drawn ? '出场顺序' : '等待抽签'}</span>
+        <span className="lp-card-strip-en">
+          {entry.genre_label} · {entry.age_group}
+        </span>
       </div>
 
       {slot ? (
         <div className="lp-card-body">
-          <p className="lp-card-scope">
-            {result.age_group} · {result.genre_label}
-          </p>
           <div className="lp-slot">
             <span className="lp-slot-letter">{slot.letter}</span>
             <span className="lp-slot-no">{slot.no}</span>
@@ -30,25 +30,37 @@ const ResultCard: React.FC<{
           <p className="lp-card-order">
             {slot.letter} 组 · 第 {slot.no} 位出场
           </p>
-          {result.auto_drawn && (
+          {entry.auto_drawn && (
             <p className="lp-card-note">抽签截止后由系统自动分配</p>
           )}
 
           <dl className="lp-card-facts">
             <div>
               <dt>选手</dt>
-              <dd>{result.name}</dd>
+              <dd>{entry.name}</dd>
             </div>
-            {result.program && (
+            <div>
+              <dt>舞种</dt>
+              <dd>
+                {entry.genre_label} · {entry.age_group}
+              </dd>
+            </div>
+            {entry.program && (
               <div>
                 <dt>剧目</dt>
-                <dd>{result.program}</dd>
+                <dd>{entry.program}</dd>
               </div>
             )}
-            {result.institution && (
+            {entry.institution && (
               <div>
                 <dt>机构</dt>
-                <dd>{result.institution}</dd>
+                <dd>{entry.institution}</dd>
+              </div>
+            )}
+            {entry.drawn_at && (
+              <div>
+                <dt>抽签</dt>
+                <dd>{formatDrawnAt(entry.drawn_at)}</dd>
               </div>
             )}
           </dl>
@@ -61,7 +73,7 @@ const ResultCard: React.FC<{
         <div className="lp-card-body lp-card-empty">
           <p className="lp-empty-title">尚未抽签</p>
           <p className="lp-empty-text">
-            {result.name} 还没有抽取出场顺序，请先完成抽签。
+            {entry.name} 的{entry.genre_label}还没有抽取出场顺序，请先完成抽签。
           </p>
           <button type="button" className="lp-text-btn" onClick={onGoDraw}>
             去抽签 →
