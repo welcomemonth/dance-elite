@@ -36,12 +36,6 @@ Do not upgrade major versions or add new major dependencies without explicit app
 # Run (dev)
 go run ./cmd/dance-elite
 
-# 生成赛事抽签数据（从报名 Excel，输出 data/lottery/<token>.json；-reset 覆盖时清空已有结果与短信记录）
-# 短信模板 CODE 可用 -remind-template / -result-template 写入（默认取 SMS_REMIND_TEMPLATE / SMS_RESULT_TEMPLATE）
-go run ./cmd/lottery-import -excel "报名资料.xlsx" -event "优舞盟12月赛事抽签" \
-  -start-at "2026-11-25 10:00" -end-at "2026-11-27 22:00" \
-  -remind-template "SMS_xxxxxxx" -result-template "SMS_yyyyyyy"
-
 # Build frontend (pnpm build 自动同步到 internal/web/dist；本地开发用 pnpm dev 可跳过)
 cd dance-admin && pnpm build
 
@@ -59,11 +53,11 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 
 配置分两处，互不混用（无命令行参数）：
 
-- **非敏感运行参数**：viper 读取 `config.yaml`（`CONFIG_FILE` 可指定路径，默认仓库根文件）。字段：`server.port` / `server.public_base_url` / `server.slow_request_ms`、`storage.db_path` / `storage.upload_dir` / `storage.lottery_dir`、`log.level` / `log.format`、`auth.jwt_expire_seconds`、`admin.init_username`、`scheduler.status_tick_seconds` / `order_expire_minutes` / `refund_watchdog_minutes`、`sms.mock`。生产挂载独立 `config.yaml`（镜像不内置）。
+- **非敏感运行参数**：viper 读取 `config.yaml`（`CONFIG_FILE` 可指定路径，默认仓库根文件）。字段：`server.port` / `server.public_base_url` / `server.slow_request_ms`、`storage.db_path` / `storage.upload_dir`、`log.level` / `log.format`、`auth.jwt_expire_seconds`、`admin.init_username`、`scheduler.status_tick_seconds` / `order_expire_minutes` / `refund_watchdog_minutes`、`sms.mock`。生产挂载独立 `config.yaml`（镜像不内置）。
 - **密钥与微信账户**：只来自环境变量；本地由 godotenv 读取 `.env`（已存在的环境变量优先），生产由容器注入。始终必需 `JWT_SECRET`、`ID_CARD_HMAC_KEY`、`WECHAT_APPID`、`WECHAT_SECRET`、`ADMIN_INIT_PASSWORD`。微信支付固定公钥验签模式：另需 `WECHAT_MCHID`、`WECHAT_MCH_SERIAL_NO`、`WECHAT_PAY_PUBLIC_KEY_ID`、`WECHAT_PAY_API_V3_KEY`（32 字节）、`WECHAT_PAY_PRIVATE_KEY_FILE`、`WECHAT_PAY_PUBLIC_KEY_FILE`（PEM 只接受文件路径，不接受内联文本）。抽签短信（可选，阿里云）：`SMS_ACCESS_KEY_ID` + `SMS_ACCESS_KEY_SECRET` + `SMS_SIGN_NAME` 三项齐全才启用，`sms.mock=true` 时只打脱敏日志。
 - **`APP_ENV=dev|prod`**（默认 prod）：dev 下支付材料缺失/不可读时自动回退 mock；prod 下同类问题启动即 fail-fast。无 `DEBUG` / `PAY_MOCK` 开关；`log.level=debug` 时 Gin 使用 debug 模式。
 - **派生**：微信支付回调地址 = `server.public_base_url` + `/api/v1/payments/wechat/notify`（退款为 `/refund-notify`），不再单独配置；音频审核与抽签外链同源。`public_base_url` 在 prod 必填，短信里的抽签链接也用它拼接。
-- 抽签数据目录 `storage.lottery_dir` 留空默认 `<db_path 目录>/lottery`（本地 `data/lottery`，一个赛事一个 `<token>.json`）。短信模板 CODE 按赛事在后台抽签页填写（每个赛事单独提审，见 API 文档 7.2.4）；配了 `end_at` 却缺模板或 `public_base_url` 时，抽签定时任务每小时打一条 `lottery.sms_config_missing` 告警。
+- 抽签数据存 SQLite（`lottery_sessions` / `lottery_groups` / `lottery_players`，迁移 0017），每个赛事一个 session、一个免登录 token；支持「上传 Excel」与「使用已截止赛事的有效报名」两种生成方式。短信模板 CODE 按赛事在后台「赛事抽签 → 设置」填写（每个赛事单独提审，见 API 文档 7.2.7）；配了 `end_at` 却缺模板或 `public_base_url` 时，抽签定时任务每小时打一条 `lottery.sms_config_missing` 告警。
 - 复制 `.env.example` 为 `.env` 用于本地开发（`.env` 不入库）；`APP_ENV=dev` 配合缺省支付材料即可走 mock。
 
 ## Directory Structure
@@ -74,7 +68,6 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 ├── config.yaml             # 非敏感运行配置（viper 读取；生产挂载独立文件）
 ├── cmd/
 │   ├── dance-elite/        # 服务入口：main.go 配置与日志，run.go 依赖装配（composition root）
-│   ├── lottery-import/     # 抽签数据生成命令：报名 Excel → data/lottery/<token>.json
 ├── internal/
 │   ├── router/             # Gin 路由注册 + handler（可 httptest 直接测）
 │   ├── service/            # 业务逻辑层（依赖注入 store，可注入 fake 测试）
@@ -97,13 +90,13 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 
 ## API Conventions（以 docs/API接口设计.md 为准）
 
-- 基础路径：小程序端 `/api/v1`；后台 `/api/v1/admin`；音频审核 / 抽签 H5 `/h5`
+- 基础路径：小程序端 `/api/v1`；后台 `/api/v1/admin`（含 `/api/v1/admin/lottery/sessions` 赛事抽签管理）；音频审核 / 抽签 H5 `/h5`
 - 字段命名 **snake_case**；时间 ISO 8601 本地时间（`2027-01-01T10:00:00+08:00`）；金额单位**分**（整数）
 - 枚举值一律英文小写蛇形（`classical`/`folk`），中文仅管理端展示层转换
 - 统一响应包装：`{"code": 0, "message": "success", "data": {}}`
 - 错误码：0 成功；40001 参数错；40101 未登录；40102 账号不存在（后台登录）；40103 密码错误（后台登录）；40104 账号已锁定（后台登录）；40301 无权限；40302 账号已停用（后台登录）；40401 不存在；40901 业务冲突；42901 限流；50001 服务器错误；报名域 41001–41015（证件号格式、年龄、重复报名、名额已满、非报名期、资料截止/状态只读、候补重复/不可取消/状态不允许、退款接口失败/不满足退款条件等）
 - 分页：query `page`（默认 1）/ `page_size`（默认 20，最大 100）；响应 `{"list": [], "total": 0, "page": 1, "page_size": 20}`
-- 认证：小程序端与后台均为 `Authorization: Bearer <JWT>`；H5 用 URL 内不可枚举 token（重新生成后旧链接立即失效）
+- 认证：小程序端与后台均为 `Authorization: Bearer <JWT>`；音频审核 / 抽签 H5 用 URL 内不可枚举 token（重新生成后旧链接立即失效）
 - 后台 JWT payload 含 `admin_id`、`role`（super_admin / admin / cs）
 
 ## Data & Domain Rules（以 docs/ 为准，改动前先读）
@@ -165,8 +158,8 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 ## Current State Notes
 
 - v1 榜单（JSON 文件存储、原生 JS 音频页）代码已全部下线（2026-11-10），代码库为全新起点；原 `web/` 目录已删除，音频审核 H5 页以 React 形式落入 `dance-admin/src/pages/audio-review/`（路由 `/audio-review/:token`，数据接口 `GET /h5/audio-review/{token}`）。
-- 抽签 H5（2026-11-18）：独立于报名库的赛事抽签页，页面在 `dance-admin/src/pages/lottery/`（路由 `/lottery/:token`），接口见 API 文档 7.2；数据由 `cmd/lottery-import` 从报名 Excel 生成到 `data/lottery/<token>.json`，JSON 内明文存证件号与手机号、文件权限 0600。
-- 抽签时间窗口与短信（2026-11-21）：JSON 新增 `start_at`/`end_at`/`remind_before_minutes`/`sms_*_template`；未到开始时间禁止抽签，截止后未抽选手由 `LotterySweeper`（定时任务）按既有规则自动分配；截止前 2 小时、截止后自动分配结果通过阿里云短信通知。实现集中在 `internal/service/lottery_{schedule,notify,sweeper}.go` 与 `internal/pkg/sms/`，与主业务库无耦合（不写数据库，状态全在抽签 JSON），可整体删除。
+- 赛事抽签（2026-11-23 合并进系统并改为数据库存储）：后台「赛事管理 → 赛事抽签」页（`dance-admin/src/pages/event/lottery/`，路由 `/event/lottery`）支持两种生成方式——上传报名 Excel 解析分组（可不关联赛事，用自定义抽签名称；关联赛事时同一赛事只能一场），或选择一个报名已结束的赛事读取其有效报名自动分组（必须关联赛事）；生成免登录链接，可导出 xlsx（姓名/身份证号/抽签信息）。H5 页面在 `dance-admin/src/pages/lottery/`（路由 `/lottery/:token`），接口见 API 文档 7.2/7.3。数据存 `lottery_sessions` / `lottery_groups` / `lottery_players`；证件号只存 HMAC，Excel 来源另存 AES-GCM 密文（导出解密），赛事报名来源仅哈希（导出身份证号标注「报名库无明文」）。H5 抽签只填姓名+证件号（多舞种由服务端返回 choose_genre 弹窗选择），查询只填证件号返回全部记录；结果可生成 Canvas 图片长按保存，并按 token 在 localStorage 记住证件号，再次打开提示上次抽签时间。
+- 抽签时间窗口与短信：session 含 `start_at`/`end_at`/`remind_before_minutes`/`sms_*_template`；未到开始时间禁止抽签，截止后未抽选手由 `LotterySweeper`（定时任务）自动分配；截止前提醒、截止后自动分配结果通过阿里云短信通知。实现集中在 `internal/service/lottery_{service,schedule,notify,sweeper,admin,admin_export}.go`、`internal/router/{lottery,admin_lottery}.go`、`internal/store/lottery_store.go` 与 `internal/pkg/sms/`。旧 JSON 抽签数据不做迁移（`data/lottery/` 仅作历史参考）。
 - 现有基础：SQLite 数据层（`store/db.go` WAL 单连接池、`migrate.go` 版本化迁移、`tx.go` 事务）、`pkg/httpx` 统一响应与错误码、`middleware`（RequestID/AccessLog/Recovery）、`server` 优雅关闭。测试基线：`go test ./...` 全绿。
 - 小程序工程模板位于 `miniprogram-ts/`（Annil + TypeScript + MobX）：TypeScript 由微信开发者工具的 `useCompilerPlugins` 编译，`pnpm typecheck` 做类型检查；已含统一请求层、登录态 store、全局注入，以及缓存、分页列表（下拉刷新/上拉加载）、格式化、上传/图片工具与示例页面/组件。后续小程序页面在此基础上新增。
 - 业务代码（model/service/各端 handler）按开发计划 T2 起落地，模型以 `docs/数据库表结构设计.md` v3 为准。

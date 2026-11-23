@@ -1541,9 +1541,9 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 | 项 | 内容 |
 |---|---|
 | 接口名称 | 抽签 H5 |
-| 功能说明 | 每场赛事一个免登录链接：选手输入 **姓名 + 证件号 + 舞种** 抽取出场顺序，或凭 **证件号 + 舞种** 查询；数据读写 `data/lottery/{token}.json`，与报名库解耦。支持抽签开始/截止时间：开始前禁止抽签，截止后剩余选手自动分配，并可通过短信提醒/通知 |
-| 请求方法 + URL | `GET /h5/lottery/{token}`、`POST /h5/lottery/{token}/query`、`POST /h5/lottery/{token}/draw` |
-| 鉴权 | 免登录（URL token，8–64 位字母数字，导入时默认生成 16 位） |
+| 功能说明 | 每场赛事一个免登录链接：选手输入 **姓名 + 证件号** 抽取出场顺序（同一人报多个舞种时由服务端提示选择），或只凭 **证件号** 查询全部记录；数据存数据库 `lottery_sessions` / `lottery_groups` / `lottery_players`。支持抽签开始/截止时间：开始前禁止抽签，截止后剩余选手自动分配，并可通过短信提醒/通知 |
+| 请求方法 + URL | `GET /h5/lottery/{token}`、`POST /h5/lottery/{token}/lookup`、`POST /h5/lottery/{token}/query`、`POST /h5/lottery/{token}/draw` |
+| 鉴权 | 免登录（URL token，8–64 位字母数字，后台导入时默认生成 16 位） |
 | 页面地址 | `/lottery/{token}`（React H5，移动端优先） |
 
 ### 7.2.1 页面元信息
@@ -1555,7 +1555,7 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 | 参数名 | 类型 | 说明 |
 |---|---|---|
 | event_name | string | 赛事名称（页面标题） |
-| genres | array | 可选舞种 |
+| genres | array | 该场赛事包含的舞种（仅展示，不再要求手动选择） |
 | genres[].key | string | 枚举值：`classical` / `folk` |
 | genres[].label | string | 展示名：古典舞 / 民族民间舞 |
 | start_at | string | 抽签开始时间（ISO 8601）；缺省表示不限制 |
@@ -1563,75 +1563,47 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 | server_time | string | 服务端当前时间（ISO 8601），前端据此校准倒计时 |
 | status | string | 服务端判定状态：`not_started` / `ongoing` / `ended`（未配置时间窗口时恒为 `ongoing`） |
 
-```json
-{
-  "code": 0, "message": "success",
-  "data": {
-    "event_name": "优舞盟12月赛事抽签",
-    "genres": [
-      { "key": "classical", "label": "古典舞" },
-      { "key": "folk", "label": "民族民间舞" }
-    ],
-    "start_at": "2026-11-25T10:00:00+08:00",
-    "end_at": "2026-11-27T22:00:00+08:00",
-    "server_time": "2026-11-24T09:30:00+08:00",
-    "status": "not_started"
-  }
-}
-```
-
 **失败响应**：40401（token 无效或已失效）。
 
-### 7.2.2 查询抽签结果
+### 7.2.2 按证件号查询全部记录
 
-`POST /h5/lottery/{token}/query`
+`POST /h5/lottery/{token}/lookup`
 
 **请求参数（JSON Body）**
 
 | 参数名 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | id_card | string | 是 | 身份证号（服务端去空白、末位 x 转大写后比对） |
-| genre | string | 是 | 舞种枚举值 |
+| name | string | 否 | 姓名；传值时用于二次核对（去掉全部空白后比对） |
 
-**响应参数（抽签与查询共用）**
+**响应参数**
 
 | 参数名 | 类型 | 说明 |
 |---|---|---|
-| name | string | 选手姓名 |
-| genre / genre_label | string | 舞种枚举值 / 展示名 |
-| age_group | string | 年龄组：U11 / U13 / U15 |
-| program | string | 剧目名称（可空） |
-| institution | string | 选送机构（可空） |
-| slot | object \| null | 抽签结果；`null` 表示尚未抽签 |
-| slot.letter | string | 组字母 A/B/C… |
-| slot.no | integer | 组内序号，从 1 开始 |
-| drawn_at | string | 抽签时间（ISO 8601） |
-| just_drawn | boolean | 本次请求是否实际完成抽签（查询恒为 false） |
-| auto_drawn | boolean | 槽位是否由系统在截止后自动分配 |
+| entries | array | 该证件号命中的全部记录（一人可报多个舞种） |
+| entries[].name | string | 选手姓名 |
+| entries[].genre / genre_label | string | 舞种枚举值 / 展示名 |
+| entries[].age_group | string | 年龄组：U11 / U13 / U15 |
+| entries[].program | string | 剧目名称（可空） |
+| entries[].institution | string | 选送机构（可空） |
+| entries[].slot | object \| null | 抽签结果；`null` 表示该舞种尚未抽签 |
+| entries[].slot.letter | string | 组字母 A/B/C… |
+| entries[].slot.no | integer | 组内序号，从 1 开始 |
+| entries[].drawn_at | string | 抽签时间（ISO 8601） |
+| entries[].auto_drawn | boolean | 槽位是否由系统在截止后自动分配 |
+| entries[].drawn | boolean | 等价于 `slot != null`，便于前端判断 |
 
-```json
-{
-  "code": 0, "message": "success",
-  "data": {
-    "name": "张三",
-    "genre": "classical",
-    "genre_label": "古典舞",
-    "age_group": "U11",
-    "program": "《唐印》",
-    "institution": "KKDANCE康康舞蹈",
-    "slot": { "letter": "A", "no": 3 },
-    "drawn_at": "2026-11-18T19:20:00+08:00",
-    "just_drawn": false,
-    "auto_drawn": false
-  }
-}
-```
+**未命中**：返回 40401，文案明确提示「未查询到报名信息」并给出自查项与客服引导（不区分是姓名、证件号还是报名状态导致）。
 
-**失败响应**：40401（token 无效，或信息不匹配）。
+**截止后的查询**：已过 `end_at` 且仍有未抽选手时，查询接口会顺带完成自动分配，保证返回最终结果。
 
-**截止后的查询**：已过 `end_at` 且仍有未抽选手时，查询接口会顺带完成自动分配，保证返回的是最终结果。
+### 7.2.3 查询抽签结果（只凭证件号）
 
-### 7.2.3 抽签
+`POST /h5/lottery/{token}/query`
+
+请求体与响应同 7.2.2，但只接受 `id_card`（不需要舞种、不需要姓名）。页面「查询」Tab 使用此接口，一次输出该选手全部已抽签信息。
+
+### 7.2.4 抽签
 
 `POST /h5/lottery/{token}/draw`
 
@@ -1641,93 +1613,198 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 |---|---|---|---|
 | name | string | 是 | 姓名（服务端去全部空白后比对） |
 | id_card | string | 是 | 身份证号 |
-| genre | string | 是 | 舞种枚举值 |
+| genre | string | 否 | 舞种枚举值；留空由服务端判断 |
 
-**幂等与并发**：同一人同一舞种重复抽签返回第一次的结果（`just_drawn=false`），不会重抽；「读取 → 分配 → 写回」在进程内互斥锁中完成，写入采用临时文件 + rename 原子替换。
+**舞种选择规则**
+
+- 该姓名 + 证件号只有 1 条待抽记录：直接抽签，不要求前端选择舞种。
+- 有 2 条及以上待抽记录（例如同时报了古典舞与民族民间舞）：返回 `status=choose_genre` 与 `choices`，前端弹窗让家长选择后再带 `genre` 提交。
+- 已指定舞种：只抽该舞种；该舞种已抽过则返回 `already_drawn`。
+- 全部记录都已抽完：返回 `already_drawn`，前端据此提示「已于 X月X日 HH:MM 完成抽签」并展示结果。
+
+**响应参数**
+
+| 参数名 | 类型 | 说明 |
+|---|---|---|
+| status | string | `drawn`（本次完成抽签）/ `already_drawn`（已抽过）/ `choose_genre`（需选择舞种） |
+| entries | array | 命中记录的最新状态，字段同 7.2.2 |
+| choices | array | `status=choose_genre` 时可选的舞种（`key` / `label`） |
+
+```json
+{
+  "code": 0, "message": "success",
+  "data": {
+    "status": "choose_genre",
+    "entries": [
+      { "name": "张三", "genre": "classical", "genre_label": "古典舞", "age_group": "U11", "slot": null, "drawn": false, "auto_drawn": false },
+      { "name": "张三", "genre": "folk", "genre_label": "民族民间舞", "age_group": "U11", "slot": null, "drawn": false, "auto_drawn": false }
+    ],
+    "choices": [
+      { "key": "classical", "label": "古典舞" },
+      { "key": "folk", "label": "民族民间舞" }
+    ]
+  }
+}
+```
+
+**幂等与并发**：同一人同一舞种重复抽签返回原结果，不会重抽；「读取 → 分配 → 写回」在进程内互斥锁中完成，写入采用临时文件 + rename 原子替换。
 
 **时间窗口**：
 
 - 未到 `start_at`：拒绝抽签，返回 40901「抽签尚未开始，开始时间：…」；查询不受限制。
 - 到达 `end_at`：剩余未抽选手由系统自动分配（同一套随机槽位规则），`auto_drawn=true`；用户此时再点抽签会返回自动分配的结果，不会重抽。
-- 未配置时间窗口：保持旧行为（随时可抽、无自动分配、不发短信）。
+- 未配置时间窗口：随时可抽、无自动分配、不发短信。
 
 **失败响应**：40001（缺参数）、40401（token 无效 / 信息不匹配）、40901（未到开始时间 / 该组别已无槽位）、42901（限流）。
 
 **分组规则**
 
 - 以「年龄组 × 舞种」为单位独立编号，各范围都从 A 组开始。
-- 组数 = `ceil(N/12)`，各组人数相差不超过 1，余数从 A 组开始依次 +1（25 人 → A9/B8/C8）。
+- 组数 = `max(N/10, N/15 + 1)`（整数除法），各组人数相差不超过 1，余数从 A 组开始依次 +1。例如：14 人 → 1 组；15 人 → 8/7；31 人 → 11/10/10；40 人 → 10/10/10/10。
 - 槽位 = 组字母 + 组内序号（A1…A10、B1…B10）；抽签从该范围尚未占用的槽位中均匀随机分配。
-- 人数无法落在每组 8–12 人时（如 13 人 → 7+6），导入工具给出提示但不阻断。
+- 任一组少于 7 人时导入给出提示，但不阻断。
 
-**数据来源与运维**
+### 7.2.5 结果图片与再次访问
 
-```bash
-# 从报名 Excel 生成（表头按名称定位，列顺序可变）
-go run ./cmd/lottery-import \
-  -excel "抽签页面资料/12月上海甲级赛-报名资料.xlsx" \
-  -event "优舞盟12月赛事抽签" \
-  -start-at "2026-11-25 10:00" \
-  -end-at "2026-11-27 22:00" \
-  -out data/lottery \
-  -remind-template "SMS_xxxxxxx" \
-  -result-template "SMS_yyyyyyy"
+- 抽签完成后 H5 用 Canvas 在本地生成结果图片（不经过服务端、不上传），展示「长按图片保存」；图片含赛事名称、选手、舞种/年龄组、组字母 + 序号、抽签时间与「已抽签」印章。
+- 页面把最近一次输入的姓名/证件号按 `token` 维度存 `localStorage`；再次打开时自动查询并提示「已于 X月X日 HH:MM 完成抽签」，同时展示全部结果。提供「不是我，清除本机记住的信息」。
 
-# 修改数据后覆盖（会清空已有抽签结果与短信发送记录；未显式给出时间/模板时沿用旧值）
-go run ./cmd/lottery-import -excel "..." -reset
-```
+### 7.2.6 数据来源与存储
 
-- 读取的表头：`姓名`、`身份证号`、`组别及场次`（需包含 U11/U13/U15 与 古典舞/民族民间舞）、`剧目名称`、`选送机构`、`手机号`（兼容 `手机`/`联系电话`/`家长手机号` 等写法）；其余列忽略。手机号格式不合法只提示、不阻断导入，该选手不会收到短信。
-- 输出目录由 `LOTTERY_DIR` 配置（默认 `<DB_PATH 所在目录>/lottery`，本地即 `data/lottery`），文件名即 token；重新导入未指定 `-token` 时复用目录中唯一文件。
-- JSON 中与时间/短信相关的顶层字段（均可手工修改，接口每次请求都会读文件，改完即生效）：
-  - `start_at` / `end_at`：抽签开始/截止时间，ISO 8601 或 `YYYY-MM-DD HH:MM`；
-  - `remind_before_minutes`：截止前多少分钟发提醒短信，缺省 120；
-  - `sms_remind_template` / `sms_result_template`：阿里云短信模板 CODE（每个赛事单独提审，见 7.2.4）；导入时可用 `-remind-template` / `-result-template` 写入，留空时默认取环境变量 `SMS_REMIND_TEMPLATE` / `SMS_RESULT_TEMPLATE`。
-- 选手上另有 `phone`、`auto_drawn`、`sms.{remind_sent_at,remind_attempts,result_sent_at,result_attempts}` 字段，由服务端维护。
-- **JSON 明文存储身份证号与手机号**（本项目既有约定为哈希，此功能例外）；文件权限 0600，每次覆盖前保留 `.bak`，`data/` 不入库。
+抽签只能从后台「赛事管理 → 赛事抽签」页创建（见 7.3），两种来源：
+
+1. **上传 Excel 解析**：表头按名称定位，必需 `姓名` / `身份证号` / `组别及场次`；可选 `舞种`（古典舞/民族民间舞，缺列时从组别文本识别）、`剧目名称`、`选送机构`、`手机号`（兼容 `手机`/`联系电话`/`家长手机号`）。手机号不合法只提示、不阻断导入。**可以不关联赛事**，此时用自定义「抽签名称」作为页面标题，每次生成独立链接。
+2. **使用赛事报名结果**：选择一个报名已结束的赛事，读取其 `status='active'` 的有效报名（`registrations` JOIN `players` / `event_groups`）自动分组，不读取任何上传文件。报名库只有证件号哈希，因此这种来源的导出身份证号为空。
+
+存储设计（迁移 `0017_lottery.sql`）：
+
+- `lottery_sessions`：一次赛事抽签（event_id、event_name、token、source=excel/event、时间窗口、短信模板、创建人）。
+- `lottery_groups`：`赛事 × 舞种 × 年龄组 × 字母组` 的人数，槽位 = 字母 + 1..size。
+- `lottery_players`：选手记录、分组槽位、抽签时间、自动分配标记与短信发送状态。
+- 证件号不落明文：`id_card_hash`（HMAC）用于 H5 比对；`id_card_enc`（AES-256-GCM，密钥由 `ID_CARD_HMAC_KEY` 派生）只对 Excel 来源写入，供后台导出解密；赛事报名来源只有哈希，`id_card_enc` 为空（导出显示「（报名库无明文）」）。
+- 唯一约束：同一 session 同一选手同一舞种一条记录；已分配槽位 `(session, genre, age_group, group_letter, slot_no)` 唯一。
+- 旧版 `data/lottery/*.json` 不再读取，也不做迁移（保留文件仅作历史参考）。
 
 **安全边界**
 
 - 抽签与查询均用 POST body，避免证件号进入访问日志、浏览器历史和 Referer。
-- 错误统一为「信息不匹配」，不区分姓名/证件号/舞种哪一项错误。
-- 限流（按 IP）：元信息 120 次/分、查询 60 次/分、抽签 60 次/分。
-- 响应不含身份证号；业务日志只记录舞种、组别与槽位。
+- 响应不含身份证号；业务日志只记录舞种、组别与槽位；导出解密失败只记 `lottery.id_decrypt_failed` 并回退掩码。
+- 限流（按 IP）：元信息 120 次/分、lookup/query/draw 各 60 次/分。
 
-### 7.2.4 短信提醒与结果通知（阿里云）
+### 7.2.7 短信提醒与结果通知（阿里云）
 
-抽签页依赖两类短信：截止前提醒未抽签选手、截止后告知被自动分配的选手结果。由进程内定时任务（`STATUS_TICK_SECONDS`，默认 60s）扫描 `LOTTERY_DIR` 下全部抽签文件执行，接口本身不发送短信。
+抽签页依赖两类短信：截止前提醒未抽签选手、截止后告知被自动分配的选手结果。由进程内定时任务（`scheduler.status_tick_seconds`，默认 60s）扫描抽签目录执行，接口本身不发送短信。
 
-**环境变量**（全部走环境变量注入，不入库）：
+**配置**：
 
-| 变量 | 说明 |
+| 配置项 | 说明 |
 |---|---|
-| `SMS_ACCESS_KEY_ID` / `SMS_ACCESS_KEY_SECRET` | 阿里云账号（建议 RAM 子账号，仅授权短信发送） |
-| `SMS_SIGN_NAME` | 短信签名，需与已审核签名完全一致 |
-| `SMS_MOCK` | `true` 时不调用阿里云，只打 `sms.mock` 日志（手机号脱敏），本地点通流程用 |
-| `PUBLIC_BASE_URL` | 生成短信里的抽签链接前缀（`{PUBLIC_BASE_URL}/lottery/{token}`） |
+| 环境变量 `SMS_ACCESS_KEY_ID` / `SMS_ACCESS_KEY_SECRET` / `SMS_SIGN_NAME` | 阿里云账号与已审核签名；三项齐全才启用 |
+| `config.yaml` `sms.mock` | `true` 时不调用阿里云，只打 `sms.mock` 日志（手机号脱敏），本地点通流程用 |
+| `config.yaml` `server.public_base_url` | 生成短信里的抽签链接前缀（`{public_base_url}/lottery/{token}`） |
 
 三项密钥只配了一半（1–2 项）时启动直接失败；三项都不配则关闭短信能力（启动日志告警），抽签功能本身不受影响。
 
 **模板规则（关键约束）**
 
-- 阿里云短信模板**不允许把 URL 放进变量**，链接必须写死在模板正文。因此**每个赛事单独提审一套模板**，模板 CODE 分别填入 JSON 的 `sms_remind_template` / `sms_result_template`。
-- 导入命令会打印可直接提交审核的模板文案（含该赛事的完整链接），复制到阿里云控制台提审即可；模板通过后用 `-remind-template` / `-result-template` 重新导入（或手填 JSON 对应字段），接口每次请求都读文件，无需重启。
-- 模板 CODE 也可放在环境变量 `SMS_REMIND_TEMPLATE` / `SMS_RESULT_TEMPLATE` 中，作为导入命令参数的默认值；服务端运行时不读这两个变量。
-- 另一种「`一级域名/${code}`」写法可以省掉每赛事提审，但变量限首字母开头的 ≤8 位字母数字且域名需 ICP 备案，本项目未采用。
+- 阿里云短信模板**不允许把 URL 放进变量**，链接必须写死在模板正文。因此**每个赛事单独提审一套模板**，模板 CODE 在后台抽签页的导入/设置表单中按赛事填写。
+- 后台导入成功后会输出模板文案（含该赛事完整链接），复制到阿里云控制台提审；通过后在「抽签设置」中填写 CODE 即成，无需重启。
 - 变量名必须与模板完全一致：提醒 `name`/`event`/`deadline`，结果 `name`/`event`/`genre`/`slot`。`name` 建议按「其他」类型报备，以便同手机号多个选手合并为「张三、李四」。
 
 **发送行为**
 
-- 提醒：窗口为 `[end_at - remind_before_minutes, end_at)`，只发未抽签且有手机号的选手；同一手机号合并为一条。`remind_before_minutes` 缺省 120，可在 JSON 中按赛事覆盖。
+- 提醒：窗口为 `[end_at - remind_before_minutes, end_at)`，只发未抽签且有手机号的选手；同一手机号合并为一条。`remind_before_minutes` 缺省 120，可在后台按赛事覆盖。
 - 结果：仅发给 `auto_drawn=true`（截止后由系统自动分配）的选手，手动抽签的不发。
-- 幂等与重试：发送成功即写入 `sms.remind_sent_at`/`result_sent_at`，同一类短信不再重发；失败累加 `*_attempts`，下一轮 tick 重试，最多 3 次。发送记录随 `-reset` 重新导入一并清空。
+- 幂等与重试：发送成功即写入 `sms.remind_sent_at`/`result_sent_at`，同一类短信不再重发；失败累加 `*_attempts`，下一轮 tick 重试，最多 3 次。重新导入（覆盖）会清空发送记录。
 - 每批 20 条、并发 4 发送，每批结束立即落盘（独立 10s context），定时任务超时被取消也不会重复发送。
-- 缺少模板、缺少 `PUBLIC_BASE_URL` 时对应短信整体跳过；为避免到点才发现，定时任务在配置了 `end_at` 且仍有待发送选手时，每小时打一条 `lottery.sms_config_missing` 告警（列出缺失项），补齐配置后告警自动停止。未配置 `end_at` 的赛事按设计不发短信，不告警。
+- 缺少模板、缺少 `public_base_url` 时对应短信整体跳过；配置了 `end_at` 且仍有待发送选手时，每小时打一条 `lottery.sms_config_missing` 告警（列出缺失项），补齐后自动停止。未配置 `end_at` 的赛事按设计不发短信，不告警。
 
 **安全边界**
 
-- 手机号在抽签 JSON 中明文存储（与证件号一致，均不进入数据库与日志）；日志中手机号统一脱敏、姓氏打码。
+- 手机号在抽签 JSON 中明文存储；日志中手机号统一脱敏、姓氏打码。
 - 抽签链接即访问凭据，短信文案提示「请勿转发」；链接到期后服务端自动分配，泄露风险仅限于查看结果。
+
+## 7.3 后台赛事抽签（`/api/v1/admin/lottery`）
+
+后台「赛事管理 → 赛事抽签」页使用的接口。数据与 7.2 共用 `lottery_*` 表；创建、修改设置、导出均记 `admin_logs`（`admin.lottery.import` / `admin.lottery.settings` / `admin.lottery.export`）。
+
+### 7.3.1 抽签列表
+
+`GET /api/v1/admin/lottery/sessions`
+
+**响应参数**
+
+| 参数名 | 类型 | 说明 |
+|---|---|---|
+| list | array | 全部抽签，按更新时间倒序 |
+| list[].id | int | 抽签记录 ID |
+| list[].token | string | 访问 token（链接凭据） |
+| list[].event_id | int \| null | 关联赛事 ID |
+| list[].event_name | string | 赛事名称 |
+| list[].source | string | 数据来源：`excel`（上传报名表）/ `event`（赛事报名结果） |
+| list[].start_at / end_at | string | 抽签时间窗口；缺省表示不限制 |
+| list[].remind_before_minutes | int | 截止前提醒分钟数 |
+| list[].sms_remind_template / sms_result_template | string | 短信模板 CODE（可空） |
+| list[].player_count / drawn_count / pending_count | int | 总人数 / 已抽 / 未抽 |
+| list[].created_at / updated_at | string | 创建时间 / 最后修改时间 |
+| list[].link | string | 免登录页面地址；未配置 `public_base_url` 时为相对路径 |
+
+角色：`cs` 及以上可读。
+
+### 7.3.2 抽签详情
+
+`GET /api/v1/admin/lottery/sessions/{token}`
+
+在 7.3.1 字段基础上增加 `groups`（分组进度）：`genre` / `genre_label` / `age_group` / `letter` / `size` / `drawn`。
+
+角色：`cs` 及以上可读。
+
+### 7.3.3 生成/覆盖抽签
+
+`POST /api/v1/admin/lottery/sessions`，`multipart/form-data`。
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| event_id | int | 否 | 关联赛事（取赛事名称，校验存在）。source=event 时必填；source=excel 时可省略，只生成抽签链接 |
+| title | string | 否 | 自定义抽签名称（≤100 字）；未关联赛事时必填，关联赛事时留空则用赛事名称 |
+| source | string | 否 | `excel`（默认，上传报名表）/ `event`（使用该赛事有效报名） |
+| file | file | source=excel 时必填 | 报名 Excel（`.xlsx`，≤30MB）；source=event 时忽略 |
+| start_at | string | 否 | 抽签开始时间；`YYYY-MM-DD HH:mm` 或 ISO 8601 |
+| end_at | string | 否 | 截止时间；必须晚于开始时间 |
+| remind_before_minutes | int | 否 | 截止前提醒分钟数，默认 120 |
+| sms_remind_template / sms_result_template | string | 否 | 短信模板 CODE |
+| replace | bool | 否 | 该赛事已有抽签时必须为 `true` 才覆盖（清空已有结果与短信记录，沿用原 token） |
+
+响应：7.3.1 字段 + `warnings`（手机号不合法、分组过小等不阻断导入的提示）。
+
+source=event 时额外校验：赛事报名必须已结束（状态为 `reg_closed`/`ongoing`/`finished`，或 `reg_end_at` 已过），且至少有一条带证件号的 `status='active'` 报名；否则 40901。
+
+source=excel 且未传 event_id 时：`title` 必填；每次生成都会创建新的抽签链接，不存在「同赛事覆盖」判断。
+
+错误：40001（Excel 缺列 / 数据不合法 / 时间格式错误 / 未关联赛事时 title 为空）、40401（赛事不存在）、40901（该赛事已有抽签且未勾选覆盖 / 报名未结束 / 无有效报名）。
+
+角色：仅 `admin` / `super_admin`。
+
+### 7.3.4 修改抽签设置
+
+`PUT /api/v1/admin/lottery/sessions/{token}`
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| event_id | int | 可选；传值时重新关联赛事并同步名称 |
+| start_at / end_at | string | 空串表示清除限制 |
+| remind_before_minutes | int | 0 表示使用默认 120 |
+| sms_remind_template / sms_result_template | string | 空串表示不发对应短信 |
+
+响应同 7.3.1。角色：仅 `admin` / `super_admin`。
+
+### 7.3.5 导出抽签结果
+
+`GET /api/v1/admin/lottery/sessions/{token}/export`
+
+返回 xlsx 文件流（`Content-Disposition: attachment`），工作表「抽签结果」，列：序号、姓名、身份证号、年龄组、舞种、分组、组内序号、出场顺序、抽签时间、抽签方式（本人抽取 / 系统自动分配）；身份证号列强制为文本，避免 Excel 转科学计数法。未抽签记录出场顺序显示「未抽签」。Excel 来源的证件号解密后输出完整值；赛事报名来源因报名库只有哈希，该列显示「（报名库无明文）」。
+
+角色：仅 `admin` / `super_admin`。
 
 ---
 
