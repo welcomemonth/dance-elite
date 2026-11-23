@@ -4,7 +4,11 @@ import { request } from '@umijs/max';
  * 文件下载辅助：带鉴权头请求文件流并触发浏览器保存。
  * 真实后端导出接口返回文件流（csv/xlsx）。
  */
-export async function downloadFile(url: string, params?: Record<string, unknown>): Promise<void> {
+export async function downloadFile(
+  url: string,
+  params?: Record<string, unknown>,
+  filename?: string,
+): Promise<void> {
   const res = (await request(url, {
     method: 'GET',
     params,
@@ -21,7 +25,7 @@ export async function downloadFile(url: string, params?: Record<string, unknown>
   const objectUrl = URL.createObjectURL(res);
   const a = document.createElement('a');
   a.href = objectUrl;
-  a.download = `export-${Date.now()}`;
+  a.download = filename ?? `export-${Date.now()}`;
   a.click();
   URL.revokeObjectURL(objectUrl);
 }

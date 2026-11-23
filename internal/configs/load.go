@@ -34,6 +34,9 @@ func Load() (*Config, error) {
 	if err := validate(cfg); err != nil {
 		return nil, err
 	}
+	if err := validateSMS(cfg); err != nil {
+		return nil, err
+	}
 	if err := derivePayment(cfg); err != nil {
 		return nil, err
 	}
@@ -111,5 +114,28 @@ func readSecrets(cfg *Config) {
 		WechatPrivateKeyFile:   strings.TrimSpace(os.Getenv("WECHAT_PAY_PRIVATE_KEY_FILE")),
 		WechatPayPublicKeyFile: strings.TrimSpace(os.Getenv("WECHAT_PAY_PUBLIC_KEY_FILE")),
 		AdminInitPassword:      os.Getenv("ADMIN_INIT_PASSWORD"),
+		SMSAccessKeyID:         strings.TrimSpace(os.Getenv("SMS_ACCESS_KEY_ID")),
+		SMSAccessKeySecret:     strings.TrimSpace(os.Getenv("SMS_ACCESS_KEY_SECRET")),
+		SMSSignName:            strings.TrimSpace(os.Getenv("SMS_SIGN_NAME")),
 	}
+}
+
+// validateSMS 校验短信凭据：允许整体不配置（功能关闭），但不允许只配一部分
+// （易造成静默失败）；mock 模式忽略凭据。
+func validateSMS(cfg *Config) error {
+	if cfg.SMS.Mock {
+		return nil
+	}
+	missing := 0
+	for _, value := range []string{
+		cfg.Secrets.SMSAccessKeyID, cfg.Secrets.SMSAccessKeySecret, cfg.Secrets.SMSSignName,
+	} {
+		if value == "" {
+			missing++
+		}
+	}
+	if missing > 0 && missing < 3 {
+		return fmt.Errorf("短信配置不完整：SMS_ACCESS_KEY_ID、SMS_ACCESS_KEY_SECRET、SMS_SIGN_NAME 需同时提供，或在 config.yaml 设置 sms.mock=true")
+	}
+	return nil
 }

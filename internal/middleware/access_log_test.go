@@ -164,9 +164,12 @@ func TestSanitizePath(t *testing.T) {
 		route, path, want string
 	}{
 		{"/h5/audio-review/:token", "/h5/audio-review/abc", "/h5/audio-review/***"},
+		{"/h5/lottery/:token/draw", "/h5/lottery/abc/draw", "/h5/lottery/***/draw"},
 		{"/api/v1/events/:event_id", "/api/v1/events/1", "/api/v1/events/1"},
 		{"", "/audio-review/abc", "/audio-review/***"},
 		{"", "/audio-review/abc/sub", "/audio-review/***/sub"},
+		{"", "/lottery/abc", "/lottery/***"},
+		{"", "/h5/lottery/abc", "/h5/lottery/***"},
 		{"", "/dashboard", "/dashboard"},
 	}
 	for _, tc := range cases {

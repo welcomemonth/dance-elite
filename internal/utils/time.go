@@ -1,6 +1,10 @@
 package utils
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // isoLayout 是全库统一的时间格式：ISO 8601 本地时间，带时区偏移。
 // 部署时区为 Asia/Shanghai，即 2027-01-01T10:00:00+08:00。
@@ -39,4 +43,28 @@ func ParseISO(s string) (time.Time, error) {
 // ParseDate 解析统一格式的日期字符串（YYYY-MM-DD）。
 func ParseDate(s string) (time.Time, error) {
 	return time.Parse(dateLayout, s)
+}
+
+// ParseFlexibleTime 解析 ISO 8601（带时区偏移）或常见本地时间写法：
+// YYYY-MM-DD HH:MM[:SS]、YYYY-MM-DDTHH:MM±hh:mm、YYYY-MM-DD。
+// 不带时区的时间按部署时区（Asia/Shanghai）解释。
+func ParseFlexibleTime(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, fmt.Errorf("时间为空")
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	for _, layout := range []string{
+		"2006-01-02T15:04-07:00",
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+		"2006-01-02",
+	} {
+		if t, err := time.ParseInLocation(layout, s, ChinaLoc); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("无法识别的时间格式 %q", s)
 }

@@ -28,3 +28,7 @@ scheduler:
   status_tick_seconds: 60
   order_expire_minutes: 15
   refund_watchdog_minutes: 10
+
+sms:
+  # 抽签提醒/结果短信：生产保持 false，凭据只经环境变量注入
+  mock: false

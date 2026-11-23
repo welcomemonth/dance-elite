@@ -31,6 +31,7 @@ type Config struct {
 	Auth      AuthConfig
 	Admin     AdminConfig
 	Scheduler SchedulerConfig
+	SMS       SMSConfig
 
 	// Wechat 是微信账户标识（非密钥，但统一经环境变量注入）。
 	Wechat WechatConfig
@@ -45,7 +46,7 @@ type Config struct {
 // ServerConfig 是 HTTP 服务配置。
 type ServerConfig struct {
 	Port          int    `mapstructure:"port"`
-	PublicBaseURL string `mapstructure:"public_base_url"` // 对外地址（音频审核外链、微信支付回调），末尾斜杠已去除
+	PublicBaseURL string `mapstructure:"public_base_url"` // 对外地址（音频审核/抽签外链、微信支付回调），末尾斜杠已去除
 	SlowRequestMS int    `mapstructure:"slow_request_ms"` // 慢请求阈值（毫秒），0 关闭
 }
 
@@ -78,6 +79,14 @@ type SchedulerConfig struct {
 	RefundWatchdogMinutes int `mapstructure:"refund_watchdog_minutes"`
 }
 
+// SMSConfig 是抽签短信的非敏感开关；阿里云凭据只从环境变量读取。
+//
+// Mock=true 时不调用阿里云，只记录脱敏日志（本地联调）。凭据三项齐全
+// 才启用真实发送；只配一部分视为配置错误。
+type SMSConfig struct {
+	Mock bool `mapstructure:"mock"`
+}
+
 // WechatConfig 是微信账户标识（全部来自环境变量）。
 type WechatConfig struct {
 	AppID          string
@@ -100,6 +109,10 @@ type Secrets struct {
 	WechatPayPrivateKeyPEM string
 	WechatPayPublicKeyPEM  string
 	AdminInitPassword      string
+	// 阿里云短信凭据（抽签提醒/结果通知）；三项齐全才启用。
+	SMSAccessKeyID     string
+	SMSAccessKeySecret string
+	SMSSignName        string
 }
 
 // PaymentConfig 是支付通道的推导结果。

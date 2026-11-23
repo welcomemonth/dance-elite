@@ -705,3 +705,50 @@ export interface AudioReviewData {
   event_name: string;
   entries: AudioReviewEntry[];
 }
+
+/** 后台赛事抽签（API 文档 7.3）。 */
+export interface LotterySession {
+  id: number;
+  token: string;
+  event_id: number | null;
+  event_name: string;
+  /** 数据来源：excel（上传报名表）/ event（赛事报名结果） */
+  source: 'excel' | 'event';
+  start_at?: string;
+  end_at?: string;
+  remind_before_minutes: number;
+  sms_remind_template?: string;
+  sms_result_template?: string;
+  player_count: number;
+  drawn_count: number;
+  pending_count: number;
+  created_at?: string;
+  updated_at?: string;
+  link: string;
+}
+
+export interface LotteryGroupStat {
+  genre: DanceType;
+  genre_label: string;
+  age_group: AgeLevel;
+  letter: string;
+  size: number;
+  drawn: number;
+}
+
+export interface LotterySessionDetail extends LotterySession {
+  groups: LotteryGroupStat[];
+}
+
+export interface LotteryImportResult extends LotterySession {
+  warnings?: string[];
+}
+
+export interface LotterySettingsInput {
+  event_id?: number;
+  start_at?: string;
+  end_at?: string;
+  remind_before_minutes?: number;
+  sms_remind_template?: string;
+  sms_result_template?: string;
+}

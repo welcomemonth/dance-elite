@@ -45,6 +45,9 @@ data/
 uploads*
 uploads
 
+# 抽签报名原始表（含明文证件号，不入库）
+抽签页面资料/
+
 # dance-admin 前端工程：其自带 .gitignore 已排除 node_modules/dist/.umi；
 # 这里只保留其随模板提供的 AI skills（根 .claude 仍忽略）
 !dance-admin/.claude/

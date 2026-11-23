@@ -77,7 +77,7 @@ func normalizePublicBaseURL(cfg *Config) error {
 	base := strings.TrimSpace(cfg.Server.PublicBaseURL)
 	if base == "" {
 		if cfg.Env == EnvProd {
-			return fmt.Errorf("配置文件 server.public_base_url 在 APP_ENV=prod 时不能为空（用于微信支付回调与音频审核外链）")
+			return fmt.Errorf("配置文件 server.public_base_url 在 APP_ENV=prod 时不能为空（用于微信支付回调、音频审核与抽签外链）")
 		}
 		return nil
 	}

@@ -19,6 +19,11 @@ export default [
     component: './audio-review',
   },
   {
+    path: '/lottery/:token',
+    layout: false,
+    component: './lottery',
+  },
+  {
     path: '/dashboard',
     name: '数据看板',
     icon: 'dashboard',
@@ -31,6 +36,7 @@ export default [
     routes: [
       { path: '/event', redirect: '/event/list' },
       { path: '/event/list', name: '赛事列表', component: './event/list' },
+      { path: '/event/lottery', name: '赛事抽签', component: './event/lottery' },
       { path: '/event/create', component: './event/edit' },
       { path: '/event/edit/:id', component: './event/edit' },
       { path: '/event/detail/:id', component: './event/detail' },

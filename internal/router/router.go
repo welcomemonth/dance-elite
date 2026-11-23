@@ -46,6 +46,8 @@ type Deps struct {
 	UserContents        *service.AdminUserQueryService
 	Contents            *service.ContentService
 	AudioReview         *service.AudioReviewService
+	Lottery             *service.LotteryService
+	LotteryAdmin        *service.AdminLotteryService
 	Tokens              *token.Signer
 
 	// UploadDir 是上传文件物理根目录（配置 storage.upload_dir）。非空时把
@@ -181,11 +183,20 @@ func New(deps Deps) *gin.Engine {
 		if deps.AudioReview != nil {
 			registerAdminAudioReviewRoutes(admin, deps.AudioReview)
 		}
+		// 后台赛事抽签（API 文档 7.3）：导入 Excel、维护链接与导出结果。
+		if deps.LotteryAdmin != nil {
+			registerAdminLotteryRoutes(admin, deps.LotteryAdmin)
+		}
 	}
 
 	// 音频审核 H5（免登录，URL token 鉴权，API 文档 7.1）。
 	if deps.AudioReview != nil {
 		registerAudioReviewH5Routes(engine.Group("/h5"), deps.AudioReview)
+	}
+
+	// 抽签 H5（免登录，URL token 鉴权，API 文档 7.2）。
+	if deps.Lottery != nil {
+		registerLotteryH5Routes(engine.Group("/h5"), deps.Lottery)
 	}
 
 	// 前端单页应用托管（T32）：后台管理端与音频审核 H5 同源，
