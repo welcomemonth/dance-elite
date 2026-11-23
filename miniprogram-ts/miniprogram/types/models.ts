@@ -285,3 +285,89 @@ export interface SubmitWaitlistResult {
   position_no: number;
   status: "waiting";
 }
+
+/** 榜单选项（年龄段/舞种）。 */
+export interface RankingOption {
+  value: string;
+  label: string;
+}
+
+/** 榜单首页配置（API 文档 6.1）。 */
+export interface RankingConfig {
+  season: string;
+  title: string;
+  subtitle: string;
+  levels: RankingOption[];
+  dance_styles: RankingOption[];
+  advance_quota: number;
+  updated_at: string | null;
+}
+
+/** 直通榜条目（API 文档 6.2）。 */
+export interface RankingAwardItem {
+  event_name: string;
+  award: string;
+  prize_amount: number;
+}
+
+export interface RankingDirectEntry {
+  id: number;
+  name: string;
+  avatar_url: string;
+  awards: RankingAwardItem[];
+}
+
+/** 积分榜条目（API 文档 6.2）。 */
+export interface RankingEntry {
+  id: number;
+  rank: number;
+  prev_rank: number;
+  rank_change: number;
+  name: string;
+  avatar_url: string;
+  total_points: number;
+  is_direct: boolean;
+}
+
+export interface RankingBoard {
+  board_id: number;
+  updated_at: string | null;
+  direct: RankingDirectEntry[];
+  ranking: RankingEntry[];
+}
+
+/** 机构榜条目（API 文档 6.3）。 */
+export interface InstitutionRankEntry {
+  rank: number;
+  name: string;
+  total_points: number;
+  player_count: number;
+  honor: string | null;
+}
+
+export interface InstitutionRanking {
+  updated_at: string | null;
+  institutions: InstitutionRankEntry[];
+}
+
+/** 选手积分详情（API 文档 6.4）。 */
+export interface DancerEventItem {
+  event_name: string;
+  event_date: string | null;
+  level: string;
+  award: string;
+  points: number;
+}
+
+export interface DancerDetail {
+  id: number;
+  name: string;
+  avatar_url: string;
+  board: { level: string; dance_type: string };
+  rank: number;
+  total_points: number;
+  counted_events: DancerEventItem[];
+  history: DancerEventItem[];
+  honors: string[];
+  qualification: { type: string; source: string } | null;
+}

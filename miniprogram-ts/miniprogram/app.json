@@ -2,6 +2,7 @@
   "pages": [
     "pages/events/events",
     "pages/ranking/ranking",
+    "pages/dancer/dancer",
     "pages/mine/mine",
     "pages/event-detail/event-detail",
     "pages/register/register",

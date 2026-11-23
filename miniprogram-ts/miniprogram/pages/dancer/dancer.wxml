@@ -1,0 +1,61 @@
+<view class="app-page dancer-page">
+  <nav-bar title="选手积分" bg="#fffdf8" />
+
+  <view wx:if="{{loading}}" class="app-loading">正在加载选手详情…</view>
+
+  <view wx:elif="{{loadError}}" class="dancer-error">
+    <view class="app-error">{{loadError}}</view>
+    <button class="app-btn app-btn--primary" bind:tap="onRetry">重新加载</button>
+  </view>
+
+  <block wx:elif="{{detail}}">
+    <view class="dancer-hero">
+      <image class="dancer-hero__avatar" src="{{detail.avatar_url || '/assets/avatar/avatar.png'}}" />
+      <view class="dancer-hero__name">{{detail.name}}</view>
+      <view class="dancer-hero__board">{{boardText}}</view>
+      <view class="dancer-hero__stats">
+        <view class="dancer-stat">
+          <view class="dancer-stat__value">{{detail.rank || '—'}}</view>
+          <view class="dancer-stat__label">当前排名</view>
+        </view>
+        <view class="dancer-stat">
+          <view class="dancer-stat__value">{{detail.total_points}}</view>
+          <view class="dancer-stat__label">年度积分</view>
+        </view>
+      </view>
+      <view wx:if="{{qualificationText}}" class="dancer-hero__qual">{{qualificationText}}</view>
+    </view>
+
+    <view class="dancer-section">
+      <view class="app-section-kicker">COUNTED</view>
+      <view class="app-section-title">计入排名的场次</view>
+      <view class="dancer-note">取本年度积分最高的 3 场（不足 3 场按实际计）。</view>
+      <view wx:for="{{countedEvents}}" wx:key="event_name" class="event-row">
+        <view class="event-row__body">
+          <view class="event-row__name">{{item.event_name}}</view>
+          <view class="event-row__meta">{{item.dateText}} · {{item.awardLabel}}</view>
+        </view>
+        <view class="event-row__points">+{{item.points}}</view>
+      </view>
+    </view>
+
+    <view class="dancer-section">
+      <view class="app-section-kicker">HISTORY</view>
+      <view class="app-section-title">本年度参赛记录</view>
+      <view wx:for="{{historyEvents}}" wx:key="event_name" class="event-row">
+        <view class="event-row__body">
+          <view class="event-row__name">{{item.event_name}}</view>
+          <view class="event-row__meta">{{item.dateText}} · {{item.awardLabel}}</view>
+        </view>
+        <view class="event-row__points">+{{item.points}}</view>
+      </view>
+      <empty-state wx:if="{{historyEvents.length === 0}}" text="暂无参赛记录" />
+    </view>
+
+    <view wx:if="{{honorText}}" class="dancer-section">
+      <view class="app-section-kicker">HONORS</view>
+      <view class="app-section-title">荣誉</view>
+      <view class="dancer-honors">{{honorText}}</view>
+    </view>
+  </block>
+</view>
