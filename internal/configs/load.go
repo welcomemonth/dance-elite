@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -32,7 +31,6 @@ func Load() (*Config, error) {
 		cfg.Env = EnvProd
 	}
 	readSecrets(cfg)
-	deriveStorage(cfg)
 	if err := validate(cfg); err != nil {
 		return nil, err
 	}
@@ -120,15 +118,6 @@ func readSecrets(cfg *Config) {
 		SMSAccessKeySecret:     strings.TrimSpace(os.Getenv("SMS_ACCESS_KEY_SECRET")),
 		SMSSignName:            strings.TrimSpace(os.Getenv("SMS_SIGN_NAME")),
 	}
-}
-
-// deriveStorage 为未显式配置的抽签目录补默认值：与数据库同目录的 lottery/。
-// 本地即 data/lottery，容器内即 /opt/dance-elite/lottery。
-func deriveStorage(cfg *Config) {
-	if strings.TrimSpace(cfg.Storage.LotteryDir) != "" {
-		return
-	}
-	cfg.Storage.LotteryDir = filepath.Join(filepath.Dir(cfg.Storage.DBPath), "lottery")
 }
 
 // validateSMS 校验短信凭据：允许整体不配置（功能关闭），但不允许只配一部分

@@ -21,6 +21,7 @@ type lotteryHandler struct {
 func registerLotteryH5Routes(group *gin.RouterGroup, svc *service.LotteryService) {
 	h := &lotteryHandler{svc: svc}
 	group.GET("/lottery/:token", middleware.RateLimit(120, time.Minute), h.meta)
+	group.POST("/lottery/:token/lookup", middleware.RateLimit(60, time.Minute), h.lookup)
 	group.POST("/lottery/:token/query", middleware.RateLimit(60, time.Minute), h.query)
 	group.POST("/lottery/:token/draw", middleware.RateLimit(60, time.Minute), h.draw)
 }
@@ -35,11 +36,26 @@ func (h *lotteryHandler) meta(c *gin.Context) {
 	httpx.OK(c, resp)
 }
 
-// query 按身份证号 + 舞种查询抽签结果（不抽签）。
-func (h *lotteryHandler) query(c *gin.Context) {
-	var req model.LotteryQueryRequest
+// lookup 按证件号（可选姓名）返回全部抽签记录；已抽签记录带抽签时间。
+func (h *lotteryHandler) lookup(c *gin.Context) {
+	var req model.LotteryLookupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：身份证号和舞种不能为空").WithCause(err))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：身份证号不能为空").WithCause(err))
+		return
+	}
+	resp, err := h.svc.Lookup(c.Request.Context(), c.Param("token"), req)
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	httpx.OK(c, resp)
+}
+
+// query 只按身份证号查询全部已抽签信息（不需要舞种）。
+func (h *lotteryHandler) query(c *gin.Context) {
+	var req model.LotteryLookupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：身份证号不能为空").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Query(c.Request.Context(), c.Param("token"), req)
@@ -50,11 +66,11 @@ func (h *lotteryHandler) query(c *gin.Context) {
 	httpx.OK(c, resp)
 }
 
-// draw 按姓名 + 身份证号 + 舞种抽签；已抽过的人返回原结果。
+// draw 按姓名 + 身份证号抽签；舞种为空时由服务端决定（唯一/弹出选择）。
 func (h *lotteryHandler) draw(c *gin.Context) {
 	var req model.LotteryDrawRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：姓名、身份证号和舞种不能为空").WithCause(err))
+		httpx.AbortError(c, httpx.ErrBadRequest("请求参数错误：姓名和身份证号不能为空").WithCause(err))
 		return
 	}
 	resp, err := h.svc.Draw(c.Request.Context(), c.Param("token"), req)

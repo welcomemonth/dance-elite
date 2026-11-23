@@ -14,6 +14,7 @@ var envKeys = []string{
 	"WECHAT_APPID", "WECHAT_SECRET", "WECHAT_MCHID", "WECHAT_MCH_SERIAL_NO",
 	"WECHAT_PAY_PUBLIC_KEY_ID", "WECHAT_PAY_API_V3_KEY",
 	"WECHAT_PAY_PRIVATE_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_FILE",
+	"SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME",
 	// 已移除的旧配置：必须不再生效
 	"DEBUG", "PAY_MOCK", "PORT", "DB_PATH", "UPLOAD_DIR", "LOG_LEVEL", "LOG_FORMAT",
 	"SLOW_REQUEST_MS", "JWT_EXPIRE_SECONDS", "STATUS_TICK_SECONDS",
@@ -420,5 +421,47 @@ func TestRealEnvWinsOverDotEnv(t *testing.T) {
 	}
 	if cfg.Secrets.JWTSecret != "jwt" {
 		t.Errorf("JWTSecret = %q, want existing env to win", cfg.Secrets.JWTSecret)
+	}
+}
+
+func TestSMSMockSkipsCredentialCheck(t *testing.T) {
+	prepare(t, `
+sms:
+  mock: true
+`)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with sms.mock=true: %v", err)
+	}
+	if !cfg.SMS.Mock {
+		t.Error("SMS.Mock = false, want true")
+	}
+}
+
+func TestSMSPartialCredentialsRejected(t *testing.T) {
+	prepare(t, `
+sms:
+  mock: false
+`)
+	t.Setenv("SMS_ACCESS_KEY_ID", "id-only")
+	if _, err := Load(); err == nil {
+		t.Fatal("want error for partial SMS credentials")
+	}
+}
+
+func TestSMSCompleteCredentials(t *testing.T) {
+	prepare(t, `
+sms:
+  mock: false
+`)
+	t.Setenv("SMS_ACCESS_KEY_ID", "id")
+	t.Setenv("SMS_ACCESS_KEY_SECRET", "secret")
+	t.Setenv("SMS_SIGN_NAME", "优舞盟")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Secrets.SMSAccessKeyID != "id" || cfg.Secrets.SMSSignName != "优舞盟" {
+		t.Errorf("SMS secrets = %+v", cfg.Secrets)
 	}
 }

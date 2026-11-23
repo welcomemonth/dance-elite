@@ -4,9 +4,9 @@
 # APP_ENV 设为 prod、public_base_url 填真实域名、日志改为 info/json。
 
 server:
-  port: 8080
-  # 对外访问地址（微信支付回调、音频审核外链）；prod 必填，形如 https://api.example.com
-  public_base_url: ""
+  port: 10350
+  # 对外访问地址（微信支付回调、音频审核/抽签外链）；prod 必填，形如 https://api.example.com
+  public_base_url: "https://tilt.tunnel.meetmonth.top"
   # 慢请求阈值（毫秒），超过时访问日志升为 WARN；0 关闭
   slow_request_ms: 500
 
@@ -14,8 +14,6 @@ storage:
   # SQLite 文件与上传目录；生产挂 volume 持久化
   db_path: data/dance-elite.db
   upload_dir: uploads
-  # 赛事抽签 JSON 目录（一个赛事一个 <token>.json）；留空默认 <db_path 目录>/lottery
-  lottery_dir: ""
 
 log:
   level: debug      # debug/info/warn/error；生产改为 info
@@ -40,4 +38,4 @@ scheduler:
 sms:
   # 抽签提醒/结果短信：true 时只记录脱敏日志、不调用阿里云（本地联调用）。
   # 真实发送的凭据只从环境变量读取：SMS_ACCESS_KEY_ID / SMS_ACCESS_KEY_SECRET / SMS_SIGN_NAME。
-  mock: false
+  mock: true

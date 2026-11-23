@@ -1,11 +1,19 @@
 package model
 
-// 抽签 H5 的数据文件结构与接口 DTO。
+// 抽签域模型与接口 DTO。
 //
-// 抽签数据与报名库完全解耦：每个赛事一个 JSON 文件，文件名即访问 token。
-// 数据由 cmd/lottery-import 从报名 Excel 生成，服务端只读写该文件。
+// 抽签数据存 SQLite（lottery_sessions / lottery_groups / lottery_players），
+// 与报名库同一套数据层；一次赛事一个抽签 session，token 即免登录链接凭据。
+// 证件号不存明文：id_card_hash 用于比对，id_card_enc 为 AES-GCM 密文
+// （仅 Excel 导入来源有，导出时解密）；从赛事报名生成时只有哈希。
 
-// LotteryGenre 是抽签页面下拉框中的一个舞种。
+// 抽签创建来源。
+const (
+	LotterySourceExcel = "excel" // 上传报名 Excel 解析生成
+	LotterySourceEvent = "event" // 从已截止赛事的有效报名生成
+)
+
+// LotteryGenre 是抽签页展示的舞种。
 type LotteryGenre struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
@@ -13,10 +21,14 @@ type LotteryGenre struct {
 
 // LotteryGroup 是一个「组别 × 舞种」下的字母组（A/B/C…）及其人数。
 type LotteryGroup struct {
-	Genre    string `json:"genre"`
-	AgeGroup string `json:"age_group"`
-	Letter   string `json:"letter"`
-	Size     int    `json:"size"`
+	ID        int64  `json:"-"`
+	SessionID int64  `json:"-"`
+	Genre     string `json:"genre"`
+	AgeGroup  string `json:"age_group"`
+	Letter    string `json:"letter"`
+	Size      int    `json:"size"`
+	// Drawn 是已分配人数，仅在后台详情中统计。
+	Drawn int `json:"drawn,omitempty"`
 }
 
 // LotterySlot 是抽签结果中的一个槽位：组字母 + 组内序号。
@@ -25,68 +37,79 @@ type LotterySlot struct {
 	No     int    `json:"no"`
 }
 
-// LotteryPlayer 是参与抽签的一名选手；Slot 为 nil 表示尚未抽签。
-type LotteryPlayer struct {
-	Name        string `json:"name"`
-	IDCard      string `json:"id_card"`
-	Genre       string `json:"genre"`
-	AgeGroup    string `json:"age_group"`
-	Institution string `json:"institution,omitempty"`
-	Program     string `json:"program,omitempty"`
-	// Phone 是短信提醒用的手机号（明文）；为空表示不发短信。
-	Phone   string       `json:"phone,omitempty"`
-	Slot    *LotterySlot `json:"slot"`
-	DrawnAt string       `json:"drawn_at,omitempty"`
-	// AutoDrawn 表示该槽位由系统在截止后自动分配（非本人操作）。
-	AutoDrawn bool `json:"auto_drawn,omitempty"`
-	// SMS 记录该选手的短信发送状态；nil 表示从未尝试发送。
-	SMS *LotterySMSState `json:"sms,omitempty"`
-}
-
 // LotterySMSState 记录一名选手的提醒短信与结果短信发送情况。
-//
-// 两种短信各自独立记录：SentAt 非空表示已成功发送；Attempts 达到上限后
-// 不再重试，避免模板错误时无休止地调用短信接口。
 type LotterySMSState struct {
-	RemindSentAt   string `json:"remind_sent_at,omitempty"`
-	RemindAttempts int    `json:"remind_attempts,omitempty"`
-	ResultSentAt   string `json:"result_sent_at,omitempty"`
-	ResultAttempts int    `json:"result_attempts,omitempty"`
+	RemindSentAt   *string `json:"-"`
+	RemindAttempts int     `json:"-"`
+	ResultSentAt   *string `json:"-"`
+	ResultAttempts int     `json:"-"`
 }
 
-// LotteryData 是一个赛事的完整抽签数据，整体读写同一个 JSON 文件。
-//
-// StartAt / EndAt 为空表示该赛事未配置抽签时间窗口（沿用旧行为：随时可抽、
-// 无自动分配、无短信提醒）。时间格式为全库统一的 ISO 8601 本地时间。
-type LotteryData struct {
-	Version   int    `json:"version"`
-	EventName string `json:"event_name"`
-	// StartAt 是抽签开始时间；到点前页面只展示开始时间，抽签接口拒绝请求。
-	StartAt string `json:"start_at,omitempty"`
-	// EndAt 是抽签截止时间；到点后剩余未抽选手由系统自动分配。
-	EndAt string `json:"end_at,omitempty"`
-	// RemindBeforeMinutes 是截止前多少分钟发送提醒短信；0 表示默认 120 分钟。
-	RemindBeforeMinutes int `json:"remind_before_minutes,omitempty"`
-	// SMSRemindTemplate / SMSResultTemplate 是阿里云短信模板 code。
-	// 模板正文由本赛事专用（抽签链接写死在正文里），留空则不发短信。
-	SMSRemindTemplate string          `json:"sms_remind_template,omitempty"`
-	SMSResultTemplate string          `json:"sms_result_template,omitempty"`
-	Genres            []LotteryGenre  `json:"genres"`
-	Groups            []LotteryGroup  `json:"groups"`
-	Players           []LotteryPlayer `json:"players"`
+// LotterySession 是一次赛事抽签（lottery_sessions）。
+type LotterySession struct {
+	ID                  int64
+	EventID             *int64
+	EventName           string
+	Token               string
+	Source              string
+	StartAt             *string
+	EndAt               *string
+	RemindBeforeMinutes int
+	SMSRemindTemplate   *string
+	SMSResultTemplate   *string
+	CreatedBy           *int64
+	CreatedAt           string
+	UpdatedAt           string
+	// PlayerCount / DrawnCount 是列表/详情用的聚合值。
+	PlayerCount int
+	DrawnCount  int
+}
+
+// LotteryPlayer 是一名选手在某舞种下的抽签记录（lottery_players）。
+type LotteryPlayer struct {
+	ID             int64
+	SessionID      int64
+	RegistrationID *int64
+	Name           string
+	IDCardHash     string
+	IDCardMasked   *string
+	IDCardEnc      *string
+	Genre          string
+	AgeGroup       string
+	Institution    *string
+	Program        *string
+	Phone          *string
+	GroupLetter    *string
+	SlotNo         *int
+	DrawnAt        *string
+	AutoDrawn      bool
+	SMS            LotterySMSState
+	CreatedAt      string
+	UpdatedAt      string
+}
+
+// Slot 返回已分配槽位；尚未抽签返回 nil。
+func (p *LotteryPlayer) Slot() *LotterySlot {
+	if p.SlotNo == nil || p.GroupLetter == nil {
+		return nil
+	}
+	return &LotterySlot{Letter: *p.GroupLetter, No: *p.SlotNo}
+}
+
+// LotteryLookupRequest 是 lookup / query 的请求体。
+// Lookup 时可带姓名做二次核对；Query 只按证件号返回全部记录。
+type LotteryLookupRequest struct {
+	Name   string `json:"name"`
+	IDCard string `json:"id_card" binding:"required"`
 }
 
 // LotteryDrawRequest 是 POST /h5/lottery/{token}/draw 的请求体。
+// Genre 为空时：只有一条待抽记录直接抽；同一选手有多条待抽记录则返回
+// choose_genre，由前端弹窗让家长选择舞种。
 type LotteryDrawRequest struct {
 	Name   string `json:"name" binding:"required"`
 	IDCard string `json:"id_card" binding:"required"`
-	Genre  string `json:"genre" binding:"required"`
-}
-
-// LotteryQueryRequest 是 POST /h5/lottery/{token}/query 的请求体。
-type LotteryQueryRequest struct {
-	IDCard string `json:"id_card" binding:"required"`
-	Genre  string `json:"genre" binding:"required"`
+	Genre  string `json:"genre"`
 }
 
 // 抽签页面状态，由服务端按服务端时钟计算后下发。
@@ -96,9 +119,17 @@ const (
 	LotteryStatusEnded      = "ended"
 )
 
+// 抽签接口的业务结果状态。
+const (
+	// LotteryOutcomeDrawn 表示本次完成了抽签（含截止后自动分配）。
+	LotteryOutcomeDrawn = "drawn"
+	// LotteryOutcomeAlreadyDrawn 表示所查询记录均已抽签，未做任何修改。
+	LotteryOutcomeAlreadyDrawn = "already_drawn"
+	// LotteryOutcomeChooseGenre 表示同一姓名+证件号存在多个舞种待抽，需前端选择。
+	LotteryOutcomeChooseGenre = "choose_genre"
+)
+
 // LotteryMeta 是 GET /h5/lottery/{token} 的响应：页面初始化所需的赛事信息。
-//
-// ServerTime 用于前端校准倒计时（家长手机时钟可能不准，不能只信客户端时间）。
 type LotteryMeta struct {
 	EventName  string         `json:"event_name"`
 	Genres     []LotteryGenre `json:"genres"`
@@ -108,8 +139,8 @@ type LotteryMeta struct {
 	Status     string         `json:"status"`
 }
 
-// LotteryResult 是抽签/查询接口的统一响应。
-type LotteryResult struct {
+// LotteryEntry 是一名选手在某舞种下的抽签记录（一名选手可报多个舞种）。
+type LotteryEntry struct {
 	Name        string       `json:"name"`
 	Genre       string       `json:"genre"`
 	GenreLabel  string       `json:"genre_label"`
@@ -118,8 +149,77 @@ type LotteryResult struct {
 	Institution string       `json:"institution,omitempty"`
 	Slot        *LotterySlot `json:"slot"`
 	DrawnAt     string       `json:"drawn_at,omitempty"`
-	// JustDrawn 表示本次请求实际完成了抽签（false 为查询或重复点击）。
-	JustDrawn bool `json:"just_drawn"`
-	// AutoDrawn 表示槽位由系统在截止后自动分配。
-	AutoDrawn bool `json:"auto_drawn"`
+	AutoDrawn   bool         `json:"auto_drawn"`
+	// Drawn 等价于 Slot != nil，便于前端直接判断。
+	Drawn bool `json:"drawn"`
+}
+
+// LotteryLookupResult 是 lookup / query 的响应：按证件号命中的全部记录。
+type LotteryLookupResult struct {
+	Entries []LotteryEntry `json:"entries"`
+}
+
+// LotteryDrawResult 是抽签接口的响应。
+type LotteryDrawResult struct {
+	Status  string         `json:"status"`
+	Entries []LotteryEntry `json:"entries"`
+	Choices []LotteryGenre `json:"choices,omitempty"`
+}
+
+// AdminLotterySession 是后台抽签列表/详情中的一条赛事抽签。
+type AdminLotterySession struct {
+	ID                  int64  `json:"id"`
+	Token               string `json:"token"`
+	EventID             *int64 `json:"event_id"`
+	EventName           string `json:"event_name"`
+	Source              string `json:"source"`
+	StartAt             string `json:"start_at,omitempty"`
+	EndAt               string `json:"end_at,omitempty"`
+	RemindBeforeMinutes int    `json:"remind_before_minutes"`
+	SMSRemindTemplate   string `json:"sms_remind_template,omitempty"`
+	SMSResultTemplate   string `json:"sms_result_template,omitempty"`
+	PlayerCount         int    `json:"player_count"`
+	DrawnCount          int    `json:"drawn_count"`
+	PendingCount        int    `json:"pending_count"`
+	CreatedAt           string `json:"created_at,omitempty"`
+	UpdatedAt           string `json:"updated_at,omitempty"`
+	// Link 是拼接 public_base_url 后的免登录页面地址；未配置时返回相对路径。
+	Link string `json:"link"`
+}
+
+// AdminLotteryListResponse 是 GET /api/v1/admin/lottery/sessions 的响应。
+type AdminLotteryListResponse struct {
+	List []AdminLotterySession `json:"list"`
+}
+
+// AdminLotteryGroupStat 是后台详情中的分组进度。
+type AdminLotteryGroupStat struct {
+	Genre      string `json:"genre"`
+	GenreLabel string `json:"genre_label"`
+	AgeGroup   string `json:"age_group"`
+	Letter     string `json:"letter"`
+	Size       int    `json:"size"`
+	Drawn      int    `json:"drawn"`
+}
+
+// AdminLotteryDetail 是后台单场抽签详情。
+type AdminLotteryDetail struct {
+	AdminLotterySession
+	Groups []AdminLotteryGroupStat `json:"groups"`
+}
+
+// AdminLotteryCreateResult 是导入后返回的结果摘要。
+type AdminLotteryCreateResult struct {
+	AdminLotterySession
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// AdminLotterySettingsRequest 是修改抽签设置（时间窗口/短信模板）的请求体。
+type AdminLotterySettingsRequest struct {
+	EventID             *int64 `json:"event_id"`
+	StartAt             string `json:"start_at"`
+	EndAt               string `json:"end_at"`
+	RemindBeforeMinutes int    `json:"remind_before_minutes"`
+	SMSRemindTemplate   string `json:"sms_remind_template"`
+	SMSResultTemplate   string `json:"sms_result_template"`
 }

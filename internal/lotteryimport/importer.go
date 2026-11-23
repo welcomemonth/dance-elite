@@ -2,11 +2,31 @@ package lotteryimport
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
 	"github.com/meetmonth/dance-elite/internal/model"
 )
+
+// Player 是导入/分组使用的中立选手结构（不含数据库主键）。
+type Player struct {
+	Name        string
+	IDCard      string
+	Genre       string
+	AgeGroup    string
+	Institution string
+	Program     string
+	Phone       string
+}
+
+// Result 是一次 Excel 解析结果。
+type Result struct {
+	EventName string
+	Genres    []model.LotteryGenre
+	Groups    []model.LotteryGroup
+	Players   []Player
+}
 
 // ValidationError 汇总一次导入中的全部数据问题，便于一次性修完 Excel。
 type ValidationError struct {
@@ -17,15 +37,23 @@ func (e *ValidationError) Error() string {
 	return "导入校验未通过：\n  - " + strings.Join(e.Problems, "\n  - ")
 }
 
-// Build 读取报名 Excel 并生成抽签数据。
+// BuildReader 读取报名 Excel 并生成抽签数据（后台导入用）。
 //
 // 只依赖表头名称定位列，列顺序变化不影响导入。任何一条数据不合法都会
 // 返回 *ValidationError（列出全部问题与行号），不会生成半份数据。
-// 返回值 warnings 描述分组人数超出 8-12 人的情况，不阻断导入。
-func Build(excelPath, eventName string) (*model.LotteryData, []string, error) {
-	rows, err := readRows(excelPath)
+// 返回值 warnings 描述手机号不合法、分组人数过少等不阻断导入的情况。
+func BuildReader(r io.Reader, eventName string) (*Result, []string, error) {
+	rows, err := readRowsFrom(r)
 	if err != nil {
 		return nil, nil, err
+	}
+	return buildRows(rows, eventName)
+}
+
+// buildRows 校验并组装抽签数据；rows[0] 为表头。
+func buildRows(rows [][]string, eventName string) (*Result, []string, error) {
+	if len(rows) == 0 {
+		return nil, nil, fmt.Errorf("Excel 为空")
 	}
 	cols, err := mapColumns(rows[0])
 	if err != nil {
@@ -53,9 +81,9 @@ func Build(excelPath, eventName string) (*model.LotteryData, []string, error) {
 		return nil, nil, &ValidationError{Problems: problems}
 	}
 
-	players := make([]model.LotteryPlayer, 0, len(parsed))
+	players := make([]Player, 0, len(parsed))
 	for _, r := range parsed {
-		players = append(players, model.LotteryPlayer{
+		players = append(players, Player{
 			Name:        r.name,
 			IDCard:      r.idCard,
 			Genre:       r.genre,
@@ -65,16 +93,15 @@ func Build(excelPath, eventName string) (*model.LotteryData, []string, error) {
 			Phone:       r.phone,
 		})
 	}
-	groups, groupWarnings := computeGroups(players)
+	groups, groupWarnings := Group(players)
 	warnings := phoneWarnings(parsed)
 	warnings = append(warnings, groupWarnings...)
 	if eventName == "" {
 		eventName = "优舞盟赛事抽签"
 	}
-	return &model.LotteryData{
-		Version:   2,
+	return &Result{
 		EventName: eventName,
-		Genres:    presentGenres(players),
+		Genres:    Genres(players),
 		Groups:    groups,
 		Players:   players,
 	}, warnings, nil

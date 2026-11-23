@@ -2,6 +2,7 @@ package lotteryimport
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"unicode"
 
@@ -32,10 +33,9 @@ var headerAliases = map[string][]string{
 	"phone": {"手机号", "手机", "联系电话", "联系手机", "家长手机号", "家长电话"},
 }
 
-// readRows 读取第一个工作表的全部行。返回的切片下标 0 是表头，
-// 即 Excel 第 1 行；后续行号按 index+1 计算。
-func readRows(path string) ([][]string, error) {
-	f, err := excelize.OpenFile(path)
+// readRowsFrom 从任意 reader（后台 multipart 上传）读取第一个工作表。
+func readRowsFrom(r io.Reader) ([][]string, error) {
+	f, err := excelize.OpenReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("打开 Excel 失败: %w", err)
 	}

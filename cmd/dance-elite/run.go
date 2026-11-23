@@ -89,7 +89,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 	userContentQueryService := service.NewAdminUserQueryService(stores)
 	contentService := service.NewContentService(stores)
 	audioReviewService := service.NewAudioReviewService(stores, cfg.Server.PublicBaseURL)
-	// 抽签 H5：数据在独立 JSON 文件；短信未配置时为 nil，提醒/通知自动跳过。
+	// 抽签 H5：数据存 lottery_* 表；短信未配置时为 nil，提醒/通知自动跳过。
 	smsClient, err := sms.New(sms.Config{
 		AccessKeyID:     cfg.Secrets.SMSAccessKeyID,
 		AccessKeySecret: cfg.Secrets.SMSAccessKeySecret,
@@ -102,9 +102,9 @@ func run(ctx context.Context, cfg *config.Config) error {
 	if smsClient == nil {
 		logger.Log.Warn("短信通道未配置，抽签提醒与结果通知不会发送")
 	}
-	lotteryStore := store.NewLotteryStore(cfg.Storage.LotteryDir)
-	lotteryService := service.NewLotteryService(lotteryStore)
-	lotterySweeper := service.NewLotterySweeper(lotteryStore, smsClient, cfg.Server.PublicBaseURL)
+	lotteryService := service.NewLotteryService(stores, cfg.Secrets.IDCardHMACKey)
+	lotteryAdminService := service.NewAdminLotteryService(stores, cfg.Server.PublicBaseURL, cfg.Secrets.IDCardHMACKey)
+	lotterySweeper := service.NewLotterySweeper(stores, smsClient, cfg.Server.PublicBaseURL)
 
 	// 前端构建产物在编译期嵌入；未构建时（只有 .gitkeep）跳过页面托管，
 	// 本地开发请使用 dance-admin 的 pnpm dev（代理到本服务）。
@@ -145,6 +145,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		Contents:            contentService,
 		AudioReview:         audioReviewService,
 		Lottery:             lotteryService,
+		LotteryAdmin:        lotteryAdminService,
 		Tokens:              tokens,
 		UploadDir:           cfg.Storage.UploadDir,
 		SlowRequestMS:       cfg.Server.SlowRequestMS,

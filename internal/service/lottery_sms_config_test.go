@@ -1,8 +1,6 @@
 package service
 
 import (
-	"context"
-	"reflect"
 	"testing"
 	"time"
 
@@ -10,14 +8,41 @@ import (
 	"github.com/meetmonth/dance-elite/internal/utils"
 )
 
-// autoDrawnLotteryData 构造截止后已由系统自动分配、但结果短信未发送的数据。
-func autoDrawnLotteryData(start, end time.Time) *model.LotteryData {
-	data := lotteryWindowData(start, end)
-	for i := range data.Players {
-		data.Players[i].Slot = &model.LotterySlot{Letter: "A", No: i + 1}
-		data.Players[i].AutoDrawn = true
+// smsTestSession 构造一场抽签会话（仅时间窗口与短信模板）。
+func smsTestSession(start, end time.Time, remindTpl, resultTpl string) *model.LotterySession {
+	session := &model.LotterySession{ID: 1, EventName: "短信测试", Token: "SmsToken01"}
+	if !start.IsZero() {
+		session.StartAt = lotteryTimePtr(start)
 	}
-	return data
+	if !end.IsZero() {
+		session.EndAt = lotteryTimePtr(end)
+	}
+	if remindTpl != "" {
+		session.SMSRemindTemplate = &remindTpl
+	}
+	if resultTpl != "" {
+		session.SMSResultTemplate = &resultTpl
+	}
+	return session
+}
+
+// smsTestPlayers 构造两名待抽签 / 已自动分配的选手。
+func smsTestPlayers(autoDrawn bool) []model.LotteryPlayer {
+	phone1, phone2 := "13800000001", "13800000002"
+	players := []model.LotteryPlayer{
+		{ID: 1, Name: "张三", Genre: "classical", AgeGroup: "U11", Phone: &phone1},
+		{ID: 2, Name: "李四", Genre: "classical", AgeGroup: "U11", Phone: &phone2},
+	}
+	if autoDrawn {
+		letter := "A"
+		for i := range players {
+			no := i + 1
+			players[i].GroupLetter = &letter
+			players[i].SlotNo = &no
+			players[i].AutoDrawn = true
+		}
+	}
+	return players
 }
 
 func TestMissingLotterySMSConfig(t *testing.T) {
@@ -26,98 +51,94 @@ func TestMissingLotterySMSConfig(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		data    *model.LotteryData
+		session *model.LotterySession
+		players []model.LotteryPlayer
 		baseURL string
 		want    []string
 	}{
 		{
 			name:    "无截止时间按设计不发短信",
-			data:    lotteryWindowData(now.Add(-time.Hour), time.Time{}),
+			session: smsTestSession(now.Add(-time.Hour), time.Time{}, "", ""),
+			players: smsTestPlayers(false),
 			baseURL: baseURL,
 			want:    nil,
 		},
 		{
 			name:    "截止前缺提醒模板",
-			data:    lotteryWindowData(now.Add(-24*time.Hour), now.Add(time.Hour)),
+			session: smsTestSession(now.Add(-24*time.Hour), now.Add(time.Hour), "", ""),
+			players: smsTestPlayers(false),
 			baseURL: baseURL,
 			want:    []string{"sms_remind_template"},
 		},
 		{
-			name: "截止前缺 PUBLIC_BASE_URL 拼链接",
-			data: func() *model.LotteryData {
-				data := lotteryWindowData(now.Add(-24*time.Hour), now.Add(time.Hour))
-				data.SMSRemindTemplate = "SMS_REMIND"
-				return data
-			}(),
+			name:    "截止前缺 public_base_url 拼链接",
+			session: smsTestSession(now.Add(-24*time.Hour), now.Add(time.Hour), "SMS_REMIND", ""),
+			players: smsTestPlayers(false),
 			baseURL: "",
-			want:    []string{"PUBLIC_BASE_URL"},
+			want:    []string{"public_base_url"},
 		},
 		{
-			name: "截止前模板齐全",
-			data: func() *model.LotteryData {
-				data := lotteryWindowData(now.Add(-24*time.Hour), now.Add(time.Hour))
-				data.SMSRemindTemplate = "SMS_REMIND"
-				data.SMSResultTemplate = "SMS_RESULT"
-				return data
+			name:    "截止前模板齐全",
+			session: smsTestSession(now.Add(-24*time.Hour), now.Add(time.Hour), "SMS_REMIND", "SMS_RESULT"),
+			players: smsTestPlayers(false),
+			baseURL: baseURL,
+			want:    nil,
+		},
+		{
+			name:    "已全部抽签不再告警",
+			session: smsTestSession(now.Add(-24*time.Hour), now.Add(time.Hour), "", ""),
+			players: func() []model.LotteryPlayer {
+				players := smsTestPlayers(true)
+				return players
 			}(),
 			baseURL: baseURL,
 			want:    nil,
 		},
 		{
-			name: "截止后缺结果模板",
-			data: autoDrawnLotteryData(now.Add(-24*time.Hour), now.Add(-time.Minute)),
-			// 结果短信只需要结果模板，提醒模板缺失不再告警。
+			name:    "截止后缺结果模板",
+			session: smsTestSession(now.Add(-48*time.Hour), now.Add(-time.Minute), "SMS_REMIND", ""),
+			players: smsTestPlayers(true),
 			baseURL: baseURL,
 			want:    []string{"sms_result_template"},
 		},
-		{
-			name: "截止后结果短信已发完",
-			data: func() *model.LotteryData {
-				data := autoDrawnLotteryData(now.Add(-24*time.Hour), now.Add(-time.Minute))
-				for i := range data.Players {
-					data.Players[i].SMS = &model.LotterySMSState{ResultSentAt: utils.FormatISO(now)}
-				}
-				return data
-			}(),
-			baseURL: baseURL,
-			want:    nil,
-		},
-		{
-			name: "截止后手动抽签的选手不发结果短信",
-			data: func() *model.LotteryData {
-				data := autoDrawnLotteryData(now.Add(-24*time.Hour), now.Add(-time.Minute))
-				for i := range data.Players {
-					data.Players[i].AutoDrawn = false
-				}
-				return data
-			}(),
-			baseURL: baseURL,
-			want:    nil,
-		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := missingLotterySMSConfig(tt.data, tt.baseURL, now)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("missing config = %v, want %v", got, tt.want)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := missingLotterySMSConfig(tc.session, tc.players, tc.baseURL, now)
+			if len(got) != len(tc.want) {
+				t.Fatalf("missing = %v, want %v", got, tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Fatalf("missing = %v, want %v", got, tc.want)
+				}
 			}
 		})
 	}
 }
 
-// TestLotterySweeperSkipsSilentlyWithoutTemplate 校验缺模板时不发送、也不报错，
-// 告警只落在日志里，不影响其他赛事与本轮调度。
-func TestLotterySweeperSkipsSilentlyWithoutTemplate(t *testing.T) {
-	now := time.Date(2026, 11, 27, 21, 0, 0, 0, utils.ChinaLoc)
-	data := lotteryWindowData(now.Add(-24*time.Hour), now.Add(time.Hour))
-	client := &fakeSMSClient{}
-	sweeper, _ := newLotterySweeperForTest(t, data, now, client)
-
-	if err := sweeper.RunOnce(context.Background()); err != nil {
-		t.Fatalf("run once: %v", err)
+func TestPendingLotterySMSPlayers(t *testing.T) {
+	players := smsTestPlayers(false)
+	if got := pendingRemindPlayers(players); got != 2 {
+		t.Fatalf("pendingRemindPlayers = %d, want 2", got)
 	}
-	if calls := client.callCount(); calls != 0 {
-		t.Fatalf("sms sent %d times, want 0 without template", calls)
+	if got := pendingResultPlayers(players); got != 0 {
+		t.Fatalf("pendingResultPlayers = %d, want 0", got)
+	}
+
+	sentAt := utils.NowISO()
+	players[0].SMS.RemindSentAt = &sentAt
+	if got := pendingRemindPlayers(players); got != 1 {
+		t.Fatalf("after sent pendingRemindPlayers = %d, want 1", got)
+	}
+
+	auto := smsTestPlayers(true)
+	if got := pendingResultPlayers(auto); got != 2 {
+		t.Fatalf("auto pendingResultPlayers = %d, want 2", got)
+	}
+	auto[1].SMS.ResultAttempts = lotterySMSMaxAttempts
+	if got := pendingResultPlayers(auto); got != 1 {
+		t.Fatalf("max attempts pendingResultPlayers = %d, want 1", got)
 	}
 }

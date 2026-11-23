@@ -47,6 +47,7 @@ type Deps struct {
 	Contents            *service.ContentService
 	AudioReview         *service.AudioReviewService
 	Lottery             *service.LotteryService
+	LotteryAdmin        *service.AdminLotteryService
 	Tokens              *token.Signer
 
 	// UploadDir 是上传文件物理根目录（配置 storage.upload_dir）。非空时把
@@ -181,6 +182,10 @@ func New(deps Deps) *gin.Engine {
 		}
 		if deps.AudioReview != nil {
 			registerAdminAudioReviewRoutes(admin, deps.AudioReview)
+		}
+		// 后台赛事抽签（API 文档 7.3）：导入 Excel、维护链接与导出结果。
+		if deps.LotteryAdmin != nil {
+			registerAdminLotteryRoutes(admin, deps.LotteryAdmin)
 		}
 	}
 

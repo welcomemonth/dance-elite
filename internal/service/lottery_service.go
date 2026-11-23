@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
+	"database/sql"
 	"errors"
 	"fmt"
-	"math/big"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,27 +18,40 @@ import (
 
 // LotteryService 承载免登录抽签 H5 的元信息、查询与抽签（API 文档 7.2）。
 //
-// 抽签数据来自 store.LotteryStore 管理的 JSON 文件，与报名库无关。
+// 抽签数据存 lottery_sessions / lottery_groups / lottery_players；
+// 证件号以 HMAC 参与比对，不落明文。
 type LotteryService struct {
-	store *store.LotteryStore
+	stores *store.Store
+	idKey  []byte
 	// now 可注入，测试固定时钟用；生产为 time.Now。
 	now func() time.Time
 }
 
-// NewLotteryService 构造抽签服务。
-func NewLotteryService(lotteryStore *store.LotteryStore) *LotteryService {
-	return &LotteryService{store: lotteryStore, now: time.Now}
+// NewLotteryService 构造抽签服务；idCardKey 为 ID_CARD_HMAC_KEY。
+func NewLotteryService(stores *store.Store, idCardKey string) *LotteryService {
+	return &LotteryService{stores: stores, idKey: []byte(idCardKey), now: time.Now}
 }
+
+// lotteryNotFoundMessage 是证件号未命中时的统一提示。抽签现场大量家长不会
+// 区分「没报名」和「填错证件号」，文案必须给出下一步动作，避免直接找客服。
+const lotteryNotFoundMessage = "未查询到报名信息：请确认身份证号与报名时填写的一致（18 位，末位 X 用大写）。" +
+	"若确认已报名，请把「姓名 + 身份证号」发给赛事客服核对。"
 
 // Meta 返回页面初始化信息（赛事名称、舞种列表、抽签时间窗口与服务端时间）。
 func (s *LotteryService) Meta(ctx context.Context, token string) (*model.LotteryMeta, error) {
-	data, err := s.load(ctx, token)
+	session, _, players, err := s.load(ctx, token)
 	if err != nil {
 		return nil, err
 	}
 	now := s.now()
-	window := lotteryWindowOf(data)
-	startAt, endAt := data.StartAt, data.EndAt
+	window := lotteryWindowOf(session)
+	startAt, endAt := "", ""
+	if session.StartAt != nil {
+		startAt = *session.StartAt
+	}
+	if session.EndAt != nil {
+		endAt = *session.EndAt
+	}
 	if window.hasStart {
 		startAt = utils.FormatISO(window.start)
 	}
@@ -46,8 +59,8 @@ func (s *LotteryService) Meta(ctx context.Context, token string) (*model.Lottery
 		endAt = utils.FormatISO(window.end)
 	}
 	return &model.LotteryMeta{
-		EventName:  data.EventName,
-		Genres:     data.Genres,
+		EventName:  session.EventName,
+		Genres:     lotteryGenresOf(players),
 		StartAt:    startAt,
 		EndAt:      endAt,
 		ServerTime: utils.FormatISO(now),
@@ -55,94 +68,245 @@ func (s *LotteryService) Meta(ctx context.Context, token string) (*model.Lottery
 	}, nil
 }
 
-// Query 按「身份证号 + 舞种」查询抽签结果；未抽签时 Slot 为 nil。
+// Query 按证件号查询全部抽签记录（不要求舞种，一次返回该选手所有舞种）。
+func (s *LotteryService) Query(ctx context.Context, token string, req model.LotteryLookupRequest) (*model.LotteryLookupResult, error) {
+	return s.Lookup(ctx, token, req)
+}
+
+// Lookup 按证件号（可选姓名）返回全部命中记录；未命中返回统一的醒目提示。
 //
-// 已过截止时间且仍有未抽选手时，顺带完成自动分配，保证查询到的是最终结果。
-func (s *LotteryService) Query(ctx context.Context, token string, req model.LotteryQueryRequest) (*model.LotteryResult, error) {
-	now := s.now()
-	data, err := s.load(ctx, token)
+// 已截止的赛事会先完成自动分配，再返回最终结果；未开始也可查询。
+func (s *LotteryService) Lookup(ctx context.Context, token string, req model.LotteryLookupRequest) (*model.LotteryLookupResult, error) {
+	idCard := utils.NormalizeIDNumber(utils.IDTypeIDCard, req.IDCard)
+	hash := s.hashID(idCard)
+	name := normalizeLotteryName(req.Name)
+
+	session, _, players, err := s.load(ctx, token)
 	if err != nil {
 		return nil, err
 	}
-	if lotteryWindowOf(data).ended(now) && pendingLotteryPlayers(data) > 0 {
-		data, err = s.store.Mutate(ctx, token, func(data *model.LotteryData) error {
-			autoDrawPending(data, now)
+	now := s.now()
+	if lotteryWindowOf(session).ended(now) && pendingLotteryPlayers(players) > 0 {
+		err = s.stores.WithTx(ctx, func(tx *sql.Tx) error {
+			var txErr error
+			_, groups, txPlayers, txErr := s.stores.Lottery.GetByTokenTx(ctx, tx, store.NormalizeLotteryToken(token))
+			if txErr != nil {
+				return txErr
+			}
+			autoDrawLottery(ctx, s.stores, tx, groups, txPlayers, now)
+			players = txPlayers
 			return nil
 		})
 		if err != nil {
 			return nil, s.wrapStoreError(err)
 		}
 	}
-	player := findLotteryPlayer(data, req.IDCard, req.Genre)
-	if player == nil {
-		return nil, httpx.ErrNotFound("信息不匹配，请核对证件号和舞种")
+	entries := matchingLotteryEntries(players, hash, name)
+	if len(entries) == 0 {
+		return nil, httpx.ErrNotFound(lotteryNotFoundMessage)
 	}
-	return lotteryResult(data, player, false), nil
+	return &model.LotteryLookupResult{Entries: entries}, nil
 }
 
-// Draw 按「姓名 + 身份证号 + 舞种」抽签。
+// drawOutcome 是 Draw 在事务闭包内计算出的结果。
+type drawOutcome struct {
+	status  string
+	choices []model.LotteryGenre
+	drawn   []model.LotteryPlayer
+}
+
+// Draw 按「姓名 + 证件号」抽签；舞种可选。
 //
-// 已抽过的人直接返回原结果（幂等），不会重新分配；首次抽签在互斥锁内
-// 从同「组别 × 舞种」尚未占用的槽位里均匀随机取一个并写回文件。
-// 未到开始时间拒绝抽签；已过截止时间则按自动分配规则补抽。
-func (s *LotteryService) Draw(ctx context.Context, token string, req model.LotteryDrawRequest) (*model.LotteryResult, error) {
-	name := normalizeLotteryName(req.Name)
+//   - 只有一条待抽记录：直接抽；
+//   - 同一选手有多个舞种都待抽：返回 choose_genre，前端弹窗让家长选择；
+//   - 已全部抽完：返回 already_drawn（前端据此提示「已于 X 月 X 日 HH:MM 抽签」）；
+//   - 已过截止时间：按系统规则自动分配，不重新随机。
+func (s *LotteryService) Draw(ctx context.Context, token string, req model.LotteryDrawRequest) (*model.LotteryDrawResult, error) {
 	idCard := utils.NormalizeIDNumber(utils.IDTypeIDCard, req.IDCard)
+	hash := s.hashID(idCard)
+	name := normalizeLotteryName(req.Name)
 	genre := strings.TrimSpace(req.Genre)
 	now := s.now()
 
-	var result *model.LotteryResult
-	justDrawn := false
-	_, err := s.store.Mutate(ctx, token, func(data *model.LotteryData) error {
-		window := lotteryWindowOf(data)
+	var outcome drawOutcome
+	var entries []model.LotteryEntry
+	err := s.stores.WithTx(ctx, func(tx *sql.Tx) error {
+		session, groups, players, err := s.stores.Lottery.GetByTokenTx(ctx, tx, store.NormalizeLotteryToken(token))
+		if err != nil {
+			return err
+		}
+		matched := make([]int, 0, len(players))
+		for i := range players {
+			if players[i].IDCardHash == hash && normalizeLotteryName(players[i].Name) == name {
+				matched = append(matched, i)
+			}
+		}
+		if len(matched) == 0 {
+			return httpx.ErrNotFound("信息不匹配：请核对姓名和身份证号是否与报名时一致（证件号末位 X 用大写）")
+		}
+		window := lotteryWindowOf(session)
 		if !window.started(now) {
 			return httpx.ErrConflict(fmt.Sprintf("抽签尚未开始，开始时间：%s", lotteryTimeText(window.start)))
 		}
-		player := findLotteryPlayer(data, idCard, genre)
-		if player == nil || normalizeLotteryName(player.Name) != name {
-			return httpx.ErrNotFound("信息不匹配，请核对姓名、证件号和舞种")
-		}
-		if player.Slot == nil {
-			if window.ended(now) {
-				// 已截止：按系统自动分配规则补抽（与定时任务同一逻辑）。
-				autoDrawPending(data, now)
-				if player.Slot == nil {
-					return httpx.ErrConflict("该组别已无可抽签位，请联系赛事客服")
+
+		// 已截止：所有待抽记录按系统规则自动分配，本次请求不再随机。
+		if window.ended(now) {
+			pendingBefore := 0
+			for _, index := range matched {
+				if players[index].SlotNo == nil {
+					pendingBefore++
 				}
-				justDrawn = true
+			}
+			_, skipped := autoDrawLottery(ctx, s.stores, tx, groups, players, now)
+			if skipped > 0 {
+				logger.WarnEvent(ctx, "lottery.auto_drawn_short", "存在无可用槽位的选手，请检查分组数据",
+					"event_name", session.EventName, "skipped", skipped)
+			}
+			pendingAfter := 0
+			for _, index := range matched {
+				if players[index].SlotNo == nil {
+					pendingAfter++
+				}
+			}
+			if pendingBefore > pendingAfter {
+				outcome.status = model.LotteryOutcomeDrawn
 			} else {
-				slots := availableLotterySlots(data, player.Genre, player.AgeGroup)
-				if len(slots) == 0 {
-					return httpx.ErrConflict("该组别已无可抽签位，请联系赛事客服")
+				outcome.status = model.LotteryOutcomeAlreadyDrawn
+			}
+			entries = matchingLotteryEntries(players, hash, name)
+			return nil
+		}
+
+		// 指定舞种：只抽该舞种。
+		if genre != "" {
+			target := -1
+			for _, index := range matched {
+				if players[index].Genre == genre {
+					target = index
+					break
 				}
-				slot, err := pickLotterySlot(slots)
-				if err != nil {
-					return httpx.ErrInternal(err, "抽签失败，请稍后重试")
-				}
-				player.Slot = &slot
-				player.DrawnAt = utils.NowISO()
-				justDrawn = true
+			}
+			if target < 0 {
+				return httpx.ErrNotFound("未找到该舞种的报名记录，请核对姓名、证件号和舞种")
+			}
+			if players[target].SlotNo != nil {
+				outcome.status = model.LotteryOutcomeAlreadyDrawn
+				entries = matchingLotteryEntries(players, hash, name)
+				return nil
+			}
+			if err := s.assignSlot(ctx, tx, groups, players, &players[target], now); err != nil {
+				return err
+			}
+			outcome.status = model.LotteryOutcomeDrawn
+			outcome.drawn = []model.LotteryPlayer{players[target]}
+			entries = matchingLotteryEntries(players, hash, name)
+			return nil
+		}
+
+		pending := make([]int, 0, len(matched))
+		for _, index := range matched {
+			if players[index].SlotNo == nil {
+				pending = append(pending, index)
 			}
 		}
-		result = lotteryResult(data, player, justDrawn)
+		switch len(pending) {
+		case 0:
+			outcome.status = model.LotteryOutcomeAlreadyDrawn
+		case 1:
+			if err := s.assignSlot(ctx, tx, groups, players, &players[pending[0]], now); err != nil {
+				return err
+			}
+			outcome.status = model.LotteryOutcomeDrawn
+			outcome.drawn = []model.LotteryPlayer{players[pending[0]]}
+		default:
+			outcome.status = model.LotteryOutcomeChooseGenre
+			pendingPlayers := make([]model.LotteryPlayer, 0, len(pending))
+			for _, index := range pending {
+				pendingPlayers = append(pendingPlayers, players[index])
+			}
+			outcome.choices = lotteryGenreChoices(pendingPlayers)
+		}
+		entries = matchingLotteryEntries(players, hash, name)
 		return nil
 	})
 	if err != nil {
 		return nil, s.wrapStoreError(err)
 	}
-	if justDrawn {
-		// 只记录分组与槽位，不记录姓名/证件号（PII）。
+	for _, player := range outcome.drawn {
 		logger.Event(ctx, "lottery.drawn", "抽签完成",
-			"genre", result.Genre,
-			"age_group", result.AgeGroup,
-			"slot", lotterySlotText(*result.Slot),
-			"auto", result.AutoDrawn,
+			"genre", player.Genre,
+			"age_group", player.AgeGroup,
+			"slot", lotterySlotText(*player.Slot()),
 		)
 	}
-	return result, nil
+	return &model.LotteryDrawResult{
+		Status:  outcome.status,
+		Entries: entries,
+		Choices: outcome.choices,
+	}, nil
 }
 
-// wrapStoreError 把文件存储的「不存在」统一转换为对用户友好的业务错误。
+// assignSlot 为一名选手分配随机槽位并写库。
+func (s *LotteryService) assignSlot(ctx context.Context, tx *sql.Tx, groups []model.LotteryGroup,
+	players []model.LotteryPlayer, player *model.LotteryPlayer, now time.Time) error {
+	slots := availableLotterySlots(groups, players, player.Genre, player.AgeGroup)
+	if len(slots) == 0 {
+		return httpx.ErrConflict("该组别已无可抽签位，请联系赛事客服")
+	}
+	slot, err := pickLotterySlot(slots)
+	if err != nil {
+		return httpx.ErrInternal(err, "抽签失败，请稍后重试")
+	}
+	drawnAt := utils.FormatISO(now)
+	ok, err := s.stores.Lottery.UpdatePlayerSlot(ctx, tx, player.ID, slot.Letter, slot.No, drawnAt, false)
+	if err != nil {
+		return httpx.ErrInternal(err, "抽签失败，请稍后重试")
+	}
+	if !ok {
+		return httpx.ErrConflict("该槽位已被占用，请重试")
+	}
+	player.GroupLetter = &slot.Letter
+	player.SlotNo = &slot.No
+	player.DrawnAt = &drawnAt
+	player.AutoDrawn = false
+	return nil
+}
+
+// autoDrawLottery 给所有尚未抽签的选手分配剩余槽位（截止后自动分配）。
+// 返回本次分配人数与因槽位不足而跳过的人数。
+func autoDrawLottery(ctx context.Context, stores *store.Store, tx *sql.Tx,
+	groups []model.LotteryGroup, players []model.LotteryPlayer, now time.Time) (drawn, skipped int) {
+	drawnAt := utils.FormatISO(now)
+	for i := range players {
+		player := &players[i]
+		if player.SlotNo != nil {
+			continue
+		}
+		slots := availableLotterySlots(groups, players, player.Genre, player.AgeGroup)
+		if len(slots) == 0 {
+			skipped++
+			continue
+		}
+		slot, err := pickLotterySlot(slots)
+		if err != nil {
+			skipped++
+			continue
+		}
+		ok, err := stores.Lottery.UpdatePlayerSlot(ctx, tx, player.ID, slot.Letter, slot.No, drawnAt, true)
+		if err != nil || !ok {
+			skipped++
+			continue
+		}
+		player.GroupLetter = &slot.Letter
+		player.SlotNo = &slot.No
+		player.DrawnAt = &drawnAt
+		player.AutoDrawn = true
+		drawn++
+	}
+	return drawn, skipped
+}
+
+// wrapStoreError 把存储层的「不存在」统一转换为对用户友好的业务错误。
 func (s *LotteryService) wrapStoreError(err error) error {
 	if errors.Is(err, store.ErrNotFound) {
 		return httpx.ErrNotFound("抽签链接无效或已失效")
@@ -150,93 +314,63 @@ func (s *LotteryService) wrapStoreError(err error) error {
 	return err
 }
 
-func (s *LotteryService) load(ctx context.Context, token string) (*model.LotteryData, error) {
-	data, err := s.store.Load(ctx, token)
-	if errors.Is(err, store.ErrNotFound) {
-		return nil, httpx.ErrNotFound("抽签链接无效或已失效")
-	}
+func (s *LotteryService) load(ctx context.Context, token string) (*model.LotterySession, []model.LotteryGroup, []model.LotteryPlayer, error) {
+	session, groups, players, err := s.stores.Lottery.GetByToken(ctx, store.NormalizeLotteryToken(token))
 	if err != nil {
-		return nil, httpx.ErrInternal(err, "加载抽签数据失败，请稍后重试")
+		return nil, nil, nil, s.wrapStoreError(err)
 	}
-	return data, nil
+	return session, groups, players, nil
 }
 
-// findLotteryPlayer 按规范化后的证件号与舞种定位选手；不存在返回 nil。
-func findLotteryPlayer(data *model.LotteryData, idCard, genre string) *model.LotteryPlayer {
-	idCard = utils.NormalizeIDNumber(utils.IDTypeIDCard, idCard)
-	genre = strings.TrimSpace(genre)
-	for i := range data.Players {
-		p := &data.Players[i]
-		if p.Genre != genre {
+func (s *LotteryService) hashID(idCard string) string {
+	return utils.HashIDNumber(s.idKey, utils.IDTypeIDCard, idCard)
+}
+
+// matchingLotteryEntries 把命中选手转换为响应记录，按舞种配置顺序排列。
+func matchingLotteryEntries(players []model.LotteryPlayer, hash, name string) []model.LotteryEntry {
+	matched := make([]model.LotteryPlayer, 0, len(players))
+	for _, player := range players {
+		if player.IDCardHash != hash {
 			continue
 		}
-		if utils.NormalizeIDNumber(utils.IDTypeIDCard, p.IDCard) == idCard {
-			return p
-		}
-	}
-	return nil
-}
-
-// availableLotterySlots 返回同「组别 × 舞种」下尚未被占用的全部槽位。
-func availableLotterySlots(data *model.LotteryData, genre, ageGroup string) []model.LotterySlot {
-	taken := make(map[model.LotterySlot]bool, len(data.Players))
-	for _, p := range data.Players {
-		if p.Genre == genre && p.AgeGroup == ageGroup && p.Slot != nil {
-			taken[*p.Slot] = true
-		}
-	}
-	slots := make([]model.LotterySlot, 0)
-	for _, g := range data.Groups {
-		if g.Genre != genre || g.AgeGroup != ageGroup {
+		if name != "" && normalizeLotteryName(player.Name) != name {
 			continue
 		}
-		for no := 1; no <= g.Size; no++ {
-			slot := model.LotterySlot{Letter: g.Letter, No: no}
-			if !taken[slot] {
-				slots = append(slots, slot)
-			}
-		}
+		matched = append(matched, player)
 	}
-	return slots
+	order := make(map[string]int, len(lotteryGenreOrder))
+	for i, genre := range lotteryGenreOrder {
+		order[genre] = i
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return order[matched[i].Genre] < order[matched[j].Genre]
+	})
+	entries := make([]model.LotteryEntry, 0, len(matched))
+	for _, player := range matched {
+		entries = append(entries, lotteryEntry(player))
+	}
+	return entries
 }
 
-// pickLotterySlot 用 crypto/rand 从候选槽位中均匀随机取一个。
-func pickLotterySlot(slots []model.LotterySlot) (model.LotterySlot, error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(slots))))
-	if err != nil {
-		return model.LotterySlot{}, fmt.Errorf("pick random slot: %w", err)
+// lotteryEntry 把选手记录转换为展示用结构。
+func lotteryEntry(player model.LotteryPlayer) model.LotteryEntry {
+	entry := model.LotteryEntry{
+		Name:       player.Name,
+		Genre:      player.Genre,
+		GenreLabel: lotteryGenreLabel(player.Genre),
+		AgeGroup:   player.AgeGroup,
+		Slot:       player.Slot(),
+		Drawn:      player.SlotNo != nil,
+		AutoDrawn:  player.AutoDrawn,
 	}
-	return slots[n.Int64()], nil
-}
-
-func lotteryResult(data *model.LotteryData, player *model.LotteryPlayer, justDrawn bool) *model.LotteryResult {
-	label := player.Genre
-	for _, genre := range data.Genres {
-		if genre.Key == player.Genre {
-			label = genre.Label
-			break
-		}
+	if player.Program != nil {
+		entry.Program = *player.Program
 	}
-	return &model.LotteryResult{
-		Name:        player.Name,
-		Genre:       player.Genre,
-		GenreLabel:  label,
-		AgeGroup:    player.AgeGroup,
-		Program:     player.Program,
-		Institution: player.Institution,
-		Slot:        player.Slot,
-		DrawnAt:     player.DrawnAt,
-		JustDrawn:   justDrawn,
-		AutoDrawn:   player.AutoDrawn,
+	if player.Institution != nil {
+		entry.Institution = *player.Institution
 	}
-}
-
-// normalizeLotteryName 去掉姓名中的全部空白，兼容输入时多打的空格。
-func normalizeLotteryName(name string) string {
-	return strings.Join(strings.Fields(name), "")
-}
-
-// lotterySlotText 把槽位格式化为日志可读的 A3 形式。
-func lotterySlotText(slot model.LotterySlot) string {
-	return fmt.Sprintf("%s%d", slot.Letter, slot.No)
+	if player.DrawnAt != nil {
+		entry.DrawnAt = *player.DrawnAt
+	}
+	return entry
 }

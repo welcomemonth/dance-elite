@@ -1,9 +1,9 @@
 package lotteryimport
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,8 +15,8 @@ func testLotteryID(n int) string {
 	return fmt.Sprintf("31010120150101%04d", n)
 }
 
-// writeLotteryTestExcel 把表头与数据行写成一个临时 xlsx，返回文件路径。
-func writeLotteryTestExcel(t *testing.T, headers []string, rows [][]string) string {
+// writeLotteryTestExcel 把表头与数据行写成 xlsx 内容。
+func writeLotteryTestExcel(t *testing.T, headers []string, rows [][]string) []byte {
 	t.Helper()
 	f := excelize.NewFile()
 	defer f.Close()
@@ -39,11 +39,11 @@ func writeLotteryTestExcel(t *testing.T, headers []string, rows [][]string) stri
 			t.Fatalf("write row %d: %v", i+2, err)
 		}
 	}
-	path := filepath.Join(t.TempDir(), "报名资料.xlsx")
-	if err := f.SaveAs(path); err != nil {
-		t.Fatalf("save xlsx: %v", err)
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		t.Fatalf("write xlsx: %v", err)
 	}
-	return path
+	return buf.Bytes()
 }
 
 func TestBuildWithReorderedColumns(t *testing.T) {
@@ -72,7 +72,7 @@ func TestBuildWithReorderedColumns(t *testing.T) {
 		})
 	}
 
-	data, warnings, err := Build(writeLotteryTestExcel(t, headers, rows), "测试赛事")
+	data, warnings, err := BuildReader(bytes.NewReader(writeLotteryTestExcel(t, headers, rows)), "测试赛事")
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestBuildWithReorderedColumns(t *testing.T) {
 func TestBuildWithSeparateGenreColumn(t *testing.T) {
 	headers := []string{"姓名", "身份证号", "组别", "舞种"}
 	rows := [][]string{{"张三", testLotteryID(1), "U13组（2014-2015年出生）", "民族民间舞"}}
-	data, _, err := Build(writeLotteryTestExcel(t, headers, rows), "")
+	data, _, err := BuildReader(bytes.NewReader(writeLotteryTestExcel(t, headers, rows)), "")
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestBuildReportsDuplicateAndBadID(t *testing.T) {
 		{"李四", testLotteryID(1), "U11组 古典舞"},
 		{"王五", "31010120150101123", "U11组 古典舞"},
 	}
-	_, _, err := Build(writeLotteryTestExcel(t, headers, rows), "")
+	_, _, err := BuildReader(bytes.NewReader(writeLotteryTestExcel(t, headers, rows)), "")
 	var validation *ValidationError
 	if !errors.As(err, &validation) {
 		t.Fatalf("err = %v, want *ValidationError", err)
@@ -143,7 +143,7 @@ func TestBuildReportsDuplicateAndBadID(t *testing.T) {
 func TestBuildRejectsUnknownGenre(t *testing.T) {
 	headers := []string{"姓名", "身份证号", "组别及场次"}
 	rows := [][]string{{"张三", testLotteryID(1), "U11组 芭蕾"}}
-	_, _, err := Build(writeLotteryTestExcel(t, headers, rows), "")
+	_, _, err := BuildReader(bytes.NewReader(writeLotteryTestExcel(t, headers, rows)), "")
 	var validation *ValidationError
 	if !errors.As(err, &validation) {
 		t.Fatalf("err = %v, want *ValidationError", err)

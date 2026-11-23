@@ -1,6 +1,9 @@
 package service
 
 import (
+	"crypto/rand"
+	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -17,23 +20,25 @@ type lotteryWindow struct {
 	hasStart, hasEnd bool
 }
 
-// lotteryWindowOf 解析赛事的抽签时间窗口；手工写入的时间非法时按未配置处理，
-// 页面退回「不限制」的旧行为，不因一个字段写错让整场赛事不可用。
-func lotteryWindowOf(data *model.LotteryData) lotteryWindow {
+// lotteryWindowOf 解析抽签时间窗口；时间非法时按未配置处理，避免一个字段
+// 写错让整场赛事不可用。
+func lotteryWindowOf(session *model.LotterySession) lotteryWindow {
 	var w lotteryWindow
-	if t, err := parseLotteryTime(data.StartAt); err == nil {
-		w.start, w.hasStart = t, true
+	if session.StartAt != nil {
+		if t, err := utils.ParseISO(*session.StartAt); err == nil {
+			w.start, w.hasStart = t, true
+		} else if t, err := utils.ParseFlexibleTime(*session.StartAt); err == nil {
+			w.start, w.hasStart = t, true
+		}
 	}
-	if t, err := parseLotteryTime(data.EndAt); err == nil {
-		w.end, w.hasEnd = t, true
+	if session.EndAt != nil {
+		if t, err := utils.ParseISO(*session.EndAt); err == nil {
+			w.end, w.hasEnd = t, true
+		} else if t, err := utils.ParseFlexibleTime(*session.EndAt); err == nil {
+			w.end, w.hasEnd = t, true
+		}
 	}
 	return w
-}
-
-// parseLotteryTime 兼容手工编辑 JSON 时常见的几种写法；
-// 不带时区的时间按部署时区（Asia/Shanghai）解释。
-func parseLotteryTime(s string) (time.Time, error) {
-	return utils.ParseFlexibleTime(s)
 }
 
 // status 返回页面状态；未开始优先于已截止（时间窗口写反时以开始为准）。
@@ -72,9 +77,9 @@ func remindDuration(minutes int) time.Duration {
 }
 
 // remindMinutes 读取赛事配置的提醒提前量（分钟）。
-func remindMinutes(data *model.LotteryData) int {
-	if data.RemindBeforeMinutes > 0 {
-		return data.RemindBeforeMinutes
+func remindMinutes(session *model.LotterySession) int {
+	if session.RemindBeforeMinutes > 0 {
+		return session.RemindBeforeMinutes
 	}
 	return lotteryDefaultRemindMinutes
 }
@@ -84,37 +89,11 @@ func lotteryTimeText(t time.Time) string {
 	return t.In(utils.ChinaLoc).Format("2006年01月02日 15:04")
 }
 
-// autoDrawPending 给所有尚未抽签的选手分配剩余槽位（与人工抽签同一套规则）。
-// 返回本次分配人数与因槽位不足而跳过的人数；正常数据下跳过恒为 0。
-func autoDrawPending(data *model.LotteryData, now time.Time) (drawn, skipped int) {
-	for i := range data.Players {
-		player := &data.Players[i]
-		if player.Slot != nil {
-			continue
-		}
-		slots := availableLotterySlots(data, player.Genre, player.AgeGroup)
-		if len(slots) == 0 {
-			skipped++
-			continue
-		}
-		slot, err := pickLotterySlot(slots)
-		if err != nil {
-			skipped++
-			continue
-		}
-		player.Slot = &slot
-		player.DrawnAt = utils.FormatISO(now)
-		player.AutoDrawn = true
-		drawn++
-	}
-	return drawn, skipped
-}
-
 // pendingLotteryPlayers 返回尚未抽签的选手人数。
-func pendingLotteryPlayers(data *model.LotteryData) int {
+func pendingLotteryPlayers(players []model.LotteryPlayer) int {
 	pending := 0
-	for _, player := range data.Players {
-		if player.Slot == nil {
+	for _, player := range players {
+		if player.SlotNo == nil {
 			pending++
 		}
 	}
@@ -130,12 +109,35 @@ func lotteryLink(baseURL, token string) string {
 	return baseURL + "/lottery/" + token
 }
 
-// lotteryGenreLabel 返回舞种的展示名；找不到时退回枚举值。
-func lotteryGenreLabel(data *model.LotteryData, genre string) string {
-	for _, item := range data.Genres {
-		if item.Key == genre {
-			return item.Label
+// availableLotterySlots 返回同「组别 × 舞种」下尚未被占用的全部槽位。
+func availableLotterySlots(groups []model.LotteryGroup, players []model.LotteryPlayer,
+	genre, ageGroup string) []model.LotterySlot {
+	taken := make(map[model.LotterySlot]bool, len(players))
+	for _, player := range players {
+		if player.Genre == genre && player.AgeGroup == ageGroup && player.SlotNo != nil {
+			taken[model.LotterySlot{Letter: *player.GroupLetter, No: *player.SlotNo}] = true
 		}
 	}
-	return genre
+	slots := make([]model.LotterySlot, 0)
+	for _, group := range groups {
+		if group.Genre != genre || group.AgeGroup != ageGroup {
+			continue
+		}
+		for no := 1; no <= group.Size; no++ {
+			slot := model.LotterySlot{Letter: group.Letter, No: no}
+			if !taken[slot] {
+				slots = append(slots, slot)
+			}
+		}
+	}
+	return slots
+}
+
+// pickLotterySlot 用 crypto/rand 从候选槽位中均匀随机取一个。
+func pickLotterySlot(slots []model.LotterySlot) (model.LotterySlot, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(slots))))
+	if err != nil {
+		return model.LotterySlot{}, fmt.Errorf("pick random slot: %w", err)
+	}
+	return slots[n.Int64()], nil
 }

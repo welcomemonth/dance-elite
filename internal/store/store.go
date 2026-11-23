@@ -29,6 +29,7 @@ type Store struct {
 	CSTickets        *CSTicketStore
 	MaterialContacts *MaterialContactStore
 	Dashboard        *DashboardStore
+	Lottery          *LotteryStore
 }
 
 // New 构造数据访问层聚合根。
@@ -50,6 +51,7 @@ func New(db *DB) *Store {
 		CSTickets:        NewCSTicketStore(db),
 		MaterialContacts: NewMaterialContactStore(db),
 		Dashboard:        NewDashboardStore(db),
+		Lottery:          NewLotteryStore(db),
 	}
 }
 

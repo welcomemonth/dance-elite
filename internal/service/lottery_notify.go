@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,13 +10,14 @@ import (
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/logger"
+	"github.com/meetmonth/dance-elite/internal/store"
 	"github.com/meetmonth/dance-elite/internal/utils"
 )
 
 const (
 	// lotterySMSKindRemind / lotterySMSKindResult 区分两类短信的发送记录字段。
-	lotterySMSKindRemind = "remind"
-	lotterySMSKindResult = "result"
+	lotterySMSKindRemind = store.LotterySMSRemind
+	lotterySMSKindResult = store.LotterySMSResult
 	// lotterySMSMaxAttempts 是单个选手单类短信的最大尝试次数，避免模板错误时反复调用。
 	lotterySMSMaxAttempts = 3
 	// lotterySMSParallel 是并发发送数；同手机号连续发送可能触发频控，失败下次 tick 重试。
@@ -24,52 +26,45 @@ const (
 	lotterySMSBatch = 20
 )
 
-// lotterySMSRecipient 指向某位选手（按证件号 + 舞种定位）。
-type lotterySMSRecipient struct {
-	idCard string
-	genre  string
-}
-
-// lotterySMSJob 是一条待发送短信；recipients 为这条短信覆盖的选手
+// lotterySMSJob 是一条待发送短信；recipients 为这条短信覆盖的选手 ID
 // （提醒短信按手机号合并后可能覆盖多人，结果短信恒为一人）。
 type lotterySMSJob struct {
 	phone      string
 	template   string
 	params     map[string]string
-	recipients []lotterySMSRecipient
+	recipients []int64
 }
 
 // remindJobs 生成截止前提醒短信：未抽签、有手机号、未发送且未达尝试上限的选手，
 // 按手机号合并成一条，姓名为「张三、李四」。
-func (s *LotterySweeper) remindJobs(data *model.LotteryData, token string) []lotterySMSJob {
-	template := data.SMSRemindTemplate
-	window := lotteryWindowOf(data)
+func (s *LotterySweeper) remindJobs(session *model.LotterySession, players []model.LotteryPlayer, token string) []lotterySMSJob {
+	template := derefString(session.SMSRemindTemplate)
+	window := lotteryWindowOf(session)
 	if template == "" || !window.hasEnd || lotteryLink(s.baseURL, token) == "" {
 		return nil
 	}
 
 	type group struct {
 		names      []string
-		recipients []lotterySMSRecipient
+		recipients []int64
 	}
 	groups := make(map[string]*group)
 	var order []string
-	for _, player := range data.Players {
-		if player.Slot != nil || player.Phone == "" {
+	for _, player := range players {
+		if player.SlotNo != nil || player.Phone == nil || *player.Phone == "" {
 			continue
 		}
-		if player.SMS != nil && (player.SMS.RemindSentAt != "" ||
-			player.SMS.RemindAttempts >= lotterySMSMaxAttempts) {
+		if player.SMS.RemindSentAt != nil || player.SMS.RemindAttempts >= lotterySMSMaxAttempts {
 			continue
 		}
-		g, ok := groups[player.Phone]
+		g, ok := groups[*player.Phone]
 		if !ok {
 			g = &group{}
-			groups[player.Phone] = g
-			order = append(order, player.Phone)
+			groups[*player.Phone] = g
+			order = append(order, *player.Phone)
 		}
 		g.names = append(g.names, player.Name)
-		g.recipients = append(g.recipients, lotterySMSRecipient{player.IDCard, player.Genre})
+		g.recipients = append(g.recipients, player.ID)
 	}
 
 	deadline := lotteryTimeText(window.end)
@@ -81,7 +76,7 @@ func (s *LotterySweeper) remindJobs(data *model.LotteryData, token string) []lot
 			template: template,
 			params: map[string]string{
 				"name":     strings.Join(g.names, "、"),
-				"event":    data.EventName,
+				"event":    session.EventName,
 				"deadline": deadline,
 			},
 			recipients: g.recipients,
@@ -91,45 +86,42 @@ func (s *LotterySweeper) remindJobs(data *model.LotteryData, token string) []lot
 }
 
 // resultJobs 生成截止后自动分配的结果短信：只发给由系统自动分配的选手。
-func (s *LotterySweeper) resultJobs(data *model.LotteryData, token string) []lotterySMSJob {
-	template := data.SMSResultTemplate
+func (s *LotterySweeper) resultJobs(session *model.LotterySession, players []model.LotteryPlayer, token string) []lotterySMSJob {
+	template := derefString(session.SMSResultTemplate)
 	if template == "" || lotteryLink(s.baseURL, token) == "" {
 		return nil
 	}
 	var jobs []lotterySMSJob
-	for _, player := range data.Players {
-		if !player.AutoDrawn || player.Slot == nil || player.Phone == "" {
+	for _, player := range players {
+		if !player.AutoDrawn || player.SlotNo == nil || player.Phone == nil || *player.Phone == "" {
 			continue
 		}
-		if player.SMS != nil && (player.SMS.ResultSentAt != "" ||
-			player.SMS.ResultAttempts >= lotterySMSMaxAttempts) {
+		if player.SMS.ResultSentAt != nil || player.SMS.ResultAttempts >= lotterySMSMaxAttempts {
 			continue
 		}
 		jobs = append(jobs, lotterySMSJob{
-			phone:    player.Phone,
+			phone:    *player.Phone,
 			template: template,
 			params: map[string]string{
 				"name":  player.Name,
-				"event": data.EventName,
-				"genre": lotteryGenreLabel(data, player.Genre),
-				"slot":  lotterySlotText(*player.Slot),
+				"event": session.EventName,
+				"genre": lotteryGenreLabel(player.Genre),
+				"slot":  lotterySlotText(*player.Slot()),
 			},
-			recipients: []lotterySMSRecipient{{player.IDCard, player.Genre}},
+			recipients: []int64{player.ID},
 		})
 	}
 	return jobs
 }
 
-// pendingRemindPlayers 统计还会收到提醒短信的选手数
-// （未抽签、有手机号、未发送且未达尝试上限）。
-func pendingRemindPlayers(data *model.LotteryData) int {
+// pendingRemindPlayers 统计还会收到提醒短信的选手数。
+func pendingRemindPlayers(players []model.LotteryPlayer) int {
 	pending := 0
-	for _, player := range data.Players {
-		if player.Slot != nil || player.Phone == "" {
+	for _, player := range players {
+		if player.SlotNo != nil || player.Phone == nil || *player.Phone == "" {
 			continue
 		}
-		if player.SMS != nil && (player.SMS.RemindSentAt != "" ||
-			player.SMS.RemindAttempts >= lotterySMSMaxAttempts) {
+		if player.SMS.RemindSentAt != nil || player.SMS.RemindAttempts >= lotterySMSMaxAttempts {
 			continue
 		}
 		pending++
@@ -137,16 +129,14 @@ func pendingRemindPlayers(data *model.LotteryData) int {
 	return pending
 }
 
-// pendingResultPlayers 统计还会收到结果短信的选手数
-// （由系统自动分配、未发送且未达尝试上限）。
-func pendingResultPlayers(data *model.LotteryData) int {
+// pendingResultPlayers 统计还会收到结果短信的选手数。
+func pendingResultPlayers(players []model.LotteryPlayer) int {
 	pending := 0
-	for _, player := range data.Players {
-		if !player.AutoDrawn || player.Slot == nil || player.Phone == "" {
+	for _, player := range players {
+		if !player.AutoDrawn || player.SlotNo == nil || player.Phone == nil || *player.Phone == "" {
 			continue
 		}
-		if player.SMS != nil && (player.SMS.ResultSentAt != "" ||
-			player.SMS.ResultAttempts >= lotterySMSMaxAttempts) {
+		if player.SMS.ResultSentAt != nil || player.SMS.ResultAttempts >= lotterySMSMaxAttempts {
 			continue
 		}
 		pending++
@@ -155,35 +145,36 @@ func pendingResultPlayers(data *model.LotteryData) int {
 }
 
 // missingLotterySMSConfig 返回当前阶段会导致短信整体跳过的缺失配置。
-// 截止前只关心提醒模板、截止后只关心结果模板（都需要 PUBLIC_BASE_URL 拼链接）；
+// 截止前只关心提醒模板、截止后只关心结果模板（都需要 public_base_url 拼链接）；
 // 没有截止时间的赛事按设计不发短信，返回 nil。
-func missingLotterySMSConfig(data *model.LotteryData, baseURL string, now time.Time) []string {
-	if data.EndAt == "" {
+func missingLotterySMSConfig(session *model.LotterySession, players []model.LotteryPlayer,
+	baseURL string, now time.Time) []string {
+	if session.EndAt == nil {
 		return nil
 	}
-	window := lotteryWindowOf(data)
+	window := lotteryWindowOf(session)
 	if !window.hasEnd {
 		return nil
 	}
 	var missing []string
 	if !window.ended(now) {
-		if pendingRemindPlayers(data) == 0 {
+		if pendingRemindPlayers(players) == 0 {
 			return nil
 		}
-		if data.SMSRemindTemplate == "" {
+		if derefString(session.SMSRemindTemplate) == "" {
 			missing = append(missing, "sms_remind_template")
 		}
 	} else {
-		if pendingResultPlayers(data) == 0 {
+		if pendingResultPlayers(players) == 0 {
 			return nil
 		}
-		if data.SMSResultTemplate == "" {
+		if derefString(session.SMSResultTemplate) == "" {
 			missing = append(missing, "sms_result_template")
 		}
 	}
 	// 模板齐全但链接前缀缺失时同样发不出去，单独告警。
 	if strings.TrimSpace(baseURL) == "" {
-		missing = append(missing, "PUBLIC_BASE_URL")
+		missing = append(missing, "public_base_url")
 	}
 	return missing
 }
@@ -192,7 +183,7 @@ func missingLotterySMSConfig(data *model.LotteryData, baseURL string, now time.T
 //
 // 落盘用独立 context：即使本轮定时任务因超时被取消，已成功的记录也必须写回，
 // 否则下一轮会重复发送。
-func (s *LotterySweeper) sendJobs(ctx context.Context, token, kind string, jobs []lotterySMSJob) error {
+func (s *LotterySweeper) sendJobs(ctx context.Context, kind string, jobs []lotterySMSJob) error {
 	if s.sms == nil || len(jobs) == 0 {
 		return nil
 	}
@@ -201,7 +192,7 @@ func (s *LotterySweeper) sendJobs(ctx context.Context, token, kind string, jobs 
 		results := s.deliver(ctx, jobs[start:end])
 
 		recordCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		err := s.recordSMS(recordCtx, token, kind, results)
+		err := s.recordSMS(recordCtx, kind, results)
 		cancel()
 		if err != nil {
 			return fmt.Errorf("record lottery sms: %w", err)
@@ -214,8 +205,8 @@ func (s *LotterySweeper) sendJobs(ctx context.Context, token, kind string, jobs 
 }
 
 // deliver 以有界并发发送一批短信，返回每个选手是否发送成功。
-func (s *LotterySweeper) deliver(ctx context.Context, jobs []lotterySMSJob) map[lotterySMSRecipient]bool {
-	results := make(map[lotterySMSRecipient]bool, len(jobs))
+func (s *LotterySweeper) deliver(ctx context.Context, jobs []lotterySMSJob) map[int64]bool {
+	results := make(map[int64]bool, len(jobs))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, lotterySMSParallel)
@@ -229,16 +220,16 @@ func (s *LotterySweeper) deliver(ctx context.Context, jobs []lotterySMSJob) map[
 				defer func() { <-sem }()
 			case <-ctx.Done():
 				mu.Lock()
-				for _, recipient := range job.recipients {
-					results[recipient] = false
+				for _, playerID := range job.recipients {
+					results[playerID] = false
 				}
 				mu.Unlock()
 				return
 			}
 			err := s.sms.Send(ctx, job.phone, job.template, job.params)
 			mu.Lock()
-			for _, recipient := range job.recipients {
-				results[recipient] = err == nil
+			for _, playerID := range job.recipients {
+				results[playerID] = err == nil
 			}
 			mu.Unlock()
 			if err != nil {
@@ -251,35 +242,18 @@ func (s *LotterySweeper) deliver(ctx context.Context, jobs []lotterySMSJob) map[
 	return results
 }
 
-// recordSMS 把发送结果写回抽签文件：成功记 SentAt，所有尝试都累加 Attempts。
-func (s *LotterySweeper) recordSMS(ctx context.Context, token, kind string, results map[lotterySMSRecipient]bool) error {
+// recordSMS 把发送结果写回数据库：尝试数 +1，成功时记录发送时间。
+func (s *LotterySweeper) recordSMS(ctx context.Context, kind string, results map[int64]bool) error {
 	if len(results) == 0 {
 		return nil
 	}
 	sentAt := utils.NowISO()
-	_, err := s.store.Mutate(ctx, token, func(data *model.LotteryData) error {
-		for recipient, ok := range results {
-			player := findLotteryPlayer(data, recipient.idCard, recipient.genre)
-			if player == nil {
-				continue
-			}
-			if player.SMS == nil {
-				player.SMS = &model.LotterySMSState{}
-			}
-			switch kind {
-			case lotterySMSKindRemind:
-				player.SMS.RemindAttempts++
-				if ok {
-					player.SMS.RemindSentAt = sentAt
-				}
-			case lotterySMSKindResult:
-				player.SMS.ResultAttempts++
-				if ok {
-					player.SMS.ResultSentAt = sentAt
-				}
+	return s.stores.WithTx(ctx, func(tx *sql.Tx) error {
+		for playerID, ok := range results {
+			if err := s.stores.Lottery.UpdatePlayerSMS(ctx, tx, playerID, kind, sentAt, ok); err != nil {
+				return err
 			}
 		}
 		return nil
 	})
-	return err
 }

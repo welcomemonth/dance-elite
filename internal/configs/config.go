@@ -54,8 +54,6 @@ type ServerConfig struct {
 type StorageConfig struct {
 	DBPath    string `mapstructure:"db_path"`
 	UploadDir string `mapstructure:"upload_dir"`
-	// LotteryDir 是赛事抽签 JSON 所在目录；留空时派生为 <db_path 目录>/lottery。
-	LotteryDir string `mapstructure:"lottery_dir"`
 }
 
 // LogConfig 是日志配置；Level 同时决定 Gin 运行模式（debug → debug，否则 release）。

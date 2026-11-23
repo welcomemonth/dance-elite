@@ -19,9 +19,9 @@ var lotteryGenreLabels = map[string]string{
 	"folk":      "民族民间舞",
 }
 
-// presentGenres 返回当前数据中实际出现过的舞种（按固定顺序），
+// Genres 返回当前数据中实际出现过的舞种（按固定顺序），
 // 避免页面下拉框出现没有选手的舞种。
-func presentGenres(players []model.LotteryPlayer) []model.LotteryGenre {
+func Genres(players []Player) []model.LotteryGenre {
 	present := make(map[string]bool, len(genreOrder))
 	for _, p := range players {
 		present[p.Genre] = true
@@ -35,7 +35,7 @@ func presentGenres(players []model.LotteryPlayer) []model.LotteryGenre {
 	return genres
 }
 
-// computeGroups 为每个「组别 × 舞种」切分字母组。
+// Group 为每个「组别 × 舞种」切分字母组。
 //
 // 组数 = max( n/10, n/15 + 1 )，各组人数相差不超过 1，余数从 A 组开始依次 +1。
 // 该规则优先按 10 人一组，同时避免小人数被过度拆分。例如：
@@ -50,7 +50,7 @@ func presentGenres(players []model.LotteryPlayer) []model.LotteryGenre {
 //	49 人 → 4 组（13/12/12/12）
 //
 // 仅当出现少于 7 人的组时给出提示（当前规则下最小为 7 人，基本不会触发）。
-func computeGroups(players []model.LotteryPlayer) ([]model.LotteryGroup, []string) {
+func Group(players []Player) ([]model.LotteryGroup, []string) {
 	type scope struct{ genre, ageGroup string }
 	counts := make(map[scope]int, len(players))
 	for _, p := range players {

@@ -49,26 +49,33 @@ func (f *fakeSMSClient) callCount() int {
 	return f.calls
 }
 
-func newLotterySweeperForTest(t *testing.T, data *model.LotteryData, now time.Time, client *fakeSMSClient) (*LotterySweeper, *store.LotteryStore) {
+func newLotterySweeperForTest(t *testing.T, seed testLotterySeed, now time.Time, client *fakeSMSClient) (*LotterySweeper, *store.Store) {
 	t.Helper()
-	st := store.NewLotteryStore(t.TempDir())
-	if err := st.Save(context.Background(), windowTestToken, data); err != nil {
-		t.Fatalf("save lottery data: %v", err)
-	}
-	sweeper := NewLotterySweeper(st, client, "https://dance.test")
+	stores := newLotteryTestStores(t)
+	mustSeedLottery(t, stores, seed)
+	sweeper := NewLotterySweeper(stores, client, "https://dance.test")
 	sweeper.now = func() time.Time { return now }
-	return sweeper, st
+	return sweeper, stores
+}
+
+func loadSeededPlayers(t *testing.T, stores *store.Store) []model.LotteryPlayer {
+	t.Helper()
+	_, _, players, err := stores.Lottery.GetByToken(context.Background(), windowTestToken)
+	if err != nil {
+		t.Fatalf("load players: %v", err)
+	}
+	return players
 }
 
 func TestLotterySweeperSendsMergedReminderOnce(t *testing.T) {
 	now := time.Date(2026, 11, 27, 21, 0, 0, 0, utils.ChinaLoc)
-	data := lotteryWindowData(now.Add(-24*time.Hour), now.Add(time.Hour))
-	data.SMSRemindTemplate = "SMS_REMIND"
-	data.SMSResultTemplate = "SMS_RESULT"
-	data.Players[0].Phone = "13800000009"
-	data.Players[1].Phone = "13800000009" // 同手机号合并为一条
+	seed := lotteryWindowSeed(now.Add(-24*time.Hour), now.Add(time.Hour))
+	seed.RemindTpl = "SMS_REMIND"
+	seed.ResultTpl = "SMS_RESULT"
+	seed.Players[0].Phone = "13800000009"
+	seed.Players[1].Phone = "13800000009" // 同手机号合并为一条
 	client := &fakeSMSClient{}
-	sweeper, st := newLotterySweeperForTest(t, data, now, client)
+	sweeper, stores := newLotterySweeperForTest(t, seed, now, client)
 
 	if err := sweeper.RunOnce(context.Background()); err != nil {
 		t.Fatalf("run once: %v", err)
@@ -95,12 +102,8 @@ func TestLotterySweeperSendsMergedReminderOnce(t *testing.T) {
 		t.Fatalf("sent %d messages after second run, want 1", got)
 	}
 
-	saved, err := st.Load(context.Background(), windowTestToken)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	for _, player := range saved.Players {
-		if player.SMS == nil || player.SMS.RemindSentAt == "" {
+	for _, player := range loadSeededPlayers(t, stores) {
+		if player.SMS.RemindSentAt == nil || *player.SMS.RemindSentAt == "" {
 			t.Fatalf("player %s reminder not recorded", player.Name)
 		}
 	}
@@ -108,29 +111,26 @@ func TestLotterySweeperSendsMergedReminderOnce(t *testing.T) {
 
 func TestLotterySweeperAutoDrawsAndNotifiesOnlyAutoDrawn(t *testing.T) {
 	now := time.Date(2026, 11, 28, 0, 0, 0, 0, utils.ChinaLoc)
-	data := lotteryWindowData(now.Add(-48*time.Hour), now.Add(-time.Minute))
-	data.SMSRemindTemplate = "SMS_REMIND"
-	data.SMSResultTemplate = "SMS_RESULT"
-	// 张三已自行抽签，只应给自动分配的刘四发结果短信。
-	data.Players[0].Slot = &model.LotterySlot{Letter: "A", No: 1}
-	data.Players[0].DrawnAt = utils.FormatISO(now.Add(-time.Hour))
-	data.Players[1].Phone = "13800000002"
+	seed := lotteryWindowSeed(now.Add(-48*time.Hour), now.Add(-time.Minute))
+	seed.RemindTpl = "SMS_REMIND"
+	seed.ResultTpl = "SMS_RESULT"
+	// 张三已自行抽签，只应给自动分配的李四发结果短信。
+	seed.Players[0].Slot = &model.LotterySlot{Letter: "A", No: 1}
+	seed.Players[0].DrawnAt = utils.FormatISO(now.Add(-time.Hour))
+	seed.Players[1].Phone = "13800000002"
 	client := &fakeSMSClient{}
-	sweeper, st := newLotterySweeperForTest(t, data, now, client)
+	sweeper, stores := newLotterySweeperForTest(t, seed, now, client)
 
 	if err := sweeper.RunOnce(context.Background()); err != nil {
 		t.Fatalf("run once: %v", err)
 	}
 
-	saved, err := st.Load(context.Background(), windowTestToken)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	autoDrawn, manual := saved.Players[1], saved.Players[0]
-	if autoDrawn.Slot == nil || !autoDrawn.AutoDrawn {
+	players := loadSeededPlayers(t, stores)
+	autoDrawn, manual := players[1], players[0]
+	if autoDrawn.SlotNo == nil || !autoDrawn.AutoDrawn {
 		t.Fatalf("auto player = %+v, want auto-assigned slot", autoDrawn)
 	}
-	if manual.AutoDrawn || manual.Slot == nil || manual.Slot.No != 1 {
+	if manual.AutoDrawn || manual.SlotNo == nil || *manual.SlotNo != 1 {
 		t.Fatalf("manual player = %+v, should keep original slot", manual)
 	}
 
@@ -141,7 +141,7 @@ func TestLotterySweeperAutoDrawsAndNotifiesOnlyAutoDrawn(t *testing.T) {
 	if messages[0].template != "SMS_RESULT" || messages[0].phone != "13800000002" {
 		t.Fatalf("message = %+v", messages[0])
 	}
-	if got := messages[0].params["slot"]; got != lotterySlotText(*autoDrawn.Slot) {
+	if got := messages[0].params["slot"]; got != lotterySlotText(*autoDrawn.Slot()) {
 		t.Fatalf("slot param = %q", got)
 	}
 
@@ -155,12 +155,12 @@ func TestLotterySweeperAutoDrawsAndNotifiesOnlyAutoDrawn(t *testing.T) {
 
 func TestLotterySweeperStopsAfterMaxAttempts(t *testing.T) {
 	now := time.Date(2026, 11, 27, 21, 0, 0, 0, utils.ChinaLoc)
-	data := lotteryWindowData(now.Add(-24*time.Hour), now.Add(time.Hour))
-	data.SMSRemindTemplate = "SMS_REMIND"
-	data.Players[0].Phone = "13800000001"
-	data.Players[1].Phone = ""
+	seed := lotteryWindowSeed(now.Add(-24*time.Hour), now.Add(time.Hour))
+	seed.RemindTpl = "SMS_REMIND"
+	seed.Players[0].Phone = "13800000001"
+	seed.Players[1].Phone = ""
 	client := &fakeSMSClient{fail: true}
-	sweeper, st := newLotterySweeperForTest(t, data, now, client)
+	sweeper, stores := newLotterySweeperForTest(t, seed, now, client)
 
 	for i := 0; i < lotterySMSMaxAttempts+2; i++ {
 		if err := sweeper.RunOnce(context.Background()); err != nil {
@@ -171,24 +171,24 @@ func TestLotterySweeperStopsAfterMaxAttempts(t *testing.T) {
 		t.Fatalf("send calls = %d, want %d", got, lotterySMSMaxAttempts)
 	}
 
-	saved, err := st.Load(context.Background(), windowTestToken)
-	if err != nil {
-		t.Fatalf("load: %v", err)
+	players := loadSeededPlayers(t, stores)
+	if players[0].SMS.RemindSentAt != nil {
+		t.Fatalf("failed send should not be marked sent: %+v", players[0].SMS)
 	}
-	if saved.Players[0].SMS == nil || saved.Players[0].SMS.RemindSentAt != "" {
-		t.Fatalf("failed send should not be marked sent: %+v", saved.Players[0].SMS)
+	if players[0].SMS.RemindAttempts != lotterySMSMaxAttempts {
+		t.Fatalf("attempts = %d, want %d", players[0].SMS.RemindAttempts, lotterySMSMaxAttempts)
 	}
-	if saved.Players[1].SMS != nil {
-		t.Fatalf("player without phone should not be attempted: %+v", saved.Players[1].SMS)
+	if players[1].SMS.RemindAttempts != 0 {
+		t.Fatalf("player without phone should not be attempted: %+v", players[1].SMS)
 	}
 }
 
 func TestLotterySweeperSkipsWithoutTemplate(t *testing.T) {
 	now := time.Date(2026, 11, 27, 21, 0, 0, 0, utils.ChinaLoc)
-	data := lotteryWindowData(now.Add(-24*time.Hour), now.Add(time.Hour))
-	data.Players[0].Phone = "13800000001"
+	seed := lotteryWindowSeed(now.Add(-24*time.Hour), now.Add(time.Hour))
+	seed.Players[0].Phone = "13800000001"
 	client := &fakeSMSClient{}
-	sweeper, _ := newLotterySweeperForTest(t, data, now, client)
+	sweeper, _ := newLotterySweeperForTest(t, seed, now, client)
 
 	if err := sweeper.RunOnce(context.Background()); err != nil {
 		t.Fatalf("run once: %v", err)
