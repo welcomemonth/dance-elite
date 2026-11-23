@@ -689,7 +689,7 @@ curl "https://api.example.com/api/v1/registrations?page=1&page_size=20" \
 | list[].dance_type | string | classical / folk |
 | list[].player_name / player_no | string | 选手姓名 / 选手编号 |
 | list[].order_no / amount | — | 订单号 / 金额（分） |
-| list[].status | string | `paid`（已支付）/ `refunding`（退款处理中）/ `refunded`（已退款） |
+| list[].status | string | `paid`（已支付）/ `refunding`（退款处理中）/ `refunded`（已退款）/ `withdrawn`（已退赛，名额已释放但未退款） |
 | list[].material_status | object | 资料完成度：`{"total":8,"completed":3,"missing":["photo","audio","program_name"]}` |
 | list[].material_deadline | string | 资料截止（核对舞蹈音频时间） |
 
@@ -745,7 +745,7 @@ curl "https://api.example.com/api/v1/registrations/5001" -H "Authorization: Bear
 
 | 参数名 | 类型 | 说明 |
 |---|---|---|
-| status | string | paid / refunding / refunded |
+| status | string | paid / refunding / refunded / withdrawn（已退赛；名额已释放，未退款） |
 | status_desc | string | 状态说明文案 |
 | material_readonly | bool | 超过核对舞蹈音频时间后为 true，资料整体只读 |
 | material_status | object | 资料完成度：`{"total":8,"completed":3,"missing":["photo","audio","program_name"]}` |
@@ -2508,6 +2508,46 @@ curl -X POST https://api.example.com/api/v1/admin/manual-registrations \
 - 名额校验与小程序一致（事务内）；满员时可改报其他组别或先登记候补。
 - 支付信息标注「后台人工录入」+ 操作人；记操作日志；资料上传、催收、成绩录入与小程序报名同等对待。
 - 人工报名没有微信提交人，报名单/订单归属保留系统用户（`users.openid='__manual__'`，不可登录）；`free` 时订单金额固定 0。
+
+---
+
+### 11.6 人工退赛（仅释放名额，不退款）
+
+**接口概述**
+
+| 项 | 内容 |
+|---|---|
+| 接口名称 | 人工退赛 |
+| 功能说明 | 管理员把有效报名置为退赛并释放名额。**退赛 ≠ 退款**：订单保持 `paid`，不产生退款流水；如需退款走 11.4 退款工单 |
+| 请求方法 + URL | `POST /api/v1/admin/registrations/{registration_id}/withdraw` |
+| 鉴权 | 是（admin / super_admin）；cs → 40301 |
+
+**请求参数（Body）**：`reason`（string，可选，≤200 字）。
+
+**请求示例**
+
+```bash
+curl -X POST https://api.example.com/api/v1/admin/registrations/5001/withdraw \
+  -H "Authorization: Bearer <admin_token>" -H "Content-Type: application/json" \
+  -d '{"reason":"个人原因放弃参赛"}'
+```
+
+**响应参数**：`{"registration_id":5001,"status":"withdrawn","released":true}`。
+重复退赛幂等：`released` 为 false，不重复释放名额。
+
+**失败响应**
+
+| code | 说明 |
+|---|---|
+| 40001 | registration_id 非法 / reason 超长 |
+| 40401 | 报名不存在（或对应订单不存在） |
+| 41013 | 仅 `active` 报名可退赛；订单非 `paid` 时请走退款工单 |
+
+**注意事项**
+
+- 事务内：报名 → `withdrawn`、`event_groups.taken - 1`、写 `admin_logs`（action=`admin.registration.withdraw`，含订单号/组别/原因）。
+- 退赛后小程序「我的报名」展示为「已退赛」（`status=withdrawn`），详情只读；该报名仍保留在列表中进行对账。
+- 候补联动：释放名额后候补队列「已释放 N 个名额」提示随刷新出现。
 
 ---
 
