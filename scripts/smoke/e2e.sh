@@ -196,5 +196,24 @@ RESP=$(curl -s "$BASE/api/v1/institution/ranking")
 RESP=$(call GET "/api/v1/admin/prize-statements?season_id=$SEASON_ID")
 [ "$(printf '%s' "$RESP" | jq -r '.data.list | length')" -ge 1 ] && ok "prize statements" || bad "prize statements: $RESP"
 
+step "11. S5：公开内容与导出"
+RESP=$(curl -s "$BASE/api/v1/contents/announcement")
+[ "$(printf '%s' "$RESP" | jq -r '.data.key')" = "announcement" ] && ok "public contents" || bad "public contents: $RESP"
+RESP=$(curl -s "$BASE/api/v1/contents/not_a_key")
+[ "$(code_of "$RESP")" = "40401" ] && ok "unknown content key rejected" || bad "unknown content key: $RESP"
+
+META=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/v1/admin/orders/export?event_id=$EVENT_ID")
+[ "${META%% *}" = "200" ] && printf '%s' "$META" | grep -q 'spreadsheetml' && ok "order export xlsx" || bad "order export: $META"
+META=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/v1/admin/waitlists/export?event_id=$EVENT_ID")
+[ "${META%% *}" = "200" ] && printf '%s' "$META" | grep -q 'spreadsheetml' && ok "waitlist export xlsx" || bad "waitlist export: $META"
+META=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/v1/admin/materials/missing/export?event_id=$EVENT_ID")
+[ "${META%% *}" = "200" ] && printf '%s' "$META" | grep -q 'spreadsheetml' && ok "material export xlsx" || bad "material export: $META"
+META=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/v1/admin/events/$EVENT_ID/materials/archive")
+[ "${META%% *}" = "200" ] && printf '%s' "$META" | grep -q 'application/zip' && ok "material archive zip" || bad "material archive: $META"
+
 printf '\n\033[1mSummary\033[0m: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
