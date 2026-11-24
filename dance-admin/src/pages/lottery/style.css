@@ -375,6 +375,23 @@
   background: var(--lp-paper);
 }
 
+.lp-card.is-clickable {
+  cursor: pointer;
+}
+
+.lp-card.is-clickable:focus-visible {
+  outline: 2px solid var(--lp-ink);
+  outline-offset: 3px;
+}
+
+.lp-card-tap-hint {
+  margin: 18px 0 0;
+  font-family: var(--lp-font-ui);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--lp-muted);
+}
+
 .lp-card-strip {
   display: flex;
   align-items: center;

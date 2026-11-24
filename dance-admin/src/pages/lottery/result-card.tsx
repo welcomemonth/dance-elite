@@ -7,12 +7,28 @@ const ResultCard: React.FC<{
   entry: LotteryEntry;
   fresh: boolean;
   onGoDraw: () => void;
-}> = ({ entry, fresh, onGoDraw }) => {
+  /** 传入后已抽签的卡片可点击，生成该条记录的图片 */
+  onOpenPoster?: () => void;
+}> = ({ entry, fresh, onGoDraw, onOpenPoster }) => {
   const slot = entry.slot;
+  const clickable = Boolean(onOpenPoster && slot);
   return (
     <section
-      className={`lp-card${fresh ? ' is-fresh' : ''}`}
+      className={`lp-card${fresh ? ' is-fresh' : ''}${clickable ? ' is-clickable' : ''}`}
       aria-live="polite"
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? onOpenPoster : undefined}
+      onKeyDown={
+        clickable
+          ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onOpenPoster?.();
+              }
+            }
+          : undefined
+      }
     >
       <div className="lp-card-strip">
         <span>{entry.drawn ? '出场顺序' : '等待抽签'}</span>
@@ -64,6 +80,10 @@ const ResultCard: React.FC<{
               </div>
             )}
           </dl>
+
+          {onOpenPoster && (
+            <p className="lp-card-tap-hint">点击卡片查看结果图片 →</p>
+          )}
 
           <span className="lp-stamp" aria-hidden="true">
             已抽签

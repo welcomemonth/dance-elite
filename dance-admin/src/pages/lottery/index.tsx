@@ -219,6 +219,16 @@ const LotteryPage: React.FC = () => {
     }
   };
 
+  const showPoster = (nextEntries: LotteryEntry[]) => {
+    if (!meta || !nextEntries.some((entry) => entry.slot)) return;
+    const url = renderLotteryPoster(meta.event_name, nextEntries);
+    if (url) {
+      setPoster(url);
+    } else {
+      setError('生成图片失败，请使用手机截图保存。');
+    }
+  };
+
   const handleDrawResult = (data: LotteryDrawResult, payload: LotteryDrawPayload) => {
     if (data.status === 'choose_genre') {
       setChoice({ choices: data.choices ?? [], payload });
@@ -227,6 +237,7 @@ const LotteryPage: React.FC = () => {
     setChoice(null);
     if (data.status === 'already_drawn') {
       applyEntries(data.entries, {});
+      showPoster(data.entries);
       return;
     }
     const pending = data.entries.filter((entry) => !entry.drawn).length;
@@ -235,8 +246,9 @@ const LotteryPage: React.FC = () => {
       note:
         pending > 0
           ? `本次抽签已完成；还有 ${pending} 个舞种未抽签，请继续完成。`
-          : '抽签已完成，可生成结果图片保存或截图留存。',
+          : '抽签已完成，结果图片已生成，可长按保存。',
     });
+    showPoster(data.entries);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -281,13 +293,7 @@ const LotteryPage: React.FC = () => {
   };
 
   const openPoster = () => {
-    if (!meta || !entries) return;
-    const url = renderLotteryPoster(meta.event_name, entries);
-    if (url) {
-      setPoster(url);
-    } else {
-      setError('生成图片失败，请使用手机截图保存。');
-    }
+    if (entries) showPoster(entries);
   };
 
   const closePoster = () => setPoster('');
@@ -389,6 +395,9 @@ const LotteryPage: React.FC = () => {
                 entry={entry}
                 fresh={fresh && entry.drawn}
                 onGoDraw={goDraw}
+                onOpenPoster={
+                  isDraw ? undefined : () => showPoster([entry])
+                }
               />
             ))}
           </div>
@@ -399,8 +408,14 @@ const LotteryPage: React.FC = () => {
             </p>
           )}
 
+          {!isDraw && drawnEntries.length > 0 && (
+            <p className="lp-pending-hint">
+              点击上方已抽签的卡片，可查看并保存该舞种的结果图片。
+            </p>
+          )}
+
           <div className="lp-actions">
-            {drawnEntries.length > 0 && (
+            {isDraw && drawnEntries.length > 0 && (
               <button type="button" className="lp-submit" onClick={openPoster}>
                 生成结果图片
                 <span aria-hidden="true">↓</span>
