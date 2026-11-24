@@ -66,31 +66,32 @@ type AdminSeasonRequest struct {
 
 // Event 是赛事（events 表）。score_rules / prize_rules 为 JSON 文本。
 type Event struct {
-	ID                int64
-	SeasonID          int64
-	Name              string
-	Level             string
-	City              *string
-	Venue             *string
-	EventDate         *string
-	Fee               int64
-	CoverPath         *string
-	RegStartAt        *string
-	RegEndAt          *string
-	LotteryAt         *string
-	MaterialCheckAt   *string
-	StartAt           *string
-	Status            string
-	ScoreRules        *string
-	PrizeRules        *string
-	RefundPolicy      *string
-	WorkDurationLimit *string
-	ProcessDesc       *string
-	HonorDesc         *string
-	ExcludeFromPrize  bool
-	AudioReviewToken  *string
-	CreatedAt         string
-	UpdatedAt         string
+	ID                 int64
+	SeasonID           int64
+	Name               string
+	Level              string
+	City               *string
+	Venue              *string
+	EventDate          *string
+	Fee                int64
+	CoverPath          *string
+	RegStartAt         *string
+	RegEndAt           *string
+	LotteryAt          *string
+	MaterialCheckAt    *string
+	StartAt            *string
+	Status             string
+	ScoreRules         *string
+	PrizeRules         *string
+	RefundPolicy       *string
+	WorkDurationLimit  *string
+	ProcessDesc        *string
+	HonorDesc          *string
+	ExcludeFromPrize   bool
+	AudioReviewToken   *string
+	MaterialsCleanedAt *string
+	CreatedAt          string
+	UpdatedAt          string
 }
 
 // EventGroup 是赛事组别×舞种配置（event_groups 表）。一行 = 一个可报名单元。

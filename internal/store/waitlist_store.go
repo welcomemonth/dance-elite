@@ -207,25 +207,7 @@ type AdminWaitlistRow struct {
 // ListAdmin 分页查询后台候补队列：按赛事、组别分组，组内按队列序号排序
 // （通知顺序依据）。空结果返回空切片而非 nil。
 func (s *WaitlistStore) ListAdmin(ctx context.Context, f AdminWaitlistFilter) ([]AdminWaitlistRow, int64, error) {
-	where := []string{"1=1"}
-	args := []any{}
-	if f.EventID > 0 {
-		where = append(where, "w.event_id = ?")
-		args = append(args, f.EventID)
-	}
-	if f.Level != "" {
-		where = append(where, "g.level = ?")
-		args = append(args, f.Level)
-	}
-	if f.DanceType != "" {
-		where = append(where, "w.dance_type = ?")
-		args = append(args, f.DanceType)
-	}
-	if f.Status != "" {
-		where = append(where, "w.status = ?")
-		args = append(args, f.Status)
-	}
-	cond := strings.Join(where, " AND ")
+	cond, args := adminWaitlistWhere(f)
 
 	var total int64
 	if err := s.db.sql.QueryRowContext(ctx, `
@@ -245,35 +227,81 @@ func (s *WaitlistStore) ListAdmin(ctx context.Context, f AdminWaitlistFilter) ([
 	if pageSize < 1 {
 		pageSize = 20
 	}
-	rows, err := s.db.sql.QueryContext(ctx, `
-		SELECT w.id, w.position_no, w.name, w.id_card_masked, w.institution, w.phone,
-		       w.status, w.event_id, e.name, w.group_id, g.level, w.dance_type,
-		       w.created_at, w.notified_at, w.handled_at
-		FROM waitlists w
-		JOIN events e ON e.id = w.event_id
-		JOIN event_groups g ON g.id = w.group_id
+	rows, err := s.db.sql.QueryContext(ctx, adminWaitlistSelect+`
 		WHERE `+cond+`
 		ORDER BY w.event_id, w.group_id, w.position_no, w.id
 		LIMIT ? OFFSET ?`, append(args, pageSize, (page-1)*pageSize)...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query admin waitlists: %w", err)
 	}
-	defer rows.Close()
+	list, err := scanAdminWaitlistRows(rows, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
 
-	list := make([]AdminWaitlistRow, 0, pageSize)
+// ListForExport 返回后台候补队列导出数据（与列表同一筛选，不分页）。
+func (s *WaitlistStore) ListForExport(ctx context.Context, f AdminWaitlistFilter) ([]AdminWaitlistRow, error) {
+	cond, args := adminWaitlistWhere(f)
+	rows, err := s.db.sql.QueryContext(ctx, adminWaitlistSelect+`
+		WHERE `+cond+`
+		ORDER BY w.event_id, w.group_id, w.position_no, w.id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query admin waitlists for export: %w", err)
+	}
+	return scanAdminWaitlistRows(rows, 50)
+}
+
+// adminWaitlistSelect 是候补队列列表/导出的固定 SELECT。
+const adminWaitlistSelect = `
+	SELECT w.id, w.position_no, w.name, w.id_card_masked, w.institution, w.phone,
+	       w.status, w.event_id, e.name, w.group_id, g.level, w.dance_type,
+	       w.created_at, w.notified_at, w.handled_at
+	FROM waitlists w
+	JOIN events e ON e.id = w.event_id
+	JOIN event_groups g ON g.id = w.group_id`
+
+// adminWaitlistWhere 把候补队列筛选条件编译为 WHERE 子句与参数。
+func adminWaitlistWhere(f AdminWaitlistFilter) (string, []any) {
+	where := []string{"1=1"}
+	args := []any{}
+	if f.EventID > 0 {
+		where = append(where, "w.event_id = ?")
+		args = append(args, f.EventID)
+	}
+	if f.Level != "" {
+		where = append(where, "g.level = ?")
+		args = append(args, f.Level)
+	}
+	if f.DanceType != "" {
+		where = append(where, "w.dance_type = ?")
+		args = append(args, f.DanceType)
+	}
+	if f.Status != "" {
+		where = append(where, "w.status = ?")
+		args = append(args, f.Status)
+	}
+	return strings.Join(where, " AND "), args
+}
+
+// scanAdminWaitlistRows 扫描候补队列行并关闭 rows。
+func scanAdminWaitlistRows(rows *sql.Rows, capacity int) ([]AdminWaitlistRow, error) {
+	defer rows.Close()
+	list := make([]AdminWaitlistRow, 0, capacity)
 	for rows.Next() {
 		var r AdminWaitlistRow
 		if err := rows.Scan(&r.WaitlistID, &r.PositionNo, &r.Name, &r.IDCardMasked,
 			&r.Institution, &r.Phone, &r.Status, &r.EventID, &r.EventName, &r.GroupID,
 			&r.Level, &r.DanceType, &r.CreatedAt, &r.NotifiedAt, &r.HandledAt); err != nil {
-			return nil, 0, fmt.Errorf("scan admin waitlist: %w", err)
+			return nil, fmt.Errorf("scan admin waitlist: %w", err)
 		}
 		list = append(list, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("iterate admin waitlists: %w", err)
+		return nil, fmt.Errorf("iterate admin waitlists: %w", err)
 	}
-	return list, total, nil
+	return list, nil
 }
 
 // ReleasedQuota 返回筛选范围内报名单元的可用名额合计（quota - taken，负值按 0）。

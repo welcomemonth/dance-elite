@@ -152,6 +152,17 @@ type MaterialUpdateParams struct {
 	MaterialUpdatedAt string
 }
 
+// ClearMaterialsTx 清空某赛事全部报名单的媒体路径（S5-3 赛后清理）：
+// photo_path/audio_path 置 NULL，文本资料保留；已为 NULL 的行不重复更新。
+func (s *RegistrationStore) ClearMaterialsTx(ctx context.Context, tx *sql.Tx, eventID int64) error {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE registrations SET photo_path = NULL, audio_path = NULL
+		WHERE event_id = ? AND (photo_path IS NOT NULL OR audio_path IS NOT NULL)`, eventID); err != nil {
+		return fmt.Errorf("clear event %d registration materials: %w", eventID, err)
+	}
+	return nil
+}
+
 // UpdateMaterialsTx 在事务内更新报名单资料字段。条件限定本人且报名为
 // active（T13：仅有效报名可修改资料）；条件未命中返回 ErrConflict
 // （并发下状态已变化），不存在返回 ErrNotFound。

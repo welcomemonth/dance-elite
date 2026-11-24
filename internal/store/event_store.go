@@ -19,7 +19,7 @@ func NewEventStore(db *DB) *EventStore { return &EventStore{db: db} }
 const eventColumns = `id, season_id, name, level, city, venue, event_date, fee, cover_path,
 	reg_start_at, reg_end_at, lottery_at, material_check_at, start_at, status,
 	score_rules, prize_rules, refund_policy, work_duration_limit, process_desc, honor_desc,
-	exclude_from_prize, audio_review_token, created_at, updated_at`
+	exclude_from_prize, audio_review_token, materials_cleaned_at, created_at, updated_at`
 
 // EventParams 是创建赛事的完整字段集（service 层完成校验与模板预填）。
 type EventParams struct {
@@ -221,6 +221,46 @@ func (s *EventStore) ListAutoCandidates(ctx context.Context, limit int) ([]model
 	return list, nil
 }
 
+// ListFinishedForCleanup 返回已结束且尚未清理媒体的赛事（S5-3），按 id 升序。
+// 是否已过宽限期由 service 层按赛事结束时刻计算（结束时刻由时间线推导，
+// 不依赖 updated_at）。
+func (s *EventStore) ListFinishedForCleanup(ctx context.Context, limit int) ([]model.Event, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.sql.QueryContext(ctx, `
+		SELECT `+eventColumns+` FROM events
+		WHERE status = 'finished' AND materials_cleaned_at IS NULL
+		ORDER BY id LIMIT ?`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query events for material cleanup: %w", err)
+	}
+	defer rows.Close()
+
+	var list []model.Event
+	for rows.Next() {
+		event, err := scanEvent(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan cleanup event: %w", err)
+		}
+		list = append(list, *event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate cleanup events: %w", err)
+	}
+	return list, nil
+}
+
+// MarkMaterialsCleanedTx 在事务内标记赛事媒体已清理（幂等：已标记则不再更新）。
+func (s *EventStore) MarkMaterialsCleanedTx(ctx context.Context, tx *sql.Tx, id int64, cleanedAt string) error {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE events SET materials_cleaned_at = ?
+		WHERE id = ? AND materials_cleaned_at IS NULL`, cleanedAt, id); err != nil {
+		return fmt.Errorf("mark event %d materials cleaned: %w", id, err)
+	}
+	return nil
+}
+
 // Insert 在事务内创建赛事，返回新 id。
 func (s *EventStore) Insert(ctx context.Context, tx *sql.Tx, p EventParams) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
@@ -378,7 +418,7 @@ func scanEvent(row rowScanner) (*model.Event, error) {
 		&e.RegStartAt, &e.RegEndAt, &e.LotteryAt, &e.MaterialCheckAt, &e.StartAt,
 		&e.Status, &e.ScoreRules, &e.PrizeRules, &e.RefundPolicy, &e.WorkDurationLimit,
 		&e.ProcessDesc, &e.HonorDesc, &e.ExcludeFromPrize, &e.AudioReviewToken,
-		&e.CreatedAt, &e.UpdatedAt); err != nil {
+		&e.MaterialsCleanedAt, &e.CreatedAt, &e.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return &e, nil

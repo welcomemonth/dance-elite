@@ -27,6 +27,20 @@ func (s *SettingsStore) Get(ctx context.Context, key string) (string, error) {
 	return value, nil
 }
 
+// GetTx 在事务内返回指定 key 的配置值原文；不存在返回 ErrNotFound。
+// 单连接池下事务内查询必须经 tx 执行，否则自死锁。
+func (s *SettingsStore) GetTx(ctx context.Context, tx *sql.Tx, key string) (string, error) {
+	var value string
+	err := tx.QueryRowContext(ctx, `SELECT value FROM settings WHERE "key" = ?`, key).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("query setting %q in tx: %w", key, err)
+	}
+	return value, nil
+}
+
 // GetWithMeta 返回配置值原文与更新时间（后台内容管理响应用）。
 func (s *SettingsStore) GetWithMeta(ctx context.Context, key string) (value, updatedAt string, err error) {
 	err = s.db.sql.QueryRowContext(ctx,

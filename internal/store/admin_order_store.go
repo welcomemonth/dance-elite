@@ -47,6 +47,62 @@ type AdminOrderRow struct {
 // 待支付为支付流程中间态，始终不展示；已取消默认不展示，IncludeCanceled=true 时
 // 作为对账留档返回。Status 显式指定时按 Status 精确筛选（可查已取消）。
 func (s *OrderStore) ListAdmin(ctx context.Context, f AdminOrderFilter) ([]AdminOrderRow, int64, error) {
+	cond, args := adminOrderWhere(f)
+	from := adminOrderFrom
+	var total int64
+	if err := s.db.sql.QueryRowContext(ctx,
+		`SELECT COUNT(1) `+from+` WHERE `+cond, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count admin orders: %w", err)
+	}
+	if total == 0 {
+		return []AdminOrderRow{}, 0, nil
+	}
+	rows, err := s.db.sql.QueryContext(ctx, adminOrderSelect+adminOrderFrom+`
+		WHERE `+cond+`
+		ORDER BY o.created_at DESC, o.id DESC
+		LIMIT ? OFFSET ?`, append(args, f.PageSize, (f.Page-1)*f.PageSize)...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query admin orders: %w", err)
+	}
+	list, err := scanAdminOrderRows(rows, f.PageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
+// ListForExport 返回后台订单导出数据（与列表同一筛选，不分页）。
+func (s *OrderStore) ListForExport(ctx context.Context, f AdminOrderFilter) ([]AdminOrderRow, error) {
+	cond, args := adminOrderWhere(f)
+	rows, err := s.db.sql.QueryContext(ctx, adminOrderSelect+adminOrderFrom+`
+		WHERE `+cond+`
+		ORDER BY o.created_at DESC, o.id DESC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query admin orders for export: %w", err)
+	}
+	return scanAdminOrderRows(rows, 100)
+}
+
+// adminOrderSelect 是后台订单列表/导出的固定 SELECT（列顺序与 scanAdminOrderRows 一致）。
+const adminOrderSelect = `
+	SELECT o.order_no,
+	       (SELECT p.transaction_id FROM payments p
+	        WHERE p.order_id = o.id AND p.type = 'pay' AND p.status = 'success'
+	        ORDER BY p.id LIMIT 1),
+	       r.event_id, e.name, g.level, r.dance_type,
+	       pl.player_no, pl.name, pl.id_type,
+	       o.amount, o.status, o.source, o.paid_at, o.created_at `
+
+// adminOrderFrom 是后台订单查询的固定 JOIN。
+const adminOrderFrom = `FROM orders o
+	JOIN registrations r ON r.id = o.registration_id
+	JOIN events e ON e.id = r.event_id
+	JOIN event_groups g ON g.id = r.group_id
+	JOIN players pl ON pl.id = r.player_id
+	LEFT JOIN users u ON u.id = r.user_id`
+
+// adminOrderWhere 把筛选条件编译为 WHERE 子句与参数。
+func adminOrderWhere(f AdminOrderFilter) (string, []any) {
 	where := []string{"o.status <> 'pending_payment'"}
 	args := make([]any, 0, 8)
 	if f.Status != "" {
@@ -87,53 +143,26 @@ func (s *OrderStore) ListAdmin(ctx context.Context, f AdminOrderFilter) ([]Admin
 			           WHERE p.order_id = o.id AND p.type = 'pay' AND p.transaction_id LIKE ?))`)
 		args = append(args, like, like, like, like, like)
 	}
-	cond := strings.Join(where, " AND ")
-	from := `FROM orders o
-		JOIN registrations r ON r.id = o.registration_id
-		JOIN events e ON e.id = r.event_id
-		JOIN event_groups g ON g.id = r.group_id
-		JOIN players pl ON pl.id = r.player_id
-		LEFT JOIN users u ON u.id = r.user_id`
+	return strings.Join(where, " AND "), args
+}
 
-	var total int64
-	if err := s.db.sql.QueryRowContext(ctx,
-		`SELECT COUNT(1) `+from+` WHERE `+cond, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count admin orders: %w", err)
-	}
-	if total == 0 {
-		return []AdminOrderRow{}, 0, nil
-	}
-
-	rows, err := s.db.sql.QueryContext(ctx, `
-		SELECT o.order_no,
-		       (SELECT p.transaction_id FROM payments p
-		        WHERE p.order_id = o.id AND p.type = 'pay' AND p.status = 'success'
-		        ORDER BY p.id LIMIT 1),
-		       r.event_id, e.name, g.level, r.dance_type,
-		       pl.player_no, pl.name, pl.id_type,
-		       o.amount, o.status, o.source, o.paid_at, o.created_at `+from+`
-		WHERE `+cond+`
-		ORDER BY o.created_at DESC, o.id DESC
-		LIMIT ? OFFSET ?`, append(args, f.PageSize, (f.Page-1)*f.PageSize)...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("query admin orders: %w", err)
-	}
+// scanAdminOrderRows 扫描订单列表行并关闭 rows。
+func scanAdminOrderRows(rows *sql.Rows, capacity int) ([]AdminOrderRow, error) {
 	defer rows.Close()
-
-	list := make([]AdminOrderRow, 0, f.PageSize)
+	list := make([]AdminOrderRow, 0, capacity)
 	for rows.Next() {
 		var r AdminOrderRow
 		if err := rows.Scan(&r.OrderNo, &r.TransactionID, &r.EventID, &r.EventName,
 			&r.Level, &r.DanceType, &r.PlayerNo, &r.PlayerName, &r.IDType,
 			&r.Amount, &r.Status, &r.Source, &r.PaidAt, &r.CreatedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan admin order: %w", err)
+			return nil, fmt.Errorf("scan admin order: %w", err)
 		}
 		list = append(list, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("iterate admin orders: %w", err)
+		return nil, fmt.Errorf("iterate admin orders: %w", err)
 	}
-	return list, total, nil
+	return list, nil
 }
 
 // AdminOrderDetailRow 是订单详情所需的订单/报名/赛事/选手信息。

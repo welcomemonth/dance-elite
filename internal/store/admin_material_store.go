@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -37,6 +38,62 @@ type AdminMissingMaterialRow struct {
 // ListMissing 分页查询资料未传齐名单：active 报名且 photo/audio/program_name
 // 任一为空；可按赛事/组别/舞种/单项缺失/截止状态筛选。
 func (s *RegistrationStore) ListMissing(ctx context.Context, f AdminMissingMaterialFilter) ([]AdminMissingMaterialRow, int64, error) {
+	cond, args := adminMissingWhere(f)
+
+	var total int64
+	if err := s.db.sql.QueryRowContext(ctx,
+		`SELECT COUNT(1) `+adminRegistrationFrom+` WHERE `+cond, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count missing materials: %w", err)
+	}
+	if total == 0 {
+		return []AdminMissingMaterialRow{}, 0, nil
+	}
+	page, pageSize := f.Page, f.PageSize
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	rows, err := s.db.sql.QueryContext(ctx, adminMissingSelect+`
+		WHERE `+cond+`
+		ORDER BY e.id, g.level, r.dance_type, r.id
+		LIMIT ? OFFSET ?`, append(args, pageSize, (page-1)*pageSize)...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query missing materials: %w", err)
+	}
+	list, err := scanMissingMaterialRows(rows, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
+// ListMissingForExport 返回资料催收名单导出数据（与列表同一筛选，不分页）。
+func (s *RegistrationStore) ListMissingForExport(ctx context.Context, f AdminMissingMaterialFilter) ([]AdminMissingMaterialRow, error) {
+	cond, args := adminMissingWhere(f)
+	rows, err := s.db.sql.QueryContext(ctx, adminMissingSelect+`
+		WHERE `+cond+`
+		ORDER BY e.id, g.level, r.dance_type, r.id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query missing materials for export: %w", err)
+	}
+	return scanMissingMaterialRows(rows, 50)
+}
+
+// adminMissingSelect 是资料催收名单/导出的固定 SELECT（含最近一次催收时间）。
+const adminMissingSelect = `
+	SELECT ` + adminRegistrationSelectColumns + `,
+	       o.order_no, e.name, g.level, pl.player_no, pl.name,
+	       COALESCE(r.contact_phone, u.phone), e.material_check_at, mc.contacted_at
+	` + adminRegistrationFrom + `
+	LEFT JOIN (
+		SELECT registration_id, MAX(created_at) AS contacted_at
+		FROM material_contacts GROUP BY registration_id
+	) mc ON mc.registration_id = r.id`
+
+// adminMissingWhere 把资料催收筛选条件编译为 WHERE 子句与参数。
+func adminMissingWhere(f AdminMissingMaterialFilter) (string, []any) {
 	where := []string{
 		"r.status = 'active'",
 		"(NOT (" + materialPresentSQL("photo_path") + ") OR NOT (" +
@@ -72,35 +129,13 @@ func (s *RegistrationStore) ListMissing(ctx context.Context, f AdminMissingMater
 		where = append(where, "(e.material_check_at IS NOT NULL AND e.material_check_at <= ?)")
 		args = append(args, f.Now)
 	}
-	cond := strings.Join(where, " AND ")
+	return strings.Join(where, " AND "), args
+}
 
-	var total int64
-	if err := s.db.sql.QueryRowContext(ctx,
-		`SELECT COUNT(1) `+adminRegistrationFrom+` WHERE `+cond, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count missing materials: %w", err)
-	}
-	if total == 0 {
-		return []AdminMissingMaterialRow{}, 0, nil
-	}
-
-	rows, err := s.db.sql.QueryContext(ctx, `
-		SELECT `+adminRegistrationSelectColumns+`,
-		       o.order_no, e.name, g.level, pl.player_no, pl.name,
-		       COALESCE(r.contact_phone, u.phone), e.material_check_at, mc.contacted_at
-		`+adminRegistrationFrom+`
-		LEFT JOIN (
-			SELECT registration_id, MAX(created_at) AS contacted_at
-			FROM material_contacts GROUP BY registration_id
-		) mc ON mc.registration_id = r.id
-		WHERE `+cond+`
-		ORDER BY e.id, g.level, r.dance_type, r.id
-		LIMIT ? OFFSET ?`, append(args, f.PageSize, (f.Page-1)*f.PageSize)...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("query missing materials: %w", err)
-	}
+// scanMissingMaterialRows 扫描资料催收行并关闭 rows。
+func scanMissingMaterialRows(rows *sql.Rows, capacity int) ([]AdminMissingMaterialRow, error) {
 	defer rows.Close()
-
-	list := make([]AdminMissingMaterialRow, 0, f.PageSize)
+	list := make([]AdminMissingMaterialRow, 0, capacity)
 	for rows.Next() {
 		var out AdminMissingMaterialRow
 		reg := &out.Registration
@@ -111,12 +146,12 @@ func (s *RegistrationStore) ListMissing(ctx context.Context, f AdminMissingMater
 			&reg.MaterialUpdatedAt, &reg.CreatedAt, &reg.UpdatedAt,
 			&out.OrderNo, &out.EventName, &out.Level, &out.PlayerNo, &out.PlayerName,
 			&out.ContactPhone, &out.MaterialCheckAt, &out.ContactedAt); err != nil {
-			return nil, 0, fmt.Errorf("scan missing material: %w", err)
+			return nil, fmt.Errorf("scan missing material: %w", err)
 		}
 		list = append(list, out)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("iterate missing materials: %w", err)
+		return nil, fmt.Errorf("iterate missing materials: %w", err)
 	}
-	return list, total, nil
+	return list, nil
 }
