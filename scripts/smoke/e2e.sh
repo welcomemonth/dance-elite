@@ -183,6 +183,10 @@ PUBLISH_BODY=$(printf '%s' "$PREVIEW" | jq -c '{rows: [.data.rows[] | {row_no,pl
 RESP=$(call POST "/api/v1/admin/events/$RANK_EVENT_ID/scores?level=U13&dance_type=classical" "$PUBLISH_BODY")
 [ "$(printf '%s' "$RESP" | jq -r '.data.published')" = "2" ] && ok "score publish" || bad "score publish: $RESP"
 
+META=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/v1/admin/events/$RANK_EVENT_ID/scores/template")
+[ "${META%% *}" = "200" ] && printf '%s' "$META" | grep -q 'spreadsheetml' && ok "score template xlsx" || bad "score template: $META"
+
 RESP=$(curl -s "$BASE/api/v1/config")
 [ "$(printf '%s' "$RESP" | jq -r '.data.advance_quota')" = "20" ] && ok "public config" || bad "public config: $RESP"
 RESP=$(curl -s "$BASE/api/v1/ranking?level=U13&dance_type=classical")
@@ -195,6 +199,10 @@ RESP=$(curl -s "$BASE/api/v1/institution/ranking")
 [ "$(printf '%s' "$RESP" | jq -r '.data.institutions | length')" -ge 0 ] && ok "institution ranking" || bad "institution ranking: $RESP"
 RESP=$(call GET "/api/v1/admin/prize-statements?season_id=$SEASON_ID")
 [ "$(printf '%s' "$RESP" | jq -r '.data.list | length')" -ge 1 ] && ok "prize statements" || bad "prize statements: $RESP"
+
+META=$(curl -s -o /dev/null -w '%{http_code} %{content_type}' -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/v1/admin/prize-statements/export?season_id=$SEASON_ID")
+[ "${META%% *}" = "200" ] && printf '%s' "$META" | grep -q 'spreadsheetml' && ok "prize export xlsx" || bad "prize export: $META"
 
 step "11. S5：公开内容与导出"
 RESP=$(curl -s "$BASE/api/v1/contents/announcement")

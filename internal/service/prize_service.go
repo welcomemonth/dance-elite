@@ -24,8 +24,8 @@ func NewPrizeService(stores *store.Store) *PrizeService {
 
 // List 返回赛季奖金明细（可按状态筛选）。
 func (s *PrizeService) List(ctx context.Context, seasonID int64, status string) ([]model.AdminPrizeStatementItem, error) {
-	if status != "" && status != "pending" && status != "granted" && status != "skipped" {
-		return nil, httpx.ErrBadRequest("status 取值不合法（pending / granted / skipped）")
+	if err := validatePrizeStatusFilter(status); err != nil {
+		return nil, err
 	}
 	rows, err := s.stores.Prizes.ListBySeason(ctx, seasonID, status)
 	if err != nil {

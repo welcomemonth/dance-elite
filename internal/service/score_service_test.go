@@ -155,6 +155,78 @@ func TestScorePublishPrizeAndCorrection(t *testing.T) {
 			}
 		}
 	}
+	// 冠军→亚军后甲级赛不再有奖金，奖金明细同步清空。
+	prizes, err = NewPrizeService(f.stores).List(ctx, mustSeasonOf(t, f, eventID), "")
+	if err != nil {
+		t.Fatalf("prizes after correction: %v", err)
+	}
+	if len(prizes) != 0 {
+		t.Fatalf("prizes after correction = %+v", prizes)
+	}
+}
+
+func TestScoreCorrectionKeepsOtherBoardPrizes(t *testing.T) {
+	f, scores, _, _, adminID := newScoreFixture(t)
+	eventID := mustCreateRegisteringEvent(t, f, "多榜奖金赛事", []model.AdminEventGroupInput{
+		{Level: model.GroupLevelU13, DanceType: model.DanceTypeClassical, Quota: 10},
+		{Level: model.GroupLevelU13, DanceType: model.DanceTypeFolk, Quota: 10},
+	})
+	ctx := context.Background()
+	for i, dance := range []string{model.DanceTypeClassical, model.DanceTypeFolk} {
+		groupID := mustGroupID(t, f.db, eventID, model.GroupLevelU13, dance)
+		userID := mustInsertRegUser(t, f.db, "multi-board-user-"+itoaTest(i))
+		playerID := mustScorePlayer(t, f.db, padTest("MB", i), "多榜选手"+itoaTest(i))
+		if _, err := f.db.SQL().ExecContext(ctx,
+			`INSERT INTO registrations (event_id, group_id, player_id, user_id, dance_type, institution, status)
+			 VALUES (?, ?, ?, ?, ?, '机构M', 'active')`,
+			eventID, groupID, playerID, userID, dance); err != nil {
+			t.Fatalf("insert %s registration: %v", dance, err)
+		}
+		preview, err := scores.Preview(ctx, eventID, "U13", dance,
+			[]model.ScorePreviewInputRow{{RowNo: 1, PlayerName: "多榜选手" + itoaTest(i), Award: model.AwardChampion}})
+		if err != nil {
+			t.Fatalf("preview %s: %v", dance, err)
+		}
+		if _, err := scores.Publish(ctx, adminID, eventID, "U13", dance, preview.Rows, ""); err != nil {
+			t.Fatalf("publish %s: %v", dance, err)
+		}
+	}
+	classicalBoard := mustBoardID(t, f, eventID, model.DanceTypeClassical)
+	folkBoard := mustBoardID(t, f, eventID, model.DanceTypeFolk)
+
+	entries, err := scores.List(ctx, eventID, "U13", model.DanceTypeClassical)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("classical entries: %v %v", entries, err)
+	}
+	if _, err := scores.Correct(ctx, adminID, entries[0].EntryID, model.CorrectScoreRequest{Award: model.AwardRunnerUp}); err != nil {
+		t.Fatalf("correct: %v", err)
+	}
+	// 只重建被纠错榜单的奖金，另一榜单的待发放奖金保留。
+	var classicalPrizes, folkPrizes int
+	if err := f.db.SQL().QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM prizes WHERE event_id = ? AND board_id = ? AND status = 'pending'`,
+		eventID, classicalBoard).Scan(&classicalPrizes); err != nil {
+		t.Fatalf("count classical prizes: %v", err)
+	}
+	if err := f.db.SQL().QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM prizes WHERE event_id = ? AND board_id = ? AND status = 'pending'`,
+		eventID, folkBoard).Scan(&folkPrizes); err != nil {
+		t.Fatalf("count folk prizes: %v", err)
+	}
+	if classicalPrizes != 0 || folkPrizes != 1 {
+		t.Fatalf("prizes classical=%d folk=%d, want 0/1", classicalPrizes, folkPrizes)
+	}
+}
+
+func mustBoardID(t *testing.T, f *regFixture, eventID int64, dance string) int64 {
+	t.Helper()
+	var boardID int64
+	if err := f.db.SQL().QueryRowContext(context.Background(),
+		`SELECT b.id FROM boards b JOIN events e ON e.season_id = b.season_id
+		 WHERE e.id = ? AND b.level = 'U13' AND b.dance_type = ?`, eventID, dance).Scan(&boardID); err != nil {
+		t.Fatalf("query board %s: %v", dance, err)
+	}
+	return boardID
 }
 
 func TestScorePreviewUnmatchedAndValidation(t *testing.T) {

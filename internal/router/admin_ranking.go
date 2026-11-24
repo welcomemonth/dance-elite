@@ -1,6 +1,9 @@
 package router
 
 import (
+	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -31,6 +34,8 @@ func registerAdminRankingRoutes(group *gin.RouterGroup, scores *service.ScoreSer
 
 	// 成绩录入与纠错。
 	group.GET("/events/:id/scores", h.listScores)
+	group.GET("/events/:id/scores/template", h.scoreTemplate)
+	write.POST("/events/:id/scores/import", h.importScores)
 	write.POST("/events/:id/scores/preview", h.previewScores)
 	write.POST("/events/:id/scores", h.publishScores)
 	write.PUT("/scores/:entry_id", h.correctScore)
@@ -47,6 +52,7 @@ func registerAdminRankingRoutes(group *gin.RouterGroup, scores *service.ScoreSer
 
 	// 奖金明细。
 	group.GET("/prize-statements", h.listPrizes)
+	write.GET("/prize-statements/export", h.exportPrizes)
 	write.PUT("/prize-statements/:item_id", h.adjustPrize)
 	write.POST("/prize-statements/:item_id/pay", h.payPrize)
 }
@@ -142,6 +148,45 @@ func (h *adminRankingHandler) listScores(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, gin.H{"list": list})
+}
+
+// scoreTemplate 下载成绩导入模板（固定列：姓名/证件号/奖项/晋级决赛/备注）。
+func (h *adminRankingHandler) scoreTemplate(c *gin.Context) {
+	content, err := service.BuildScoreTemplateWorkbook()
+	if err != nil {
+		httpx.AbortError(c, httpx.ErrInternal(err, "生成导入模板失败，请稍后重试"))
+		return
+	}
+	name := "成绩导入模板.xlsx"
+	disposition := fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+		name, url.PathEscape(name))
+	c.Header("Content-Disposition", disposition)
+	c.Data(http.StatusOK, exportMIME, content)
+}
+
+// importScores 上传成绩 Excel：解析、匹配/建档选手并返回预览（不写成绩）。
+func (h *adminRankingHandler) importScores(c *gin.Context) {
+	adminID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	eventID, ok := pathInt64(c, "id")
+	if !ok {
+		return
+	}
+	rows, err := parseScoreImportFile(c)
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	resp, err := h.scores.ImportPreview(c.Request.Context(), adminID, eventID,
+		c.Query("level"), c.Query("dance_type"), rows)
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	httpx.OK(c, resp)
 }
 
 func (h *adminRankingHandler) previewScores(c *gin.Context) {
@@ -355,16 +400,57 @@ func (h *adminRankingHandler) listPrizes(c *gin.Context) {
 		httpx.AbortError(c, httpx.ErrBadRequest("season_id 必填"))
 		return
 	}
+	eventID, ok := optionalInt64Query(c, "event_id")
+	if !ok {
+		httpx.AbortError(c, httpx.ErrBadRequest("event_id 不合法"))
+		return
+	}
 	list, err := h.prizes.List(c.Request.Context(), seasonID, c.Query("status"))
 	if err != nil {
 		httpx.AbortError(c, err)
 		return
+	}
+	if eventID > 0 {
+		filtered := list[:0]
+		for _, item := range list {
+			if item.EventID != nil && *item.EventID == eventID {
+				filtered = append(filtered, item)
+			}
+		}
+		list = filtered
 	}
 	total := 0
 	for _, item := range list {
 		total += item.AdjustedAmount
 	}
 	httpx.OK(c, gin.H{"list": list, "total": len(list), "total_amount": total})
+}
+
+func (h *adminRankingHandler) exportPrizes(c *gin.Context) {
+	adminID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	seasonID, ok := optionalInt64Query(c, "season_id")
+	if !ok {
+		httpx.AbortError(c, httpx.ErrBadRequest("season_id 不合法"))
+		return
+	}
+	eventID, ok := optionalInt64Query(c, "event_id")
+	if !ok {
+		httpx.AbortError(c, httpx.ErrBadRequest("event_id 不合法"))
+		return
+	}
+	file, err := h.prizes.Export(c.Request.Context(), adminID, seasonID, eventID, c.Query("status"))
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	disposition := fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+		file.Name, url.PathEscape(file.Name))
+	c.Header("Content-Disposition", disposition)
+	c.Data(http.StatusOK, exportMIME, file.Content)
 }
 
 func (h *adminRankingHandler) adjustPrize(c *gin.Context) {

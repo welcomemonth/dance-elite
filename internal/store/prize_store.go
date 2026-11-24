@@ -34,10 +34,12 @@ const prizeFrom = `FROM prizes pz
 	LEFT JOIN events e ON e.id = pz.event_id
 	LEFT JOIN boards b ON b.id = pz.board_id`
 
-// ReplacePendingForEvent 事务内重建某赛事的未发放奖金（保留已发放/已跳过）。
-func (s *PrizeStore) ReplacePendingForEvent(ctx context.Context, tx *sql.Tx, eventID int64, rows []model.Prize) error {
+// ReplacePendingForEventBoard 事务内重建某赛事某榜单的未发放奖金（保留已发放/已跳过）。
+func (s *PrizeStore) ReplacePendingForEventBoard(ctx context.Context, tx *sql.Tx,
+	eventID, boardID int64, rows []model.Prize) error {
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM prizes WHERE event_id = ? AND status = 'pending'`, eventID); err != nil {
+		`DELETE FROM prizes WHERE event_id = ? AND board_id = ? AND status = 'pending'`,
+		eventID, boardID); err != nil {
 		return fmt.Errorf("clear pending prizes: %w", err)
 	}
 	for _, r := range rows {

@@ -132,7 +132,31 @@ func TestRankingFlowHTTP(t *testing.T) {
 		t.Fatalf("institution ranking status=%d body=%s", w.Code, w.Body)
 	}
 
-	// 奖金明细：甲级赛 3 人 < 40 → 冠军 1000 元 = 100000 分。
+	// 纠错后奖金明细同步：冠军→亚军，甲级赛不再有奖金。
+	w = postJSON(t, engine, http.MethodGet,
+		fmt.Sprintf("/api/v1/admin/prize-statements?season_id=%d", seasonID), "", adminHeaders)
+	if w.Code != http.StatusOK {
+		t.Fatalf("prizes after correction status=%d body=%s", w.Code, w.Body)
+	}
+	if items, _ := decodeData(t, w.Body.Bytes())["list"].([]any); len(items) != 0 {
+		t.Fatalf("prizes after correction=%d", len(items))
+	}
+
+	// 再纠正回冠军，奖金重新生成：甲级赛 3 人 < 40 → 1000 元 = 100000 分。
+	w = postJSON(t, engine, http.MethodGet,
+		fmt.Sprintf("/api/v1/admin/events/%d/scores?level=U11&dance_type=classical", eventID), "", adminHeaders)
+	entries, _ = decodeData(t, w.Body.Bytes())["list"].([]any)
+	if len(entries) != 3 {
+		t.Fatalf("entries after first correction=%d", len(entries))
+	}
+	entry0 = entries[0].(map[string]any)
+	w = postJSON(t, engine, http.MethodPut,
+		fmt.Sprintf("/api/v1/admin/scores/%d", int64(entry0["entry_id"].(float64))),
+		`{"award":"champion"}`, adminHeaders)
+	if w.Code != http.StatusOK {
+		t.Fatalf("correct back status=%d body=%s", w.Code, w.Body)
+	}
+
 	w = postJSON(t, engine, http.MethodGet,
 		fmt.Sprintf("/api/v1/admin/prize-statements?season_id=%d", seasonID), "", adminHeaders)
 	if w.Code != http.StatusOK {

@@ -52,6 +52,19 @@ func (s *ResultStore) ListByEventBoard(ctx context.Context, eventID, boardID int
 	return scanResultRows(rows)
 }
 
+// ListPublishedByEventBoard 返回赛事某榜单当前有效成绩（事务内，重算奖金用）。
+func (s *ResultStore) ListPublishedByEventBoard(ctx context.Context, tx *sql.Tx, eventID, boardID int64) ([]ResultRow, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT `+resultSelectColumns+` `+resultFrom+`
+		 WHERE r.event_id = ? AND r.board_id = ? AND r.status = 'published'
+		 ORDER BY r.id`, eventID, boardID)
+	if err != nil {
+		return nil, fmt.Errorf("list published results of event %d board %d: %w", eventID, boardID, err)
+	}
+	defer rows.Close()
+	return scanResultRows(rows)
+}
+
 // CountPublishedByEventBoard 统计某赛事某榜单当前有效成绩条数（参赛人数）。
 func (s *ResultStore) CountPublishedByEventBoard(ctx context.Context, tx *sql.Tx, eventID, boardID int64) (int, error) {
 	var n int

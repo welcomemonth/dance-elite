@@ -125,6 +125,7 @@ func (s *ScoreService) Preview(ctx context.Context, eventID int64, level, dance 
 		}
 		resp.Rows = append(resp.Rows, item)
 	}
+	resp.Errors = resp.Unmatched
 	return resp, nil
 }
 
@@ -167,6 +168,11 @@ func (s *ScoreService) Publish(ctx context.Context, adminID, eventID int64, leve
 	if err != nil {
 		return nil, err
 	}
+	for _, r := range rows {
+		if (r.MatchStatus != "matched" && r.MatchStatus != "created") || r.PlayerID == nil {
+			return nil, httpx.ErrBadRequest("存在未匹配/未建档的成绩行，请修正后重新预览")
+		}
+	}
 	scoreRules := resolveScoreRules(event.ScoreRules)
 	prizeRules := resolvePrizeRules(event.PrizeRules)
 	institutions, err := s.institutionMap(ctx, eventID, level, dance)
@@ -179,13 +185,13 @@ func (s *ScoreService) Publish(ctx context.Context, adminID, eventID int64, leve
 	err = s.stores.WithTx(ctx, func(tx *sql.Tx) error {
 		participants := 0
 		for _, r := range rows {
-			if r.MatchStatus == "matched" && r.PlayerID != nil {
+			if isPublishableScoreRow(r) {
 				participants++
 			}
 		}
 		prizes := make([]model.Prize, 0, len(rows))
 		for _, r := range rows {
-			if r.MatchStatus != "matched" || r.PlayerID == nil {
+			if !isPublishableScoreRow(r) {
 				continue
 			}
 			award := ""
@@ -230,10 +236,8 @@ func (s *ScoreService) Publish(ctx context.Context, adminID, eventID int64, leve
 				})
 			}
 		}
-		if !event.ExcludeFromPrize {
-			if err := s.stores.Prizes.ReplacePendingForEvent(ctx, tx, eventID, prizes); err != nil {
-				return err
-			}
+		if err := s.stores.Prizes.ReplacePendingForEventBoard(ctx, tx, eventID, board.ID, prizes); err != nil {
+			return err
 		}
 		if err := s.stores.Boards.MarkPublished(ctx, tx, board.ID, utils.FormatISO(now)); err != nil {
 			return err
@@ -320,6 +324,9 @@ func (s *ScoreService) Correct(ctx context.Context, adminID, entryID int64, req 
 		if err := s.recompute(ctx, tx, event.SeasonID, board.ID, now); err != nil {
 			return err
 		}
+		if err := s.rebuildBoardPrizes(ctx, tx, event, board.ID, prizeRules); err != nil {
+			return err
+		}
 		targetType := "result"
 		return adminLog(ctx, s.stores, tx, &adminID, adminActionScoreCorrect,
 			&targetType, &newID, map[string]any{
@@ -330,6 +337,31 @@ func (s *ScoreService) Correct(ctx context.Context, adminID, entryID int64, req 
 		return 0, err
 	}
 	return newID, nil
+}
+
+// rebuildBoardPrizes 按赛事某榜单当前有效成绩重建待发放奖金（纠错后同步奖金明细）。
+func (s *ScoreService) rebuildBoardPrizes(ctx context.Context, tx *sql.Tx, event *model.Event,
+	boardID int64, rules model.PrizeRules) error {
+	rows, err := s.stores.Results.ListPublishedByEventBoard(ctx, tx, event.ID, boardID)
+	if err != nil {
+		return err
+	}
+	prizes := make([]model.Prize, 0, len(rows))
+	if !event.ExcludeFromPrize {
+		for _, r := range rows {
+			amount := computePrize(r.Result.Award, event.Level, len(rows), rules)
+			if amount <= 0 {
+				continue
+			}
+			pid := r.Result.PlayerID
+			prizes = append(prizes, model.Prize{
+				SeasonID: event.SeasonID, EventID: &event.ID, BoardID: &boardID,
+				PlayerID: &pid, Award: r.Result.Award, Amount: amount,
+				InstitutionName: r.Result.Institution,
+			})
+		}
+	}
+	return s.stores.Prizes.ReplacePendingForEventBoard(ctx, tx, event.ID, boardID, prizes)
 }
 
 // recompute 重算榜单积分、资格与赛季机构榜（须在事务内调用）。
@@ -363,6 +395,11 @@ func normalizeAward(award string) string {
 		return model.AwardThird
 	}
 	return award
+}
+
+// isPublishableScoreRow 判断预览行是否已有确定的选手档案（含导入时新建）。
+func isPublishableScoreRow(r model.ScorePreviewRowResult) bool {
+	return (r.MatchStatus == "matched" || r.MatchStatus == "created") && r.PlayerID != nil
 }
 
 func strPtrOrNil(s string) *string {

@@ -36,17 +36,23 @@ type ScorePreviewRowResult struct {
 	IDCardMasked    *string `json:"id_card_masked"`
 	Award           *string `json:"award"`
 	AdvancedToFinal bool    `json:"advanced_to_final"`
-	MatchStatus     string  `json:"match_status"` // matched / unmatched
-	PlayerID        *int64  `json:"player_id"`
-	Remark          *string `json:"remark"`
+	// match_status：matched（命中已有档案）/ created（导入时新建）/ new（待新建，仅预览有错误行时出现）/
+	// unmatched（无法匹配或建档）。
+	MatchStatus string  `json:"match_status"`
+	PlayerID    *int64  `json:"player_id"`
+	Remark      *string `json:"remark"`
+	Error       *string `json:"error,omitempty"`
 }
 
 // ScorePreviewResponse 是预览结果。
 type ScorePreviewResponse struct {
-	TotalRows int                     `json:"total_rows"`
-	Matched   int                     `json:"matched"`
-	Unmatched int                     `json:"unmatched"`
-	Rows      []ScorePreviewRowResult `json:"rows"`
+	TotalRows   int                     `json:"total_rows"`
+	Matched     int                     `json:"matched"`
+	Created     int                     `json:"created"`
+	Errors      int                     `json:"errors"`
+	Unmatched   int                     `json:"unmatched"` // 兼容字段：等于 errors
+	ImportBatch string                  `json:"import_batch,omitempty"`
+	Rows        []ScorePreviewRowResult `json:"rows"`
 }
 
 // PublishScoresRequest 是确认发布成绩的请求体（rows 用预览结果）。
