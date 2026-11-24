@@ -50,6 +50,9 @@ func validate(cfg *Config) error {
 	if cfg.Scheduler.RefundWatchdogMinutes <= 0 {
 		return fmt.Errorf("配置文件 scheduler.refund_watchdog_minutes=%d 必须为正整数（分钟）", cfg.Scheduler.RefundWatchdogMinutes)
 	}
+	if cfg.Scheduler.MaterialCleanupDelayHours < 0 {
+		return fmt.Errorf("配置文件 scheduler.material_cleanup_delay_hours=%d 不能为负数（小时）", cfg.Scheduler.MaterialCleanupDelayHours)
+	}
 	if err := normalizePublicBaseURL(cfg); err != nil {
 		return err
 	}

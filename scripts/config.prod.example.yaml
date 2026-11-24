@@ -28,6 +28,8 @@ scheduler:
   status_tick_seconds: 60
   order_expire_minutes: 15
   refund_watchdog_minutes: 10
+  # 赛后媒体清理宽限期（小时）：删除 uploads/{event_id}/ 前留出的归档时间
+  material_cleanup_delay_hours: 72
 
 sms:
   # 抽签提醒/结果短信：生产保持 false，凭据只经环境变量注入

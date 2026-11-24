@@ -77,6 +77,8 @@ type SchedulerConfig struct {
 	StatusTickSeconds     int `mapstructure:"status_tick_seconds"`
 	OrderExpireMinutes    int `mapstructure:"order_expire_minutes"`
 	RefundWatchdogMinutes int `mapstructure:"refund_watchdog_minutes"`
+	// MaterialCleanupDelayHours 是赛事结束后删除媒体文件的宽限期（小时，S5-3）。
+	MaterialCleanupDelayHours int `mapstructure:"material_cleanup_delay_hours"`
 }
 
 // SMSConfig 是抽签短信的非敏感开关；阿里云凭据只从环境变量读取。

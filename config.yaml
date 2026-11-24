@@ -34,6 +34,9 @@ scheduler:
   order_expire_minutes: 15
   # 退款卡死判定窗口（分钟）：超时无回调时主动查询微信退款单
   refund_watchdog_minutes: 10
+  # 赛后媒体清理宽限期（小时）：赛事 finished 后超过该时长才删除上传资料；
+  # 清理前请先用「导出媒体资源」归档（0 表示下一轮立即清理）
+  material_cleanup_delay_hours: 72
 
 sms:
   # 抽签提醒/结果短信：true 时只记录脱敏日志、不调用阿里云（本地联调用）。

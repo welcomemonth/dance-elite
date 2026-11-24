@@ -91,9 +91,10 @@ func defaultConfig() *Config {
 			InitUsername: "admin",
 		},
 		Scheduler: SchedulerConfig{
-			StatusTickSeconds:     60,
-			OrderExpireMinutes:    15,
-			RefundWatchdogMinutes: 10,
+			StatusTickSeconds:         60,
+			OrderExpireMinutes:        15,
+			RefundWatchdogMinutes:     10,
+			MaterialCleanupDelayHours: 72,
 		},
 	}
 }
