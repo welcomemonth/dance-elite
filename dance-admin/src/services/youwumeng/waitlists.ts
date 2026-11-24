@@ -49,9 +49,9 @@ export async function convertWaitlist(
   });
 }
 
-/** 导出当前队列（含电话），*待定*：export=true 文件流 */
+/** GET /api/v1/admin/waitlists/export（按当前筛选导出 Excel，S5-7） */
 export async function exportWaitlists(params: Omit<WaitlistListParams, 'page' | 'page_size'>): Promise<void> {
-  return downloadFile('/api/v1/admin/waitlists', { ...params, export: true });
+  return downloadFile('/api/v1/admin/waitlists/export', params);
 }
 
 /** POST /api/v1/admin/manual-registrations */

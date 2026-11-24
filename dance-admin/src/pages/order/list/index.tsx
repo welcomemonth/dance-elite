@@ -1,7 +1,7 @@
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import type { ActionType, ProColumns, ProFormInstance } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { history, useSearchParams } from '@umijs/max';
-import { Space, Switch, Tag, Typography } from 'antd';
+import { history, useAccess, useSearchParams } from '@umijs/max';
+import { App, Button, Space, Switch, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import { formatDateTime, formatMoney } from '@/services/youwumeng/format';
 import {
@@ -10,7 +10,7 @@ import {
   ORDER_SOURCE_LABELS,
   ORDER_STATUS_LABELS,
 } from '@/services/youwumeng/labels';
-import { listOrders } from '@/services/youwumeng/orders';
+import { listOrders, exportOrders } from '@/services/youwumeng/orders';
 import { listEvents } from '@/services/youwumeng/events';
 import type {
   AgeLevel,
@@ -30,11 +30,35 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
 
 const OrderList: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
+  const formRef = useRef<ProFormInstance>(undefined);
+  const access = useAccess();
+  const { message } = App.useApp();
   const [searchParams] = useSearchParams();
   const urlEventId = searchParams.get('event_id')
     ? Number(searchParams.get('event_id'))
     : undefined;
   const [includeCanceled, setIncludeCanceled] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      const values = (await formRef.current?.validateFields()) ?? {};
+      const paidRange = values.paid_range as [string, string] | undefined;
+      await exportOrders({
+        event_id: values.event_id,
+        level: values.level,
+        dance_type: values.dance_type,
+        status: values.status,
+        source: values.source,
+        include_canceled: includeCanceled,
+        paid_from: paidRange?.[0],
+        paid_to: paidRange?.[1],
+        keyword: values.order_no || values.player_name,
+      });
+      message.success('导出已开始，请查看浏览器下载');
+    } catch {
+      message.error('导出失败，请稍后重试');
+    }
+  };
 
   const columns: ProColumns<OrderBrief>[] = [
     {
@@ -169,6 +193,7 @@ const OrderList: React.FC = () => {
         headerTitle="订单管理"
         rowKey="order_no"
         actionRef={actionRef}
+        formRef={formRef}
         columns={columns}
         form={{ initialValues: { event_id: urlEventId } }}
         search={{ labelWidth: 'auto' }}
@@ -191,6 +216,13 @@ const OrderList: React.FC = () => {
         }}
         pagination={{ defaultPageSize: 20 }}
         toolBarRender={() => [
+          ...(access.canAdmin
+            ? [
+                <Button key="export" onClick={handleExport}>
+                  导出订单
+                </Button>,
+              ]
+            : []),
           <span key="canceled">
             显示已取消（对账）
             <Switch

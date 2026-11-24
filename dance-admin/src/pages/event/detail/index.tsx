@@ -36,6 +36,7 @@ import {
   exportEventRegistrations,
   listAdminRegistrations,
 } from '@/services/youwumeng/registrations';
+import { exportEventMaterialsArchive } from '@/services/youwumeng/materials';
 import type { AdminRegistrationItem, EventGroup } from '@/services/youwumeng/typings';
 
 const REGISTRATION_STATUS_LABELS: Record<AdminRegistrationItem['status'], string> = {
@@ -386,6 +387,19 @@ const EventDetail: React.FC = () => {
                               }}
                             >
                               导出选手名单
+                            </Button>,
+                            <Button
+                              key="archive"
+                              onClick={async () => {
+                                try {
+                                  await exportEventMaterialsArchive(event.id);
+                                  message.success('媒体归档已开始，请查看浏览器下载');
+                                } catch {
+                                  message.error('媒体归档失败，请稍后重试');
+                                }
+                              }}
+                            >
+                              导出媒体资源
                             </Button>,
                           ]
                         : []

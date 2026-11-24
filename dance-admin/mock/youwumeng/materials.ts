@@ -4,7 +4,7 @@
  */
 import type { Request, Response } from 'express';
 import { events, orders } from './_db';
-import { ok, paginate, toInt } from './_utils';
+import { fail, ok, paginate, toInt } from './_utils';
 
 const ITEM_KEYS = ['photo', 'audio', 'program_name', 'contact_phone'] as const;
 
@@ -44,6 +44,24 @@ function toEntry(o: (typeof orders)[number]) {
 }
 
 export default {
+  'GET /api/v1/admin/materials/missing/export': (req: Request, res: Response) => {
+    if (String(req.headers.authorization ?? '').includes('-cs-')) {
+      return fail(res, 40301, '客服不可导出');
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="materials-missing.csv"');
+    return res.send('﻿赛事,姓名,电话,缺失项\n示例赛事,张小雨,13800000000,audio\n');
+  },
+
+  'GET /api/v1/admin/events/:id/materials/archive': (req: Request, res: Response) => {
+    if (String(req.headers.authorization ?? '').includes('-cs-')) {
+      return fail(res, 40301, '客服不可导出');
+    }
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="materials.zip"');
+    return res.send('mock-zip');
+  },
+
   'GET /api/v1/admin/materials/missing': (req: Request, res: Response) => {
     if (req.query.export === 'true') {
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');

@@ -54,6 +54,13 @@ export default {
     return ok(res, paginate(req, list.map(orderToBrief)));
   },
 
+  'GET /api/v1/admin/orders/export': (req: Request, res: Response) => {
+    if (isCs(req)) return fail(res, 40301, '客服不可导出');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="orders.csv"');
+    return res.send('﻿订单号,赛事,姓名,金额(元),状态,来源,支付时间\nMOCK001,示例赛事,张小雨,980.00,paid,miniapp,2027-01-01T11:40:12+08:00\n');
+  },
+
   'GET /api/v1/admin/orders/:orderNo': (req: Request, res: Response) => {
     const order = orders.find((o) => o.order_no === req.params.orderNo);
     if (!order) return fail(res, 40401, '订单不存在');

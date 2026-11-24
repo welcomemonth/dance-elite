@@ -1,7 +1,7 @@
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import type { ActionType, ProColumns, ProFormInstance } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, useAccess, useSearchParams } from '@umijs/max';
-import { App, Modal, Space, Tag, Typography } from 'antd';
+import { App, Button, Modal, Space, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import {
   DANCE_TYPE_LABELS,
@@ -10,6 +10,7 @@ import {
 import { formatDateTime } from '@/services/youwumeng/format';
 import { listEvents } from '@/services/youwumeng/events';
 import {
+  exportMissingMaterials,
   listMissingMaterials,
   markMaterialContacted,
 } from '@/services/youwumeng/materials';
@@ -20,6 +21,7 @@ const MaterialsList: React.FC = () => {
   const { message } = App.useApp();
   const access = useAccess();
   const actionRef = useRef<ActionType>(null);
+  const formRef = useRef<ProFormInstance>(undefined);
   const [searchParams] = useSearchParams();
   const urlEventId = searchParams.get('event_id')
     ? Number(searchParams.get('event_id'))
@@ -120,12 +122,30 @@ const MaterialsList: React.FC = () => {
     },
   ];
 
+  const handleExport = async () => {
+    try {
+      const values = (await formRef.current?.validateFields()) ?? {};
+      await exportMissingMaterials({
+        event_id: values.event_id,
+        level: values.level as MissingMaterialEntry['level'],
+        dance_type: values.dance_type as MissingMaterialEntry['dance_type'],
+        missing_item: values.missing_item as MissingItem | undefined,
+        deadline_state: values.deadline_state as 'open' | 'closed' | undefined,
+        keyword: values.player_name as string | undefined,
+      });
+      message.success('导出已开始，请查看浏览器下载');
+    } catch {
+      message.error('导出失败，请稍后重试');
+    }
+  };
+
   return (
     <PageContainer title={false}>
       <ProTable<MissingMaterialEntry>
         headerTitle="未传齐资料名单"
         rowKey="registration_id"
         actionRef={actionRef}
+        formRef={formRef}
         columns={columns}
         form={{ initialValues: { event_id: urlEventId } }}
         search={{ labelWidth: 'auto' }}
@@ -143,6 +163,15 @@ const MaterialsList: React.FC = () => {
           return { data: data.list, total: data.total, success: true };
         }}
         pagination={{ defaultPageSize: 20 }}
+        toolBarRender={() =>
+          access.canAdmin
+            ? [
+                <Button key="export" onClick={handleExport}>
+                  导出催收名单
+                </Button>,
+              ]
+            : []
+        }
       />
       <Modal
         title={`标记已联系：${contactTarget?.player_name ?? ''}`}

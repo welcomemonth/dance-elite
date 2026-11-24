@@ -40,7 +40,7 @@ export async function revealPhone(orderNo: string): Promise<{ contact_phone: str
   return request(`/api/v1/admin/orders/${orderNo}/reveal-phone`, { method: 'POST' });
 }
 
-/** GET /api/v1/admin/orders?export=true 导出 csv 文件流 */
+/** GET /api/v1/admin/orders/export（按当前筛选导出 Excel，S5-6） */
 export async function exportOrders(params: Omit<OrderListParams, 'page' | 'page_size'>): Promise<void> {
-  return downloadFile('/api/v1/admin/orders', { ...params, export: true });
+  return downloadFile('/api/v1/admin/orders/export', params);
 }

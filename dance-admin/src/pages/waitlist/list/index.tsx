@@ -24,6 +24,7 @@ import {
 import { listEvents } from '@/services/youwumeng/events';
 import {
   convertWaitlist,
+  exportWaitlists,
   listWaitlists,
   notifyWaitlist,
   removeWaitlist,
@@ -80,6 +81,21 @@ const WaitlistList: React.FC = () => {
   const closeModal = () => {
     setModal(null);
     setModalValue('');
+  };
+
+  const handleExport = async () => {
+    try {
+      const values = (await formRef.current?.validateFields()) ?? {};
+      await exportWaitlists({
+        event_id: values.event_id,
+        level: values.level as AgeLevel | undefined,
+        dance_type: values.dance_type as DanceType | undefined,
+        status: values.status as WaitlistStatus | undefined,
+      });
+      message.success('导出已开始，请查看浏览器下载');
+    } catch {
+      message.error('导出失败，请稍后重试');
+    }
   };
 
   const handleNotify = async () => {
@@ -239,6 +255,15 @@ const WaitlistList: React.FC = () => {
           return { data: data.list, total: data.total, success: true };
         }}
         pagination={{ defaultPageSize: 20 }}
+        toolBarRender={() =>
+          access.canAdmin
+            ? [
+                <Button key="export" onClick={handleExport}>
+                  导出候补队列
+                </Button>,
+              ]
+            : []
+        }
       />
 
       <Modal

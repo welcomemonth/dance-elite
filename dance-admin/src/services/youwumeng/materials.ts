@@ -31,11 +31,19 @@ export async function markMaterialContacted(
   });
 }
 
-/** 导出催收名单（含电话），export=true 文件流 */
+/** GET /api/v1/admin/materials/missing/export（按当前筛选导出 Excel，S5-7） */
 export async function exportMissingMaterials(
   params: Omit<MissingMaterialParams, 'page' | 'page_size'>,
 ): Promise<void> {
-  return downloadFile('/api/v1/admin/materials/missing', { ...params, export: true });
+  return downloadFile('/api/v1/admin/materials/missing/export', params);
+}
+
+/** GET /api/v1/admin/events/{event_id}/materials/archive（媒体资源 zip，S5-1） */
+export async function exportEventMaterialsArchive(
+  eventId: number,
+  params?: { player_nos?: string; include_canceled?: boolean },
+): Promise<void> {
+  return downloadFile(`/api/v1/admin/events/${eventId}/materials/archive`, params, `materials_${eventId}.zip`);
 }
 
 /** GET /api/v1/admin/events/{event_id}/registrations/export 导出选手名单 */

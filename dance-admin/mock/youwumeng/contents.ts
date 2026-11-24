@@ -22,4 +22,22 @@ export default {
     entry.updated_at = new Date().toISOString();
     return ok(res, { key: req.params.key, ...entry });
   },
+
+  'POST /api/v1/admin/contents/:key/image': (req: Request, res: Response) => {
+    const entry = contents[req.params.key as keyof typeof contents];
+    if (!entry) return fail(res, 40401, '内容键未注册');
+    if (req.params.key !== 'official_account') return fail(res, 40001, '该内容项不支持图片上传');
+    if (String(req.headers.authorization ?? '').includes('-cs-')) {
+      return fail(res, 40301, '客服不可修改内容');
+    }
+    entry.value = { ...entry.value, image_url: '/assets/images/gzh.jpg' };
+    entry.updated_at = new Date().toISOString();
+    return ok(res, { key: req.params.key, ...entry });
+  },
+
+  'GET /api/v1/contents/:key': (req: Request, res: Response) => {
+    const entry = contents[req.params.key as keyof typeof contents];
+    if (!entry) return fail(res, 40401, '内容配置不存在');
+    return ok(res, { key: req.params.key, ...entry });
+  },
 };

@@ -6,15 +6,17 @@ import {
   Button,
   Card,
   DatePicker,
+  Flex,
   Form,
   Image,
   Input,
   Menu,
   Space,
+  Upload,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useState } from 'react';
-import { getContent, putContent } from '@/services/youwumeng/contents';
+import { getContent, putContent, uploadContentImage } from '@/services/youwumeng/contents';
 import type { ContentKey } from '@/services/youwumeng/typings';
 
 const KEYS: { key: ContentKey; label: string }[] = [
@@ -109,17 +111,40 @@ const Contents: React.FC = () => {
                 <Input.TextArea rows={active === 'event_faq' ? 12 : 6} />
               </Form.Item>
               {active === 'official_account' && (
-                <Form.Item name="image_url" label="公众号二维码图片 URL">
-                  <Input placeholder="图片地址（如 /qrcode.png）" />
-                </Form.Item>
-              )}
-              {active === 'official_account' && (
-                <Form.Item noStyle shouldUpdate>
-                  {({ getFieldValue }) =>
-                    getFieldValue('image_url') ? (
-                      <Image width={160} src={getFieldValue('image_url')} alt="公众号二维码预览" />
-                    ) : null
-                  }
+                <Form.Item label="公众号二维码图片">
+                  <Flex vertical gap={12}>
+                    <Upload
+                      accept="image/png,image/jpeg"
+                      showUploadList={false}
+                      customRequest={async ({ file, onSuccess, onError }) => {
+                        try {
+                          const entry = await uploadContentImage('official_account', file as File);
+                          form.setFieldValue('image_url', entry.value.image_url);
+                          message.success('二维码已上传并保存');
+                          onSuccess?.(entry);
+                        } catch (error) {
+                          message.error('上传失败，请稍后重试');
+                          onError?.(error as Error);
+                        }
+                      }}
+                    >
+                      <Button>上传二维码图片（png/jpg，≤2MB）</Button>
+                    </Upload>
+                    <Form.Item noStyle shouldUpdate>
+                      {({ getFieldValue }) =>
+                        getFieldValue('image_url') ? (
+                          <Image
+                            width={160}
+                            src={getFieldValue('image_url')}
+                            alt="公众号二维码预览"
+                          />
+                        ) : null
+                      }
+                    </Form.Item>
+                  </Flex>
+                  <Form.Item name="image_url" hidden>
+                    <Input />
+                  </Form.Item>
                 </Form.Item>
               )}
               {active === 'announcement' && (

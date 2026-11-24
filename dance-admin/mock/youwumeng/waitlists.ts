@@ -45,6 +45,13 @@ export default {
     });
   },
 
+  'GET /api/v1/admin/waitlists/export': (req: Request, res: Response) => {
+    if (isCs(req)) return fail(res, 40301, '客服不可导出');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="waitlists.csv"');
+    return res.send('﻿序号,姓名,电话,状态\n1,示例,13800000000,waiting\n');
+  },
+
   'POST /api/v1/admin/waitlists/:id/notify': (req: Request, res: Response) => {
     if (isCs(req)) return fail(res, 40301, '无权限');
     const entry = waitlists.find((w) => w.waitlist_id === toInt(req.params.id));
