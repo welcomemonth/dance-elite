@@ -12,6 +12,7 @@ import {
 import {
   Alert,
   App,
+  Button,
   Card,
   Form,
   Input,
@@ -19,12 +20,15 @@ import {
   Select,
   Space,
   Typography,
+  Upload,
 } from 'antd';
 import React, { useState } from 'react';
 import { listEvents } from '@/services/youwumeng/events';
 import { AWARD_OPTIONS, boardLabel } from '@/services/youwumeng/labels';
 import {
   correctScore,
+  downloadScoreTemplate,
+  importScoresExcel,
   listScoreEntries,
   listSeasons,
   previewScores,
@@ -61,8 +65,34 @@ const ScoreEntry: React.FC = () => {
     danceType: DanceType;
   } | null>(null);
   const [preview, setPreview] = useState<ScorePreview | null>(null);
+  const [importBatch, setImportBatch] = useState<string | undefined>();
+  const [importing, setImporting] = useState(false);
   const [correctTarget, setCorrectTarget] = useState<ScoreEntryRow | null>(null);
   const [correctForm] = Form.useForm<{ award?: string; remark?: string }>();
+
+  const handleUpload = async (file: File) => {
+    if (!selection) {
+      message.warning('请先完成上一步，选择赛事与榜单');
+      return false;
+    }
+    setImporting(true);
+    try {
+      const result = await importScoresExcel(
+        selection.eventId,
+        selection.level,
+        selection.danceType,
+        file,
+      );
+      setPreview(result);
+      setImportBatch(result.import_batch);
+      message.success(
+        `已解析：匹配 ${result.matched}，新建 ${result.created}，错误 ${result.errors}`,
+      );
+    } finally {
+      setImporting(false);
+    }
+    return false;
+  };
 
   const previewColumns: ProColumns<ScorePreview['rows'][number]>[] = [
     { title: '行号', dataIndex: 'row_no', width: 70 },
@@ -71,26 +101,28 @@ const ScoreEntry: React.FC = () => {
     {
       title: '匹配',
       dataIndex: 'match_status',
-      width: 90,
-      render: (_, r) =>
-        r.match_status === 'matched' ? (
-          <Typography.Text type="success">成功</Typography.Text>
-        ) : (
-          <Typography.Text type="danger">未匹配</Typography.Text>
-        ),
+      width: 110,
+      render: (_, r) => {
+        switch (r.match_status) {
+          case 'matched':
+            return <Typography.Text type="success">已匹配</Typography.Text>;
+          case 'created':
+            return <Typography.Text type="success">已新建</Typography.Text>;
+          case 'new':
+            return <Typography.Text type="warning">待建档</Typography.Text>;
+          default:
+            return <Typography.Text type="danger">错误</Typography.Text>;
+        }
+      },
     },
-    {
-      title: '奖项',
-      dataIndex: 'award',
-      render: (_, r) =>
-        AWARD_OPTIONS.find((a) => a.value === r.award)?.label ?? '-',
-    },
+    { title: '奖项', dataIndex: 'award', render: (_, r) => AWARD_OPTIONS.find((a) => a.value === r.award)?.label ?? '-' },
     {
       title: '晋级决赛',
       dataIndex: 'advanced_to_final',
       render: (_, r) => (r.advanced_to_final ? '是' : '-'),
     },
     { title: '备注', dataIndex: 'remark' },
+    { title: '错误原因', dataIndex: 'error', render: (_, r) => r.error ?? '-' },
   ];
 
   return (
@@ -99,11 +131,16 @@ const ScoreEntry: React.FC = () => {
         <StepsForm
           onFinish={async () => {
             if (!selection || !preview) return false;
+            if (preview.errors > 0) {
+              message.error('存在无法匹配/建档的行，请修正 Excel 后重新导入');
+              return false;
+            }
             await publishScores(
               selection.eventId,
               selection.level,
               selection.danceType,
               preview.rows,
+              importBatch,
             );
             message.success('已发布，小程序端榜单即时更新');
             return true;
@@ -126,6 +163,8 @@ const ScoreEntry: React.FC = () => {
                 level: board.level,
                 danceType: board.dance_type,
               });
+              setPreview(null);
+              setImportBatch(undefined);
               return true;
             }}
           >
@@ -175,7 +214,8 @@ const ScoreEntry: React.FC = () => {
                 remark?: string;
               }[];
               if (rows.length === 0) {
-                message.warning('请至少录入一行成绩');
+                if (preview) return true;
+                message.warning('请上传成绩 Excel 或至少录入一行成绩');
                 return false;
               }
               const result = await previewScores(
@@ -185,17 +225,38 @@ const ScoreEntry: React.FC = () => {
                 { rows },
               );
               setPreview(result);
+              setImportBatch(undefined);
               return true;
             }}
           >
-            <Typography.Title level={5}>
-              在线逐行录入（辅助方式）
-            </Typography.Title>
+            <Typography.Title level={5}>上传成绩 Excel（主要方式）</Typography.Title>
             <Typography.Paragraph type="secondary">
-              主要方式为上传固定格式成绩
-              Excel（模板列：姓名、证件号、奖项），按证件号唯一匹配选手； mock
-              阶段请使用在线录入，Excel 解析在接入真实后端后启用。
+              模板列：姓名、证件号、奖项、晋级决赛（可选）、备注（可选）。按证件号唯一匹配选手；
+              全部行无错误时，大陆身份证选手会自动建档（其他证件请先在人工报名建档）。
             </Typography.Paragraph>
+            <Space style={{ marginBottom: 16 }}>
+              <Upload
+                accept=".xlsx"
+                showUploadList={false}
+                beforeUpload={(file) => handleUpload(file)}
+              >
+                <Button loading={importing}>上传成绩 Excel</Button>
+              </Upload>
+              <Button
+                onClick={() => selection && downloadScoreTemplate(selection.eventId)}
+              >
+                下载导入模板
+              </Button>
+            </Space>
+            {preview && (
+              <Alert
+                type={preview.errors > 0 ? 'warning' : 'success'}
+                showIcon
+                style={{ marginBottom: 16 }}
+                title={`已解析 ${preview.total_rows} 行：匹配 ${preview.matched}，新建 ${preview.created}，错误 ${preview.errors}`}
+              />
+            )}
+            <Typography.Title level={5}>在线逐行录入（辅助方式）</Typography.Title>
             <ProFormList
               name="rows"
               copyIconProps={false}
@@ -230,7 +291,7 @@ const ScoreEntry: React.FC = () => {
                   type="warning"
                   showIcon
                   style={{ marginBottom: 12 }}
-                  title={`共 ${preview.total_rows} 行：匹配成功 ${preview.matched}，未匹配 ${preview.unmatched}。未匹配行发布前请修正证件号或手动建档。`}
+                  title={`共 ${preview.total_rows} 行：匹配成功 ${preview.matched}，新建 ${preview.created}，错误 ${preview.errors}。错误行需修正后重新导入。`}
                 />
                 <ProTable<ScorePreview['rows'][number]>
                   rowKey="row_no"

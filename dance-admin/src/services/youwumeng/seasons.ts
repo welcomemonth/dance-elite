@@ -1,4 +1,5 @@
 import { request } from '@umijs/max';
+import { downloadFile } from './download';
 import type {
   AgeLevel,
   DanceType,
@@ -83,7 +84,7 @@ export interface ScorePreviewInput {
   }[];
 }
 
-/** 解析预览：Excel 内容（前端解析后上传行数据）或在线录入行，按证件号匹配选手 */
+/** 解析预览：JSON 行数据（在线录入），按证件号/姓名匹配已有选手。 */
 export async function previewScores(
   eventId: number,
   level: AgeLevel,
@@ -97,16 +98,38 @@ export async function previewScores(
   });
 }
 
+/** 上传成绩 Excel：解析、匹配/建档选手并返回预览（不写成绩）。 */
+export async function importScoresExcel(
+  eventId: number,
+  level: AgeLevel,
+  danceType: DanceType,
+  file: File,
+): Promise<ScorePreview> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  return request(`/api/v1/admin/events/${eventId}/scores/import`, {
+    method: 'POST',
+    params: { level, dance_type: danceType },
+    data: form,
+  } as never) as unknown as Promise<ScorePreview>;
+}
+
+/** 下载成绩导入模板（xlsx）。 */
+export async function downloadScoreTemplate(eventId: number): Promise<void> {
+  return downloadFile(`/api/v1/admin/events/${eventId}/scores/template`);
+}
+
 /** 确认发布成绩（二次确认后写入并触发积分重算） */
 export async function publishScores(
   eventId: number,
   level: AgeLevel,
   danceType: DanceType,
   rows: ScorePreview['rows'],
+  importBatch?: string,
 ): Promise<{ published: number }> {
   return request(`/api/v1/admin/events/${eventId}/scores`, {
     method: 'POST',
-    params: { level, dance_type: danceType },
+    params: { level, dance_type: danceType, import_batch: importBatch },
     data: { rows },
   });
 }
@@ -219,6 +242,15 @@ export async function listPrizeStatements(params: PrizeStatementParams): Promise
   total_amount: number;
 }> {
   return request('/api/v1/admin/prize-statements', { method: 'GET', params });
+}
+
+/** 导出奖金发放表（xlsx，财务对账） */
+export async function exportPrizeStatements(params: {
+  season_id: number;
+  event_id?: number;
+  status?: string;
+}): Promise<void> {
+  return downloadFile('/api/v1/admin/prize-statements/export', params);
 }
 
 /** 人工微调奖金金额（留痕） */

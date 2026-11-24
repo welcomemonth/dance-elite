@@ -26,6 +26,7 @@ import { listEvents } from '@/services/youwumeng/events';
 import { formatDateTime, formatMoney } from '@/services/youwumeng/format';
 import {
   adjustPrizeStatement,
+  exportPrizeStatements,
   getPrizeRules,
   listPrizeStatements,
   listSeasons,
@@ -76,6 +77,11 @@ const Prizes: React.FC = () => {
       .filter((i) => i.paid)
       .reduce((s, i) => s + i.adjusted_amount, 0),
     unpaid_count: items.filter((i) => !i.paid).length,
+  };
+
+  const handleExport = async () => {
+    await exportPrizeStatements({ season_id: seasonId, event_id: eventId });
+    message.success('发放表已导出');
   };
 
   const columns: ProColumns<PrizeStatementItem>[] = [
@@ -200,6 +206,7 @@ const Prizes: React.FC = () => {
               }
             />
             <Button onClick={() => setRulesOpen(true)}>奖金规则配置</Button>
+            <Button onClick={handleExport}>导出发放表</Button>
           </Space>
         }
       >

@@ -156,16 +156,24 @@ const WaitlistList: React.FC = () => {
     },
     { title: '机构', dataIndex: 'institution', width: 130, search: false, render: (v) => v || '-' },
     { title: '联系电话', dataIndex: 'phone', width: 120, search: false },
+    { title: '赛事', dataIndex: 'event_name', width: 200, search: false },
+    {
+      title: '赛事筛选',
+      dataIndex: 'event_id',
+      hideInTable: true,
+      valueType: 'select',
+      request: async () => eventOptions ?? [],
+    },
     {
       title: '组别',
       dataIndex: 'level',
-      hideInTable: true,
+      width: 80,
       valueEnum: Object.fromEntries(AGE_LEVEL_OPTIONS.map((l) => [l, { text: l }])),
     },
     {
       title: '舞种',
       dataIndex: 'dance_type',
-      hideInTable: true,
+      width: 110,
       valueEnum: Object.fromEntries(
         Object.entries(DANCE_TYPE_LABELS).map(([value, label]) => [value, { text: label }]),
       ),

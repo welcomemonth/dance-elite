@@ -601,15 +601,19 @@ export interface ScorePreviewRow {
   id_card_masked: string | null;
   award: Award | null;
   advanced_to_final: boolean;
-  match_status: 'matched' | 'unmatched';
+  match_status: 'matched' | 'created' | 'new' | 'unmatched';
   player_id: number | null;
   remark: string | null;
+  error?: string;
 }
 
 export interface ScorePreview {
   total_rows: number;
   matched: number;
+  created: number;
+  errors: number;
   unmatched: number;
+  import_batch?: string;
   rows: ScorePreviewRow[];
 }
 
