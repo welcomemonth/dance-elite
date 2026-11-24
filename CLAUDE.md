@@ -55,7 +55,7 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 
 配置分两处，互不混用（无命令行参数）：
 
-- **非敏感运行参数**：viper 读取 `config.yaml`（`CONFIG_FILE` 可指定路径，默认仓库根文件）。字段：`server.port` / `server.public_base_url` / `server.slow_request_ms`、`storage.db_path` / `storage.upload_dir`、`log.level` / `log.format`、`auth.jwt_expire_seconds`、`admin.init_username`、`scheduler.status_tick_seconds` / `order_expire_minutes` / `refund_watchdog_minutes`、`sms.mock`。生产挂载独立 `config.yaml`（镜像不内置）。
+- **非敏感运行参数**：viper 读取 `config.yaml`（`CONFIG_FILE` 可指定路径，默认仓库根文件）。字段：`server.port` / `server.public_base_url` / `server.slow_request_ms`、`storage.db_path` / `storage.upload_dir`、`log.level` / `log.format`、`auth.jwt_expire_seconds`、`admin.init_username`、`scheduler.status_tick_seconds` / `order_expire_minutes` / `refund_watchdog_minutes` / `material_cleanup_delay_hours`、`sms.mock`。生产挂载独立 `config.yaml`（镜像不内置）。
 - **密钥与微信账户**：只来自环境变量；本地由 godotenv 读取 `.env`（已存在的环境变量优先），生产由容器注入。始终必需 `JWT_SECRET`、`ID_CARD_HMAC_KEY`、`WECHAT_APPID`、`WECHAT_SECRET`、`ADMIN_INIT_PASSWORD`。微信支付固定公钥验签模式：另需 `WECHAT_MCHID`、`WECHAT_MCH_SERIAL_NO`、`WECHAT_PAY_PUBLIC_KEY_ID`、`WECHAT_PAY_API_V3_KEY`（32 字节）、`WECHAT_PAY_PRIVATE_KEY_FILE`、`WECHAT_PAY_PUBLIC_KEY_FILE`（PEM 只接受文件路径，不接受内联文本）。抽签短信（可选，阿里云）：`SMS_ACCESS_KEY_ID` + `SMS_ACCESS_KEY_SECRET` + `SMS_SIGN_NAME` 三项齐全才启用，`sms.mock=true` 时只打脱敏日志。
 - **`APP_ENV=dev|prod`**（默认 prod）：dev 下支付材料缺失/不可读时自动回退 mock；prod 下同类问题启动即 fail-fast。无 `DEBUG` / `PAY_MOCK` 开关；`log.level=debug` 时 Gin 使用 debug 模式。
 - **派生**：微信支付回调地址 = `server.public_base_url` + `/api/v1/payments/wechat/notify`（退款为 `/refund-notify`），不再单独配置；音频审核与抽签外链同源。`public_base_url` 在 prod 必填，短信里的抽签链接也用它拼接。
@@ -114,7 +114,7 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 - 音频审核页：每赛事一个免登录 H5，按 `audio_review_token` 访问
 - 舞种仅古典舞（`classical`）和民族民间舞（`folk`）；年龄组 U11/U13/U15 按出生年自动判定
 - 支付：提交报名即创建订单并拉起微信支付；关闭/返回则订单取消消失但留档；小程序端无自助退款，需客服登记 + 管理员后台人工退款
-- 赛事状态按时间线自动流转（进程内单调度器，`scheduler.status_tick_seconds` 默认每 60s，启动先跑一轮）：`reg_end_at` → reg_closed、`start_at` → ongoing、比赛日期（event_date）与 start_at 中较晚一天的次日 00:00 → finished；只前进不回退，未发布赛事不自动发布；待支付订单 `scheduler.order_expire_minutes`（默认 15 分钟）超时（先查单补结账，确认未支付才取消，`cancel_reason=system`）；退款工单 `processing`/`approved` 超过 `scheduler.refund_watchdog_minutes`（默认 10 分钟）无回调时由看门狗查微信退款单（mock 网关下跳过）
+- 赛事状态按时间线自动流转（进程内单调度器，`scheduler.status_tick_seconds` 默认每 60s，启动先跑一轮）：`reg_end_at` → reg_closed、`start_at` → ongoing、比赛日期（event_date）与 start_at 中较晚一天的次日 00:00 → finished；只前进不回退，未发布赛事不自动发布；待支付订单 `scheduler.order_expire_minutes`（默认 15 分钟）超时（先查单补结账，确认未支付才取消，`cancel_reason=system`）；退款工单 `processing`/`approved` 超过 `scheduler.refund_watchdog_minutes`（默认 10 分钟）无回调时由看门狗查微信退款单（mock 网关下跳过）；赛事 `finished` 超过 `scheduler.material_cleanup_delay_hours`（默认 72h）后由清理任务删除 `uploads/{event_id}/`、媒体路径置 NULL（保留文本与头像），并写 `events.materials_cleaned_at` 保证幂等
 - 一人同一赛事限报 1 个组别、可报多个舞种；不支持批量代报
 
 ## Backend Rules (Go)
@@ -164,4 +164,4 @@ ELITE_CONFIG_FILE=/etc/dance-elite/config.yaml docker compose -f scripts/docker-
 - 抽签时间窗口与短信：session 含 `start_at`/`end_at`/`remind_before_minutes`/`sms_*_template`；未到开始时间禁止抽签，截止后未抽选手由 `LotterySweeper`（定时任务）自动分配；截止前提醒、截止后自动分配结果通过阿里云短信通知。实现集中在 `internal/service/lottery_{service,schedule,notify,sweeper,admin,admin_export}.go`、`internal/router/{lottery,admin_lottery}.go`、`internal/store/lottery_store.go` 与 `internal/pkg/sms/`。旧 JSON 抽签数据不做迁移（`data/lottery/` 仅作历史参考）。
 - 现有基础：SQLite 数据层（`store/db.go` WAL 单连接池、`migrate.go` 版本化迁移、`tx.go` 事务）、`pkg/httpx` 统一响应与错误码、`middleware`（RequestID/AccessLog/Recovery）、`server` 优雅关闭。测试基线：`go test ./...` 全绿。
 - 小程序工程模板位于 `miniprogram-ts/`（Annil + TypeScript + MobX）：TypeScript 由微信开发者工具的 `useCompilerPlugins` 编译，`pnpm typecheck` 做类型检查；已含统一请求层、登录态 store、全局注入，以及缓存、分页列表（下拉刷新/上拉加载）、格式化、上传/图片工具与示例页面/组件。后续小程序页面在此基础上新增。
-- 业务代码（model/service/各端 handler）已完成报名/支付/退款/候补/资料/后台查询主链路（T1–T19、T32、T34、T35）；管理端 22 页主体完成（T22–T27），小程序主链路完成（T18–T21），榜单模块（T28–T31）未开始。逐项差异见 `docs/文档与实现差异清单.md`，后续顺序见 `docs/后续开发计划.md`。模型以 `docs/优舞盟报名功能/数据库表结构设计.md` v3 为准；数据访问为 `database/sql` 手写 SQL，不是 GORM。
+- 业务代码（model/service/各端 handler）已完成报名/支付/退款/候补/资料/后台查询/榜单全链路：T1–T19、T32、T34、T35 与 T28–T31（S4 榜单模块）均已完成；管理端 22 页主体完成（T22–T27），小程序主链路与排行榜完成（T18–T21、S4-3）。逐项差异见 `docs/文档与实现差异清单.md`，后续顺序见 `docs/后续开发计划.md`。S5（2026-11-24）已完成：媒体归档 zip、赛后媒体清理、公开内容读取、公众号二维码图片上传、订单/候补/催收导出；小程序规则/公众号/公告改读 `/api/v1/contents/{key}`。模型以 `docs/优舞盟报名功能/数据库表结构设计.md` v3 为准；数据访问为 `database/sql` 手写 SQL，不是 GORM。

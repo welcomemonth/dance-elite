@@ -3,18 +3,19 @@
 > 配套文档：[报名功能设计](优舞盟报名功能.md)、[小程序页面与功能设计](../小程序页面/优舞盟小程序页面与功能设计.md)、[后台管理页面与功能设计](../后台管理/优舞盟后台管理页面与功能设计.md)、[数据库表结构设计](数据库表结构设计.md)。
 > 技术栈：Go + Gin，RESTful 风格。本文档覆盖**小程序端**、**后台管理端**、**免登录 H5** 三类接口。
 
-## 实现状态（2026-11-22 核对）
+## 实现状态（2026-11-24 核对）
 
 | 章节 | 状态 | 说明 |
 |---|---|---|
 | 1–5（认证、赛事、报名支付、资料、候补） | 已实现 | 3.1/3.1b/3.1c/3.3–3.6、4.1–4.3、5.1–5.3 均有路由 |
-| 6（榜单只读） | **未实现** | `/config`、`/ranking`、`/institution/ranking`、`/dancers/{entry_id}` 均无路由 |
-| 7（音频审核 H5） | 已实现 | — |
-| 8–11（管理端认证、看板、赛事、订单） | 已实现 | 10.x 的封面 `cover` 与编辑 `season_id` 未实现 |
+| 6（榜单只读） | 已实现 | S4：`/config`、`/ranking`、`/institution/ranking`、`/dancers/{entry_id}` 均已落地 |
+| 7（音频审核 H5） | 已实现 | 含 7.2/7.3 抽签 H5 与后台抽签 |
+| 8–11（管理端认证、看板、赛事、订单） | 已实现 | 10.x 的封面 `cover` 与编辑 `season_id` 未实现；11.1 导出见 `/orders/export` |
 | 11.4.3 退款错误码 | 已统一 | 订单状态不允许退款统一为 41013 |
-| 12.1–12.5 | 已实现 | — |
-| 12.6 媒体归档 | **未实现** | 无路由 |
+| 12.1–12.5 | 已实现 | 候补/催收导出为 S5-7 |
+| 12.6 媒体归档 | 已实现 | S5-1/S5-2 |
 | 13–14 | 已实现 | 14.2 日志导出未实现 |
+| 16 公开内容 | 已实现 | S5-4；13.4 图片上传为 S5-5 |
 
 > 逐条差异见 [文档与实现差异清单](../文档与实现差异清单.md)。
 
@@ -2229,7 +2230,8 @@ curl -X POST https://api.example.com/api/v1/admin/events/12/publish \
 - 自动流转写 `admin_logs`，`admin_id` 为空表示系统动作（action=`admin.event.auto_transition`）。
 - 后台手动操作仍然有效：手动「关闭报名」可提前把赛事置为 `reg_closed`，时间线不会把它推导回 `registering`；`offline` 为终止态。
 - 后台 `10.1` 的 `status` 筛选作用于落库状态（最长滞后一个调度周期，约 60 秒）；小程序端展示态实时推导，不受影响。
-- `finished` 后赛事不可再编辑、调名额、开关组别；T33 的赛后媒体清理以该状态为触发依据。
+- `finished` 后赛事不可再编辑、调名额、开关组别；赛后媒体清理以该状态为触发依据。
+- 同一调度器还执行赛后媒体清理（S5-3）：赛事 `finished` 且超过 `scheduler.material_cleanup_delay_hours`（默认 72 小时）后，删除 `uploads/{event_id}/`、把报名单 `photo_path`/`audio_path` 置 NULL（文本资料与 `uploads/avatars/` 保留），写审计日志（`admin.event.materials_cleaned`，`admin_id` 为空），并标记 `events.materials_cleaned_at` 保证幂等。**清理前请先用 12.6 导出媒体资源归档。**
 - 同一调度器还执行两轮兜底任务（同为无接口的系统动作）：
   - **待支付订单超时回收**：扫描 `status='pending_payment'` 且 `expire_at`（缺省按 `created_at` + `scheduler.order_expire_minutes`）已过的订单，先向微信查单——SUCCESS 补结账、失败终态取消（`pay_failed`）、确认未支付才系统取消（`cancel_reason=system`），查询失败本轮跳过不取消。
   - **退款看门狗**：`refund_tickets.status` 为 `processing` / `approved` 且超过 `scheduler.refund_watchdog_minutes`（默认 10 分钟）无回调时主动查微信退款单——SUCCESS 完成退款、CLOSED/ABNORMAL 置 `refund_failed` 并回退订单为 `paid`（可重试）、PROCESSING 或查询失败留待下轮。mock 网关下跳过（无真实退款单）。
@@ -2388,7 +2390,7 @@ curl -X POST https://api.example.com/api/v1/admin/events/12/audio-review-token \
 | source | string | 否 | miniapp / manual | — |
 | paid_from / paid_to | string | 否 | 支付时间范围（ISO8601 或 `YYYY-MM-DD`，日期按当天起止补全） | — |
 | keyword | string | 否 | 姓名 / 订单号 / 微信支付单号 | — |
-| export | bool | 否 | 预留：按当前筛选导出文件流（本期由 12.5 报名名单导出承担） | `false` |
+| export | bool | 否 | **已废弃**：改用 `GET /api/v1/admin/orders/export`（S5-6，同一筛选，admin+） | `false` |
 
 **请求示例**
 
@@ -2432,6 +2434,7 @@ curl "https://api.example.com/api/v1/admin/orders?event_id=12&status=paid&page=1
 - **证件号永不返回任何形态**（含脱敏）：系统仅存不可逆哈希，物理上无法还原；选手统一以 `player_no` 标识。
 - 待支付订单属于支付流程中间态，列表始终不展示；已取消订单默认不展示，`include_canceled=true` 或显式 `status=canceled` 时作为对账留档返回。
 - 已取消订单标注"留档"，只读不可修改。
+- **导出（S5-6）**：`GET /api/v1/admin/orders/export`，query 与列表一致（不含分页），返回 xlsx；列固定为订单号、微信支付单号、赛事、组别、舞种、选手编号、选手姓名、证件类型、金额(元)、状态、来源、支付时间、创建时间。仅 admin / super_admin（cs → 40301），导出记操作日志。
 
 ---
 
@@ -2864,6 +2867,8 @@ curl "https://api.example.com/api/v1/admin/waitlists?event_id=12&status=waiting"
 
 **错误码**：无。
 
+**导出（S5-7）**：`GET /api/v1/admin/waitlists/export`，query 与列表一致（不含分页），返回 xlsx；列固定为队列序号、姓名、证件号(脱敏)、机构、联系电话、状态、赛事、组别、舞种、提交时间、通知时间、处理时间。仅 admin / super_admin（cs → 40301），导出记操作日志。
+
 ### 12.2 标记已通知 / 移出队列 / 手动关联报名
 
 **接口概述**
@@ -2917,7 +2922,7 @@ curl -X POST https://api.example.com/api/v1/admin/waitlists/301/notify \
 | event_id / level / dance_type | — | 否 | 常规筛选 | — |
 | missing_item | string | 否 | photo / audio / program_name / contact_phone | `"audio"` |
 | deadline_state | string | 否 | `open`（未截止）/ `closed`（已截止锁定） | `open` |
-| export | bool | 否 | 预留：催收名单导出（本期未实现，名单导出见 12.5） | `false` |
+| export | bool | 否 | **已废弃**：改用 `GET /api/v1/admin/materials/missing/export`（S5-7，同一筛选，admin+） | `false` |
 | page / page_size | int | 否 | 分页 | — |
 
 **请求示例**
@@ -2944,6 +2949,8 @@ curl "https://api.example.com/api/v1/admin/materials/missing?event_id=12&missing
 **错误码**：40001（筛选值不合法）。
 
 **注意事项**：名单固定为 active 报名且 `photo/audio/program_name` 任一为空；`missing_item` 可再按单项缺失过滤。
+
+**导出（S5-7）**：`GET /api/v1/admin/materials/missing/export`，query 与列表一致（不含分页），返回 xlsx；列固定为赛事、组别、舞种、选手姓名、选手编号、联系电话、资料完成度、缺失项、资料截止、最后上传、已联系、联系时间、订单号。仅 admin / super_admin（cs → 40301），导出记操作日志。
 
 ### 12.4 标记已联系
 
@@ -3012,7 +3019,7 @@ curl "https://api.example.com/api/v1/admin/events/12/registrations/export" \
 
 ---
 
-### 12.6 媒体资源归档导出（后续扩展；**首发不含，上线后迭代，S0 决策**）
+### 12.6 媒体资源归档导出（S5-1/S5-2，已实现）
 
 **接口概述**
 
@@ -3021,7 +3028,7 @@ curl "https://api.example.com/api/v1/admin/events/12/registrations/export" \
 | 接口名称 | 赛事媒体归档导出 |
 | 功能说明 | 按赛事打包导出选手证件照/音频，默认按选手分目录，可按选手筛选；用于赛事结束后的资料归档 |
 | 请求方法 + URL | `GET /api/v1/admin/events/{event_id}/materials/archive` |
-| 鉴权 | 是（admin；**cs 不可导出**） |
+| 鉴权 | 是（admin / super_admin；**cs 不可导出 → 40301**） |
 
 **请求参数（Query）**
 
@@ -3196,8 +3203,8 @@ curl -X POST https://api.example.com/api/v1/admin/cs-tickets \
 |---|---|
 | 接口名称 | 内容配置读写 |
 | 功能说明 | 积分规则说明、赛事规则/FAQ、公众号二维码、公告 等键值内容 |
-| 请求方法 + URL | `GET /api/v1/admin/contents/{key}`；`PUT /api/v1/admin/contents/{key}` |
-| 鉴权 | 是（GET：admin/cs；PUT：admin） |
+| 请求方法 + URL | `GET /api/v1/admin/contents/{key}`；`PUT /api/v1/admin/contents/{key}`；`POST /api/v1/admin/contents/{key}/image`（S5-5，仅 official_account） |
+| 鉴权 | 是（GET：admin/cs；PUT/POST：admin） |
 
 **请求参数（Path + Body）**
 
@@ -3217,7 +3224,9 @@ curl -X PUT https://api.example.com/api/v1/admin/contents/announcement \
 
 **响应参数**：`{"key": "announcement", "value": {...}, "updated_at": "..."}`
 
-**错误码**：40401（key 未注册）；40301（cs 尝试写入）。
+**图片上传（S5-5）**：`POST /api/v1/admin/contents/official_account/image`，`multipart/form-data` 字段 `file`，png/jpg ≤2MB；服务端落盘到 `uploads/content/`，把 `value.image_url` 更新为 `/static/content/...` 并返回完整配置。其他 key 返回 40001；cs → 40301。
+
+**错误码**：40401（key 未注册）；40301（cs 尝试写入）；40001（图片格式/大小不合法或 key 不支持图片上传）。
 
 **注意事项**：小程序端对应展示接口从同一份 `settings` 表读取（见 6.1 config 的扩展字段）；修改记操作日志。
 
@@ -3381,6 +3390,41 @@ curl "https://api.example.com/api/v1/admin/logs?action=refund&page=1&page_size=5
 - **积分晋级**：每个榜单按快照排名取前 20（跳过已直通/手动资格）写入 `points`。
 - **机构积分**：每位选手取各榜单最高总积分，按成绩所属机构求和；机构榜前 3 获「年度菁英机构奖」，4–10 获「年度十佳机构奖」。
 - **奖金**：甲级赛冠军、超级赛前两名按参赛人数分档；总决赛按名次；`exclude_from_prize` 赛事不生成奖金。
+
+---
+
+## 16. 公开内容读取（小程序免登录，S5-4）
+
+**接口概述**
+
+| 项 | 内容 |
+|---|---|
+| 接口名称 | 公开内容读取 |
+| 功能说明 | 小程序端读取后台内容管理配置（积分规则说明 / 赛事规则 FAQ / 公众号二维码 / 公告），与 13.4 共用 `settings` 表 |
+| 请求方法 + URL | `GET /api/v1/contents/{key}` |
+| 鉴权 | 否（免登录） |
+
+**请求参数（Path）**
+
+| 参数名 | 类型 | 必填 | 说明 | 示例值 |
+|---|---|---|---|---|
+| key | string | 是 | points_rules_desc / event_faq / official_account / announcement | `"announcement"` |
+
+**请求示例**
+
+```bash
+curl "https://api.example.com/api/v1/contents/announcement"
+```
+
+**响应参数**：`{"key": "announcement", "value": {"text": "...", "online_at": "...", "offline_at": "..."}, "updated_at": "..."}`
+
+- `announcement.online_at/offline_at` 可选，小程序端只在时间窗口内展示。
+- `official_account.image_url` 是 `/static/content/...` 相对地址，客户端按 API 域名补全。
+- 已注册 key 但种子行缺失时返回空对象（不报错）。
+
+**错误码**：40401（key 未注册）。
+
+**注意事项**：仅暴露 4 个已注册 key；写入仍走 13.4（需 admin）。接口返回内容可能被缓存，发布公告后建议客户端下拉刷新。
 
 ---
 
