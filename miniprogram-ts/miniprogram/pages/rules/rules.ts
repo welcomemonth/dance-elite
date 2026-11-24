@@ -1,5 +1,7 @@
 import { DefineComponent, RootComponent } from "annil";
 
+import { getContent } from "../../api/contents";
+
 const RULE_SECTIONS = [
   {
     title: "积分如何计算",
@@ -27,6 +29,34 @@ const rootComponent = RootComponent()({
   isPage: true,
   data: {
     sections: RULE_SECTIONS,
+  },
+  pageLifetimes: {
+    onLoad() {
+      void this.loadContents();
+    },
+  },
+  methods: {
+    /** 读取后台内容管理里的积分规则/赛事 FAQ（S5-4）；失败或为空时保留本地文案。 */
+    async loadContents(): Promise<void> {
+      try {
+        const [points, faq] = await Promise.all([
+          getContent("points_rules_desc"),
+          getContent("event_faq"),
+        ]);
+        const sections: { title: string; text: string }[] = [];
+        if (points.value.text.trim()) {
+          sections.push({ title: "积分规则说明", text: points.value.text.trim() });
+        }
+        if (faq.value.text.trim()) {
+          sections.push({ title: "赛事规则 / FAQ", text: faq.value.text.trim() });
+        }
+        if (sections.length > 0) {
+          this.setData({ sections });
+        }
+      } catch {
+        // 内容接口不可用时使用本地兜底文案，不阻塞页面展示。
+      }
+    },
   },
 });
 

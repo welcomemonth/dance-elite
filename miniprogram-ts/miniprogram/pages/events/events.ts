@@ -1,6 +1,7 @@
 import { CustomComponent, DefineComponent, navigateTo, RootComponent } from "annil";
 
 import { listEvents } from "../../api/events";
+import { getContent } from "../../api/contents";
 import type { $EmptyState } from "../../components/empty-state/empty-state";
 import { userStore } from "../../store/user";
 import type { EventItem, EventStatus } from "../../types/models";
@@ -43,6 +44,7 @@ const rootComponent = RootComponent()({
     listError: null as string | null,
     activeStatus: "" as "" | EventStatus,
     filters: EVENT_STATUS_OPTIONS,
+    announcement: "",
   },
   computed: {
     rows(): EventCardView[] {
@@ -67,6 +69,7 @@ const rootComponent = RootComponent()({
         .ensureLogin()
         .catch(() => undefined)
         .then(() => this.refreshList());
+      void this.loadAnnouncement();
     },
     onUnload() {
       unsubscribe?.();
@@ -97,6 +100,25 @@ const rootComponent = RootComponent()({
         await list.loadMore();
       } catch (error) {
         this.showError(error);
+      }
+    },
+    /** 读取后台公告（S5-4），按上下线时间决定是否展示；失败静默。 */
+    async loadAnnouncement(): Promise<void> {
+      try {
+        const entry = await getContent("announcement");
+        const { text, online_at, offline_at } = entry.value;
+        const now = Date.now();
+        if (online_at && now < Date.parse(online_at)) {
+          return;
+        }
+        if (offline_at && now > Date.parse(offline_at)) {
+          return;
+        }
+        if (text.trim()) {
+          this.setData({ announcement: text.trim() });
+        }
+      } catch {
+        // 公告接口不可用时保持不展示。
       }
     },
     onFilterTap(event: WechatMiniprogram.TouchEvent) {

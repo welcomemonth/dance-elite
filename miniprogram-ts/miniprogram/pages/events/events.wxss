@@ -214,3 +214,26 @@
   font-size: 22rpx;
   font-weight: 700;
 }
+
+.announcement {
+  display: flex;
+  gap: 16rpx;
+  margin: 0 40rpx 24rpx;
+  padding: 20rpx 24rpx;
+  border: 2rpx solid #121217;
+  background: #fff4d6;
+}
+
+.announcement__tag {
+  flex-shrink: 0;
+  color: #5423e7;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.announcement__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  line-height: 1.5;
+}

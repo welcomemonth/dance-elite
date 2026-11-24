@@ -371,3 +371,24 @@ export interface DancerDetail {
   honors: string[];
   qualification: { type: string; source: string } | null;
 }
+
+/** 公开内容配置 key（后台内容管理 / API 文档 13.4）。 */
+export type ContentKey =
+  | "points_rules_desc"
+  | "event_faq"
+  | "official_account"
+  | "announcement";
+
+/** 公开内容值：文案 + 可选图片与上下线时间（公告）。 */
+export interface ContentValue {
+  text: string;
+  image_url?: string;
+  online_at?: string;
+  offline_at?: string;
+}
+
+export interface ContentEntry {
+  key: ContentKey;
+  value: ContentValue;
+  updated_at: string;
+}

@@ -16,6 +16,11 @@
     </view>
   </view>
 
+  <view wx:if="{{announcement}}" class="announcement">
+    <text class="announcement__tag">公告</text>
+    <text class="announcement__text">{{announcement}}</text>
+  </view>
+
   <view class="filters">
     <view
       wx:for="{{filters}}"
