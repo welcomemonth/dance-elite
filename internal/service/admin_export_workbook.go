@@ -60,8 +60,17 @@ func buildRegistrationWorkbook(rows []store.AdminRegistrationRow) ([]byte, error
 	return buf.Bytes(), nil
 }
 
-// styleExportSheet 设置表头样式、列宽与首行冻结。
+// styleExportSheet 设置报名名单表头样式、列宽与首行冻结。
 func styleExportSheet(f *excelize.File) error {
+	widths := map[string]float64{
+		"A": 24, "B": 12, "C": 12, "D": 8, "E": 14, "F": 24,
+		"G": 12, "H": 24, "I": 16, "J": 10, "K": 24,
+	}
+	return styleExportSheetRange(f, exportSheetName, "K", widths)
+}
+
+// styleExportSheetRange 是通用导出表头样式（表头加粗、冻结首行、按列宽显示）。
+func styleExportSheetRange(f *excelize.File, sheet, lastColumn string, widths map[string]float64) error {
 	style, err := f.NewStyle(&excelize.Style{
 		Font: &excelize.Font{Bold: true},
 		Fill: excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"DDEBF7"}},
@@ -69,19 +78,15 @@ func styleExportSheet(f *excelize.File) error {
 	if err != nil {
 		return fmt.Errorf("create export style: %w", err)
 	}
-	if err := f.SetCellStyle(exportSheetName, "A1", "K1", style); err != nil {
+	if err := f.SetCellStyle(sheet, "A1", lastColumn+"1", style); err != nil {
 		return fmt.Errorf("apply export header style: %w", err)
 	}
-	widths := map[string]float64{
-		"A": 24, "B": 12, "C": 12, "D": 8, "E": 14, "F": 24,
-		"G": 12, "H": 24, "I": 16, "J": 10, "K": 24,
-	}
 	for column, width := range widths {
-		if err := f.SetColWidth(exportSheetName, column, column, width); err != nil {
+		if err := f.SetColWidth(sheet, column, column, width); err != nil {
 			return fmt.Errorf("set export column %s width: %w", column, err)
 		}
 	}
-	if err := f.SetPanes(exportSheetName, &excelize.Panes{
+	if err := f.SetPanes(sheet, &excelize.Panes{
 		Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft",
 	}); err != nil {
 		return fmt.Errorf("freeze export header: %w", err)

@@ -79,14 +79,20 @@ func TestAdminRegistrationExport(t *testing.T) {
 // readExportSheet 打开导出工作簿并返回全部行。
 func readExportSheet(t *testing.T, content []byte) [][]string {
 	t.Helper()
+	return readExportSheetNamed(t, content, exportSheetName)
+}
+
+// readExportSheetNamed 打开导出工作簿并返回指定工作表的全部行。
+func readExportSheetNamed(t *testing.T, content []byte, sheet string) [][]string {
+	t.Helper()
 	xl, err := excelize.OpenReader(bytes.NewReader(content))
 	if err != nil {
 		t.Fatalf("open export workbook: %v", err)
 	}
 	defer func() { _ = xl.Close() }()
-	rows, err := xl.GetRows(exportSheetName)
+	rows, err := xl.GetRows(sheet)
 	if err != nil {
-		t.Fatalf("read export sheet: %v", err)
+		t.Fatalf("read export sheet %q: %v", sheet, err)
 	}
 	return rows
 }
