@@ -15,6 +15,7 @@
 | 12.1–12.5 | 已实现 | 候补/催收导出为 S5-7 |
 | 12.6 媒体归档 | 已实现 | S5-1/S5-2 |
 | 13–14 | 已实现 | 14.2 日志导出未实现 |
+| 15 榜单中心 | 已实现 | S4；成绩 Excel 导入/模板与奖金发放表导出已补齐 |
 | 16 公开内容 | 已实现 | S5-4；13.4 图片上传为 S5-5 |
 
 > 逐条差异见 [文档与实现差异清单](../文档与实现差异清单.md)。
@@ -3350,13 +3351,16 @@ curl "https://api.example.com/api/v1/admin/logs?action=refund&page=1&page_size=5
 | 方法 + 路径 | 说明 |
 |---|---|
 | `GET /api/v1/admin/events/{id}/scores?level=&dance_type=` | 已发布成绩列表 |
-| `POST /api/v1/admin/events/{id}/scores/preview?level=&dance_type=` | 解析预览：按 `id_card_no`（身份证/护照哈希）或姓名匹配选手，返回 `matched/unmatched` |
-| `POST /api/v1/admin/events/{id}/scores?level=&dance_type=` | 确认发布：写成绩 → 固化积分/奖金 → 重算榜单与资格 |
+| `GET /api/v1/admin/events/{id}/scores/template` | 下载成绩导入模板（xlsx：姓名/证件号/奖项/晋级决赛/备注） |
+| `POST /api/v1/admin/events/{id}/scores/import?level=&dance_type=` | 上传成绩 Excel（multipart `file`，≤10MB）：解析、匹配/建档选手并返回预览（不写成绩） |
+| `POST /api/v1/admin/events/{id}/scores/preview?level=&dance_type=` | 在线录入行解析预览：按 `id_card_no`（身份证/护照哈希）或姓名匹配选手，返回 `matched/unmatched` |
+| `POST /api/v1/admin/events/{id}/scores?level=&dance_type=&import_batch=` | 确认发布：写成绩 → 固化积分/奖金 → 重算榜单与资格 |
 | `PUT /api/v1/admin/scores/{entry_id}` | 纠错：旧记录置 `corrected`，写入新发布记录并重算 |
 
 请求体：
+- import：multipart，`file` 为 `.xlsx`；表头需含「姓名」「证件号」「奖项」，可选「晋级决赛」「备注」。返回 `{total_rows, matched, created, errors, import_batch, rows[]}`；`match_status` 为 `matched / created / new / unmatched`，`error` 为不可导入原因。**存在错误行时不建档任何选手**；全部行可导入时，大陆身份证新选手自动建档（护照等其他证件需先人工报名建档）。
 - preview：`{"rows":[{"row_no":1,"player_name":"...","id_card_no":"...","award":"champion","advanced_to_final":false,"remark":""}]}`
-- publish：`{"rows":[<preview 返回的 rows，含 match_status/player_id>]}`
+- publish：`{"rows":[<preview 返回的 rows，含 match_status/player_id>]}`；存在未匹配/未建档行时返回 40001。
 - correct：`{"award":"runner_up","advanced_to_final":true,"remark":"纠错原因"}`
 
 奖项枚举：`champion / runner_up / third / elite_dancer / special_gold / gold / silver`（兼容旧写法 `third_place`）。
@@ -3378,7 +3382,8 @@ curl "https://api.example.com/api/v1/admin/logs?action=refund&page=1&page_size=5
 
 | 方法 + 路径 | 说明 |
 |---|---|
-| `GET /api/v1/admin/prize-statements?season_id=&status=` | 赛季奖金明细（`pending/granted/skipped`） |
+| `GET /api/v1/admin/prize-statements?season_id=&event_id=&status=` | 赛季奖金明细（`pending/granted/skipped`；可按赛事筛选） |
+| `GET /api/v1/admin/prize-statements/export?season_id=&event_id=&status=` | 导出发放表（xlsx，财务对账；仅 admin / super_admin，记操作日志） |
 | `PUT /api/v1/admin/prize-statements/{item_id}` | 调整未发放金额（`amount` 分 + `reason`） |
 | `POST /api/v1/admin/prize-statements/{item_id}/pay` | 登记发放（`payee`、可选 `note`） |
 
