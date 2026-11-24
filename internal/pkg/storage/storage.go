@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,6 +35,9 @@ const relPrefix = "uploads/"
 
 // segmentPattern 校验路径段（player_no / event_id）只含安全字符。
 var segmentPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// contentKeyPattern 校验内容配置 key（用于内容图片文件名，只允许小写字母/数字/下划线）。
+var contentKeyPattern = regexp.MustCompile(`^[a-z0-9_]+$`)
 
 // Store 是 uploads/ 根目录的本地文件存储。
 type Store struct {
@@ -83,6 +87,16 @@ func (s *Store) StageAvatar(playerNo, ext string, src io.Reader) (*StagedFile, e
 	}
 	dir := relPrefix + "avatars/" + playerNo
 	return s.stage(dir, fmt.Sprintf("avatar_%s.%s", randomHex(8), trimDot(ext)), src)
+}
+
+// StageContentImage 把内容管理图片（如公众号二维码）写入临时文件，
+// 最终路径在 uploads/content/ 下，文件名以配置 key 开头。
+func (s *Store) StageContentImage(key, ext string, src io.Reader) (*StagedFile, error) {
+	if !contentKeyPattern.MatchString(key) {
+		return nil, fmt.Errorf("invalid content key %q", key)
+	}
+	dir := relPrefix + "content"
+	return s.stage(dir, fmt.Sprintf("%s_%s.%s", key, randomHex(8), trimDot(ext)), src)
 }
 
 // stage 写入临时文件并生成最终相对路径（Commit 前不对最终目录可见）。
@@ -146,6 +160,49 @@ func (s *Store) Remove(relPath string) error {
 
 // Root 返回存储的物理根目录。
 func (s *Store) Root() string { return s.root }
+
+// Open 打开 uploads/ 下相对路径对应的文件（媒体归档导出用）。
+// 只接受 uploads/ 下的路径，路径穿越或越界路径直接拒绝。
+func (s *Store) Open(relPath string) (io.ReadCloser, error) {
+	clean := path.Clean(relPath)
+	if clean == "uploads" || !strings.HasPrefix(clean, relPrefix) {
+		return nil, fmt.Errorf("refuse to open path outside uploads: %q", relPath)
+	}
+	f, err := os.Open(s.abs(clean))
+	if err != nil {
+		return nil, fmt.Errorf("open upload %q: %w", clean, err)
+	}
+	return f, nil
+}
+
+// RemoveEventDir 删除 uploads/{event_id}/ 整个目录（赛后媒体清理），返回删除的文件数。
+// 目录不存在视为成功（返回 0），保证清理任务幂等。
+func (s *Store) RemoveEventDir(eventID int64) (int, error) {
+	if eventID <= 0 {
+		return 0, fmt.Errorf("invalid event id %d", eventID)
+	}
+	dir := s.abs(fmt.Sprintf("uploads/%d", eventID))
+	removed := 0
+	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if !d.IsDir() {
+			removed++
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return 0, fmt.Errorf("walk event media dir %q: %w", dir, err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return 0, fmt.Errorf("remove event media dir %q: %w", dir, err)
+	}
+	return removed, nil
+}
 
 // abs 把相对路径转为物理路径；前缀已由调用方校验。
 func (s *Store) abs(relPath string) string {
