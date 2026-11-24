@@ -41,6 +41,7 @@ type Deps struct {
 	AdminRegs           *service.AdminRegistrationQueryService
 	AdminRegActions     *service.AdminRegistrationActionService
 	MaterialMissing     *service.MaterialCollectionService
+	MaterialArchive     *service.MaterialArchiveService
 	Dashboard           *service.DashboardService
 	Accounts            *service.AdminAccountService
 	AdminLogs           *service.AdminLogQueryService
@@ -108,11 +109,13 @@ func New(deps Deps) *gin.Engine {
 		registerMaterialRoutes(api, deps.Materials, deps.Tokens)
 	}
 
-	// 上传文件静态访问（T13）：/static/materials → storage.upload_dir，
-	// /static/avatars → storage.upload_dir/avatars；关闭目录列表。
+	// 上传文件静态访问（T13、S5-5）：/static/materials → storage.upload_dir，
+	// /static/avatars → storage.upload_dir/avatars，/static/content → storage.upload_dir/content；
+	// 关闭目录列表。
 	if deps.UploadDir != "" {
 		engine.StaticFS("/static/materials", gin.Dir(deps.UploadDir, false))
 		engine.StaticFS("/static/avatars", gin.Dir(filepath.Join(deps.UploadDir, "avatars"), false))
+		engine.StaticFS("/static/content", gin.Dir(filepath.Join(deps.UploadDir, "content"), false))
 	}
 
 	// 小程序端订单支付（T10）：需登录，预下单按用户限流 10 次/分钟。
@@ -138,6 +141,11 @@ func New(deps Deps) *gin.Engine {
 	// 小程序榜单只读（T29，免鉴权）。
 	if deps.PublicRanking != nil {
 		registerPublicRankingRoutes(api, deps.PublicRanking)
+	}
+
+	// 小程序公开内容读取（S5-4，免鉴权）：规则说明/FAQ/公众号/公告。
+	if deps.Contents != nil {
+		registerPublicContentRoutes(api, deps.Contents)
 	}
 
 	// 后台端认证（T5）
@@ -180,6 +188,10 @@ func New(deps Deps) *gin.Engine {
 		// 后台资料催收（T17）：名单与标记已联系 cs/admin 均可。
 		if deps.MaterialMissing != nil {
 			registerAdminMaterialRoutes(admin, deps.MaterialMissing)
+		}
+		// 后台媒体资源归档导出（S5-1/S5-2）：仅 admin / super_admin。
+		if deps.MaterialArchive != nil {
+			registerAdminMaterialArchiveRoutes(admin, deps.MaterialArchive)
 		}
 		if deps.Dashboard != nil {
 			registerAdminDashboardRoutes(admin, deps.Dashboard)

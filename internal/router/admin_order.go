@@ -1,6 +1,9 @@
 package router
 
 import (
+	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -23,6 +26,9 @@ func registerAdminOrderRoutes(group *gin.RouterGroup, svc *service.AdminOrderQue
 	orders := group.Group("/orders")
 	orders.GET("", h.list)
 	orders.GET("/:order_no", h.detail)
+	// 订单列表导出（S5-6）：与列表同一筛选，仅 admin / super_admin（cs → 40301）。
+	write := orders.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
+	write.GET("/export", h.export)
 	// 明文查看手机号：需独立权限（默认拒绝 → 40301），按账号限流 10 次/分钟，
 	// 每次调用落 reveal_phone 日志（API 文档 11.3）。
 	orders.POST("/:order_no/reveal-phone",
@@ -74,6 +80,39 @@ func (h *adminOrderHandler) detail(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, resp)
+}
+
+// export 按当前筛选导出订单列表（S5-6，仅 admin / super_admin）。
+func (h *adminOrderHandler) export(c *gin.Context) {
+	adminID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	eventID, ok := optionalInt64Query(c, "event_id")
+	if !ok {
+		httpx.AbortError(c, httpx.ErrBadRequest("event_id 不合法"))
+		return
+	}
+	file, err := h.svc.Export(c.Request.Context(), adminID, model.AdminOrderListQuery{
+		EventID:         eventID,
+		Level:           c.Query("level"),
+		DanceType:       c.Query("dance_type"),
+		Status:          c.Query("status"),
+		IncludeCanceled: queryBool(c, "include_canceled"),
+		Source:          c.Query("source"),
+		PaidFrom:        c.Query("paid_from"),
+		PaidTo:          c.Query("paid_to"),
+		Keyword:         c.Query("keyword"),
+	})
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	disposition := fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+		file.Name, url.PathEscape(file.Name))
+	c.Header("Content-Disposition", disposition)
+	c.Data(http.StatusOK, exportMIME, file.Content)
 }
 
 // revealPhone 明文查看订单联系电话（API 文档 11.3），调用留痕。

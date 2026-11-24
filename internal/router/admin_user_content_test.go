@@ -182,3 +182,22 @@ func mustInsertRouterUserWithPhone(t *testing.T, db *store.DB, openid, phone, ni
 	id, _ := res.LastInsertId()
 	return id
 }
+
+// TestPublicContentsHTTP 覆盖小程序公开内容读取（S5-4）：免登录、统一包装、未注册 key 40401。
+func TestPublicContentsHTTP(t *testing.T) {
+	engine, _, _ := newRefundTestEngine(t)
+
+	w := postJSON(t, engine, http.MethodGet, "/api/v1/contents/announcement", "", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("public contents status = %d, body = %s", w.Code, w.Body)
+	}
+	data := decodeData(t, w.Body.Bytes())
+	if data["key"] != "announcement" {
+		t.Fatalf("key = %v, want announcement", data["key"])
+	}
+	if _, ok := data["value"].(map[string]any); !ok {
+		t.Fatalf("value should be an object: %v", data["value"])
+	}
+
+	assertCode(t, postJSON(t, engine, http.MethodGet, "/api/v1/contents/not_a_key", "", nil), 40401)
+}

@@ -88,11 +88,12 @@ func run(ctx context.Context, cfg *config.Config) error {
 	prizeService := service.NewPrizeService(stores)
 	publicRankingService := service.NewPublicRankingService(stores)
 	materialCollectionService := service.NewMaterialCollectionService(stores)
+	materialArchiveService := service.NewMaterialArchiveService(stores, fileStore)
 	dashboardService := service.NewDashboardService(stores)
 	accountService := service.NewAdminAccountService(stores, tokens)
 	adminLogQueryService := service.NewAdminLogQueryService(stores)
 	userContentQueryService := service.NewAdminUserQueryService(stores)
-	contentService := service.NewContentService(stores)
+	contentService := service.NewContentService(stores, fileStore)
 	audioReviewService := service.NewAudioReviewService(stores, cfg.Server.PublicBaseURL)
 	// 抽签 H5：数据存 lottery_* 表；短信未配置时为 nil，提醒/通知自动跳过。
 	smsClient, err := sms.New(sms.Config{
@@ -148,6 +149,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		Prizes:              prizeService,
 		PublicRanking:       publicRankingService,
 		MaterialMissing:     materialCollectionService,
+		MaterialArchive:     materialArchiveService,
 		Dashboard:           dashboardService,
 		Accounts:            accountService,
 		AdminLogs:           adminLogQueryService,
@@ -167,6 +169,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		service.NewEventStatusAdvancer(stores),
 		service.NewOrderExpirySweeper(stores, paymentService, cfg.Scheduler.OrderExpireMinutes),
 		service.NewRefundWatchdog(stores, refundService, payGateway, cfg.Scheduler.RefundWatchdogMinutes, isMockGateway(payGateway)),
+		service.NewMaterialCleanupJob(stores, fileStore, cfg.Scheduler.MaterialCleanupDelayHours),
 		lotterySweeper,
 	)
 	schedulerCtx, stopScheduler := context.WithCancel(ctx)

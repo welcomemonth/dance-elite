@@ -8,6 +8,7 @@ import (
 
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
+	"github.com/meetmonth/dance-elite/internal/pkg/storage"
 	"github.com/meetmonth/dance-elite/internal/store"
 )
 
@@ -23,15 +24,16 @@ var contentKeys = map[string]struct{}{
 	"announcement":      {},
 }
 
-// ContentService 是内容配置读写服务（联调 B5，API 文档 13.4）。
+// ContentService 是内容配置读写服务（联调 B5、S5-4/S5-5，API 文档 13.4）。
 // 小程序端展示接口与后台读写同一份 settings 表。
 type ContentService struct {
 	stores *store.Store
+	files  *storage.Store
 }
 
-// NewContentService 构造内容配置服务。
-func NewContentService(stores *store.Store) *ContentService {
-	return &ContentService{stores: stores}
+// NewContentService 构造内容配置服务；files 用于公众号二维码图片上传（可为 nil）。
+func NewContentService(stores *store.Store, files *storage.Store) *ContentService {
+	return &ContentService{stores: stores, files: files}
 }
 
 // Get 读取指定 key 的内容配置（API 文档 13.4）。key 未注册 → 40401。

@@ -1,6 +1,9 @@
 package router
 
 import (
+	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +25,7 @@ func registerAdminWaitlistRoutes(group *gin.RouterGroup, svc *service.WaitlistSe
 	waitlists := group.Group("/waitlists")
 	waitlists.GET("", h.list)
 	write := waitlists.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
+	write.GET("/export", h.export)
 	write.POST("/:waitlist_id/notify", h.notify)
 	write.POST("/:waitlist_id/remove", h.remove)
 	write.POST("/:waitlist_id/convert", h.convert)
@@ -47,6 +51,34 @@ func (h *adminWaitlistHandler) list(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, resp)
+}
+
+// export 按当前筛选导出候补队列（S5-7，仅 admin / super_admin）。
+func (h *adminWaitlistHandler) export(c *gin.Context) {
+	adminID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	eventID, ok := optionalInt64Query(c, "event_id")
+	if !ok {
+		httpx.AbortError(c, httpx.ErrBadRequest("event_id 不合法"))
+		return
+	}
+	file, err := h.svc.Export(c.Request.Context(), adminID, model.AdminWaitlistListQuery{
+		EventID:   eventID,
+		Level:     c.Query("level"),
+		DanceType: c.Query("dance_type"),
+		Status:    c.Query("status"),
+	})
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	disposition := fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+		file.Name, url.PathEscape(file.Name))
+	c.Header("Content-Disposition", disposition)
+	c.Data(http.StatusOK, exportMIME, file.Content)
 }
 
 // notify 标记已通知（通知结果备注写入审计日志）。

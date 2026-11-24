@@ -28,6 +28,7 @@ func registerAdminUserContentRoutes(group *gin.RouterGroup, users *service.Admin
 
 	write := group.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
 	write.PUT("/contents/:key", h.putContent)
+	write.POST("/contents/:key/image", h.uploadContentImage)
 	group.GET("/contents/:key", h.getContent)
 }
 
@@ -95,6 +96,28 @@ func (h *adminUserContentHandler) putContent(c *gin.Context) {
 		return
 	}
 	resp, err := h.contents.Put(c.Request.Context(), actorID, c.Param("key"), req.Value)
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	httpx.OK(c, resp)
+}
+
+// uploadContentImage 上传内容图片（S5-5，公众号二维码）：admin+，cs → 40301。
+func (h *adminUserContentHandler) uploadContentImage(c *gin.Context) {
+	actorID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	file, closer, ok := readUploadedFile(c, "file", "图片", "图片不能超过 2MB",
+		service.MaxContentImageRequestBytes)
+	if !ok {
+		return
+	}
+	defer closer()
+	resp, err := h.contents.UploadImage(c.Request.Context(), actorID, c.Param("key"),
+		&service.ContentImageFile{Filename: file.Filename, Size: file.Size, Content: file.Content})
 	if err != nil {
 		httpx.AbortError(c, err)
 		return

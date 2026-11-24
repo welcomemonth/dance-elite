@@ -1,6 +1,9 @@
 package router
 
 import (
+	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +25,7 @@ func registerAdminMaterialRoutes(group *gin.RouterGroup, svc *service.MaterialCo
 	materials := group.Group("/materials")
 	materials.GET("/missing", h.list)
 	write := materials.Group("", middleware.RequireRole(model.RoleSuperAdmin, model.RoleAdmin))
+	write.GET("/missing/export", h.export)
 	write.POST("/missing/:registration_id/contacted", h.contacted)
 }
 
@@ -47,6 +51,36 @@ func (h *adminMaterialHandler) list(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, resp)
+}
+
+// export 按当前筛选导出资料催收名单（S5-7，仅 admin / super_admin）。
+func (h *adminMaterialHandler) export(c *gin.Context) {
+	adminID, ok := middleware.GetAdminID(c)
+	if !ok {
+		httpx.AbortError(c, httpx.ErrUnauthorized("未登录或登录已过期"))
+		return
+	}
+	eventID, ok := optionalInt64Query(c, "event_id")
+	if !ok {
+		httpx.AbortError(c, httpx.ErrBadRequest("event_id 不合法"))
+		return
+	}
+	file, err := h.svc.Export(c.Request.Context(), adminID, model.AdminMissingMaterialQuery{
+		EventID:       eventID,
+		Level:         c.Query("level"),
+		DanceType:     c.Query("dance_type"),
+		MissingItem:   c.Query("missing_item"),
+		DeadlineState: c.Query("deadline_state"),
+		Keyword:       c.Query("keyword"),
+	})
+	if err != nil {
+		httpx.AbortError(c, err)
+		return
+	}
+	disposition := fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`,
+		file.Name, url.PathEscape(file.Name))
+	c.Header("Content-Disposition", disposition)
+	c.Data(http.StatusOK, exportMIME, file.Content)
 }
 
 // contacted 标记已联系（追加催收记录，截止后只读）。
