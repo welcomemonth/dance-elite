@@ -82,6 +82,20 @@ func TestWebAssetsBlocksLotteryOutsideWeChat(t *testing.T) {
 	}
 }
 
+func TestWebAssetsServesWeChatVerifyFile(t *testing.T) {
+	assets := testWebAssets()
+	assets["MP_verify_test123.txt"] = &fstest.MapFile{Data: []byte("test123")}
+	engine := newWebAssetsTestEngine(assets)
+
+	w := serveWebRequest(engine, http.MethodGet, "/MP_verify_test123.txt", "*/*")
+	if w.Code != http.StatusOK || w.Body.String() != "test123" {
+		t.Fatalf("verify file code = %d, body = %q", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/plain") {
+		t.Fatalf("verify file content-type = %q, want text/plain", ct)
+	}
+}
+
 func TestWebAssetsRedirectsStaticRouteWithoutSlash(t *testing.T) {
 	engine := newWebAssetsTestEngine(testWebAssets())
 
