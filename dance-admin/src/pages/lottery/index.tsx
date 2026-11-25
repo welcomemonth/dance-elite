@@ -8,12 +8,14 @@ import ScheduleBanner, { useLotteryClock } from './schedule';
 import {
   drawLottery,
   fetchLotteryMeta,
+  LotteryApiError,
   type LotteryDrawPayload,
   type LotteryDrawResult,
   type LotteryEntry,
   type LotteryGenre,
   type LotteryMeta,
   lookupLottery,
+  lotteryAuthStartUrl,
   queryLottery,
 } from './service';
 import { formatDrawnAt } from './time';
@@ -59,6 +61,35 @@ function clearRemembered(token: string): void {
   }
 }
 
+/** 记录本标签页是否已尝试过自动跳转授权，避免 cookie 丢失时无限跳转。 */
+function authAttemptKey(token: string): string {
+  return `dance-elite:lottery:auth-attempt:${token}`;
+}
+
+function hasAuthAttempted(token: string): boolean {
+  try {
+    return window.sessionStorage.getItem(authAttemptKey(token)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markAuthAttempted(token: string): void {
+  try {
+    window.sessionStorage.setItem(authAttemptKey(token), '1');
+  } catch {
+    // 隐私模式下不可用：退化为单次跳转，由 auth_error 兜底。
+  }
+}
+
+function clearAuthAttempted(token: string): void {
+  try {
+    window.sessionStorage.removeItem(authAttemptKey(token));
+  } catch {
+    // 同上。
+  }
+}
+
 /** 判断服务端错误是否属于「未查询到/信息不匹配」，用于展示醒目的排查面板。 */
 function isNotFoundMessage(message: string): boolean {
   return (
@@ -98,6 +129,7 @@ const LotteryPage: React.FC = () => {
     payload: LotteryDrawPayload;
   } | null>(null);
   const [poster, setPoster] = useState('');
+  const [authError, setAuthError] = useState(false);
   const restoredRef = useRef(false);
   const clock = useLotteryClock(meta);
 
@@ -129,12 +161,28 @@ const LotteryPage: React.FC = () => {
       return;
     }
     let cancelled = false;
+    const authFailed = new URLSearchParams(window.location.search).has(
+      'auth_error',
+    );
     fetchLotteryMeta(token)
       .then((data) => {
         if (cancelled) return;
-        setMeta(data);
-        setLoadState('done');
         document.title = `抽签 | ${data.event_name}`;
+        if (data.authorized) {
+          clearAuthAttempted(token);
+          setMeta(data);
+          setLoadState('done');
+          return;
+        }
+        // 未授权：先自动跳转一次静默授权；失败或已尝试过则展示「重新授权」。
+        if (authFailed || hasAuthAttempted(token)) {
+          setMeta(data);
+          setAuthError(true);
+          setLoadState('done');
+          return;
+        }
+        markAuthAttempted(token);
+        window.location.replace(lotteryAuthStartUrl(token));
       })
       .catch(() => {
         if (!cancelled) setLoadState('error');
@@ -146,7 +194,7 @@ const LotteryPage: React.FC = () => {
 
   // 再次打开页面时自动带出上次输入的证件号并展示结果（需求：提示上次抽签时间）。
   useEffect(() => {
-    if (!token || !meta || restoredRef.current) return;
+    if (!token || !meta || restoredRef.current || authError) return;
     restoredRef.current = true;
     const remembered = loadRemembered(token);
     if (!remembered) return;
@@ -214,7 +262,12 @@ const LotteryPage: React.FC = () => {
       saveRemembered(token, { name: payload.name, id_card: payload.id_card });
       handleDrawResult(data, payload);
     } catch (err) {
-      const message = err instanceof Error ? err.message : '操作失败，请稍后重试。';
+      if (err instanceof LotteryApiError && err.code === 40101) {
+        setAuthError(true);
+        return;
+      }
+      const message =
+        err instanceof Error ? err.message : '操作失败，请稍后重试。';
       if (isNotFoundMessage(message)) {
         setNotFound(message);
       } else {
@@ -235,7 +288,10 @@ const LotteryPage: React.FC = () => {
     }
   };
 
-  const handleDrawResult = (data: LotteryDrawResult, payload: LotteryDrawPayload) => {
+  const handleDrawResult = (
+    data: LotteryDrawResult,
+    payload: LotteryDrawPayload,
+  ) => {
     if (data.status === 'choose_genre') {
       setChoice({ choices: data.choices ?? [], payload });
       return;
@@ -280,11 +336,17 @@ const LotteryPage: React.FC = () => {
       setNotFound('');
       try {
         const data = await queryLottery(token, { id_card: trimmedID });
-        const recordedName = data.entries.find((entry) => entry.name)?.name ?? trimmedName;
+        const recordedName =
+          data.entries.find((entry) => entry.name)?.name ?? trimmedName;
         saveRemembered(token, { name: recordedName, id_card: trimmedID });
         applyEntries(data.entries, {});
       } catch (err) {
-        const message = err instanceof Error ? err.message : '查询失败，请稍后重试。';
+        if (err instanceof LotteryApiError && err.code === 40101) {
+          setAuthError(true);
+          return;
+        }
+        const message =
+          err instanceof Error ? err.message : '查询失败，请稍后重试。';
         if (isNotFoundMessage(message)) {
           setNotFound(message);
         } else {
@@ -312,6 +374,12 @@ const LotteryPage: React.FC = () => {
     resetView();
   };
 
+  const retryAuth = () => {
+    if (!token) return;
+    clearAuthAttempted(token);
+    window.location.href = lotteryAuthStartUrl(token);
+  };
+
   if (loadState === 'loading') {
     return (
       <div className="lottery-page">
@@ -325,6 +393,31 @@ const LotteryPage: React.FC = () => {
       <div className="lottery-page">
         <BrandTopline />
         <InvalidLinkHeader />
+      </div>
+    );
+  }
+
+  if (authError) {
+    return (
+      <div className="lottery-page">
+        <BrandTopline />
+        <PageHeader eventName={meta.event_name} genres={meta.genres} />
+        <section className="lp-notfound" role="alert">
+          <p className="lp-notfound-code">WECHAT AUTH · 微信授权</p>
+          <h2 className="lp-notfound-title">需要微信授权后才能继续</h2>
+          <p className="lp-notfound-detail">
+            为保证抽签结果可追溯，页面会记录你当前微信的匿名标识（不会获取昵称或头像）。
+            请点击下方按钮重新授权；授权过程为静默跳转，不会弹出额外页面。
+          </p>
+          <button type="button" className="lp-submit" onClick={retryAuth}>
+            重新授权
+            <span aria-hidden="true">→</span>
+          </button>
+        </section>
+        <footer className="lp-footer">
+          <span className="lp-footer-dot" aria-hidden="true" />
+          本链接仅用于本次赛事抽签，请勿转发。
+        </footer>
       </div>
     );
   }
@@ -382,7 +475,11 @@ const LotteryPage: React.FC = () => {
             确认已报名仍查不到？请把「选手姓名 + 身份证号」发给赛事客服核对，
             无需重复提交，也请勿相信非官方渠道。
           </p>
-          <button type="button" className="lp-notfound-back" onClick={resetView}>
+          <button
+            type="button"
+            className="lp-notfound-back"
+            onClick={resetView}
+          >
             返回重新输入
           </button>
           {isDraw && (
@@ -414,16 +511,15 @@ const LotteryPage: React.FC = () => {
                 entry={entry}
                 fresh={fresh && entry.drawn}
                 onGoDraw={goDraw}
-                onOpenPoster={
-                  isDraw ? undefined : () => showPoster([entry])
-                }
+                onOpenPoster={isDraw ? undefined : () => showPoster([entry])}
               />
             ))}
           </div>
 
           {pendingEntries.length > 0 && drawnEntries.length > 0 && (
             <p className="lp-pending-hint">
-              还有 {pendingEntries.length} 个舞种未抽签，请点击上方卡片中的「去抽签」完成。
+              还有 {pendingEntries.length}{' '}
+              个舞种未抽签，请点击上方卡片中的「去抽签」完成。
             </p>
           )}
 
@@ -522,7 +618,8 @@ const LotteryPage: React.FC = () => {
             <p className="lp-eyebrow">Multiple Entries</p>
             <h2 className="lp-modal-title">请选择要抽签的舞种</h2>
             <p className="lp-modal-text">
-              检测到该选手报名了 {choice.choices.length} 个舞种，请选择本次要抽取的舞种。
+              检测到该选手报名了 {choice.choices.length}{' '}
+              个舞种，请选择本次要抽取的舞种。
             </p>
             <div className="lp-modal-choices">
               {choice.choices.map((item) => (
@@ -554,11 +651,19 @@ const LotteryPage: React.FC = () => {
       )}
 
       {poster && (
-        <div className="lp-modal-mask lp-poster-mask" role="dialog" aria-modal="true">
+        <div
+          className="lp-modal-mask lp-poster-mask"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="lp-poster">
             <p className="lp-poster-hint">长按图片保存到手机相册</p>
             <img src={poster} alt="抽签结果，长按保存" />
-            <button type="button" className="lp-modal-cancel" onClick={closePoster}>
+            <button
+              type="button"
+              className="lp-modal-cancel"
+              onClick={closePoster}
+            >
               关闭
             </button>
           </div>
@@ -567,7 +672,7 @@ const LotteryPage: React.FC = () => {
 
       <footer className="lp-footer">
         <span className="lp-footer-dot" aria-hidden="true" />
-        本链接仅用于本次赛事抽签，请勿转发。
+        本链接仅用于本次赛事抽签，请勿转发。页面会记录当前微信的匿名标识用于抽签核对。
       </footer>
     </div>
   );

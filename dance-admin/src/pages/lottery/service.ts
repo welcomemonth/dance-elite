@@ -36,6 +36,8 @@ export interface LotteryMeta {
   server_time: string;
   /** 服务端判定的页面状态 */
   status: LotteryStatus;
+  /** 当前浏览器是否已通过公众号网页授权（open 调试模式恒为 true） */
+  authorized: boolean;
 }
 
 /** 一名选手在某舞种下的抽签记录（同一人可报多个舞种）。 */
@@ -83,6 +85,17 @@ interface ApiResponse<T> {
   data: T;
 }
 
+/** 带业务错误码的接口错误，页面据此识别 40101（需要重新微信授权）。 */
+export class LotteryApiError extends Error {
+  readonly code: number;
+
+  constructor(code: number, message: string) {
+    super(message);
+    this.name = 'LotteryApiError';
+    this.code = code;
+  }
+}
+
 /** 读取统一响应包装；业务错误直接抛出服务端文案。 */
 async function readData<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => null)) as ApiResponse<T> | null;
@@ -90,7 +103,10 @@ async function readData<T>(res: Response): Promise<T> {
     throw new Error(`请求失败（HTTP ${res.status}），请稍后重试`);
   }
   if (body.code !== 0) {
-    throw new Error(body.message || `请求失败（code ${body.code}）`);
+    throw new LotteryApiError(
+      body.code,
+      body.message || `请求失败（code ${body.code}）`,
+    );
   }
   return body.data;
 }
@@ -98,15 +114,25 @@ async function readData<T>(res: Response): Promise<T> {
 async function postJSON<T>(path: string, payload: unknown): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   return readData<T>(res);
 }
 
+/** 公众号网页授权跳转地址（静默 snsapi_base，无弹窗）。 */
+export function lotteryAuthStartUrl(token: string): string {
+  return `/h5/lottery/${encodeURIComponent(token)}/auth/start`;
+}
+
 /** GET /h5/lottery/{token}：页面初始化信息。 */
 export async function fetchLotteryMeta(token: string): Promise<LotteryMeta> {
-  const res = await fetch(`/h5/lottery/${encodeURIComponent(token)}`);
+  const res = await fetch(`/h5/lottery/${encodeURIComponent(token)}`, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+  });
   return readData<LotteryMeta>(res);
 }
 
