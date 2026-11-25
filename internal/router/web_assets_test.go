@@ -31,9 +31,16 @@ func newWebAssetsTestEngine(assets fstest.MapFS) *gin.Engine {
 }
 
 func serveWebRequest(engine *gin.Engine, method, target, accept string) *httptest.ResponseRecorder {
+	return serveWebRequestUA(engine, method, target, accept, "")
+}
+
+func serveWebRequestUA(engine *gin.Engine, method, target, accept, userAgent string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, target, nil)
 	if accept != "" {
 		req.Header.Set("Accept", accept)
+	}
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
 	}
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
@@ -57,6 +64,21 @@ func TestWebAssetsServesPageAndSpaFallback(t *testing.T) {
 		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), tc.body) {
 			t.Fatalf("%s: code = %d, body = %q", tc.path, w.Code, w.Body.String())
 		}
+	}
+}
+
+func TestWebAssetsBlocksLotteryOutsideWeChat(t *testing.T) {
+	engine := newWebAssetsTestEngine(testWebAssets())
+
+	w := serveWebRequest(engine, http.MethodGet, "/lottery/tok123", "text/html")
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("non-wechat lottery page code = %d, want 404", w.Code)
+	}
+
+	w = serveWebRequestUA(engine, http.MethodGet, "/lottery/tok123", "text/html",
+		"Mozilla/5.0 MicroMessenger/8.0.47")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "<html>root</html>") {
+		t.Fatalf("wechat lottery page code = %d, body = %q", w.Code, w.Body.String())
 	}
 }
 

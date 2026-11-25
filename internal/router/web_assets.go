@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/meetmonth/dance-elite/internal/middleware"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
 )
 
@@ -36,6 +37,11 @@ func registerWebAssets(engine *gin.Engine, assets fs.FS) {
 			httpx.AbortError(c, httpx.ErrNotFound("资源不存在"))
 			return
 		}
+		// 抽签 H5 只允许在微信内打开；其他浏览器/来源直接 404。
+		if isLotteryPage(p) && !middleware.IsWeChatBrowser(c.GetHeader("User-Agent")) {
+			httpx.AbortError(c, httpx.ErrNotFound("资源不存在"))
+			return
+		}
 		if assetExists(assets, p) {
 			// 用原始路径判断缓存：path.Clean 会去掉目录路径末尾的斜杠。
 			setAssetCache(c, raw)
@@ -59,6 +65,11 @@ func isBackendPath(p string) bool {
 		}
 	}
 	return p == "/api" || p == "/h5" || p == "/static"
+}
+
+// isLotteryPage 判断是否为选手抽签 H5 的页面路由（/lottery/{token}）。
+func isLotteryPage(p string) bool {
+	return p == "/lottery" || strings.HasPrefix(p, "/lottery/")
 }
 
 func isReadMethod(method string) bool {

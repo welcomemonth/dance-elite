@@ -20,6 +20,7 @@ import (
 const (
 	testLotteryRouteToken = "RouteToken1"
 	testLotteryRouteKey   = "route-test-key"
+	testWeChatUA          = "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 MicroMessenger/8.0.47"
 )
 
 // newLotteryTestEngine 打开内存库、写入一场抽签，只装配抽签 H5 路由。
@@ -68,9 +69,15 @@ func lotteryPost(t *testing.T, engine *gin.Engine, path, body string) *httptest.
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", testWeChatUA)
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 	return w
+}
+
+func lotteryGet(t *testing.T, engine *gin.Engine, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	return getJSON(t, engine, path, map[string]string{"User-Agent": testWeChatUA})
 }
 
 func decodeLotteryBody(t *testing.T, w *httptest.ResponseRecorder) (int, []byte) {
@@ -87,7 +94,7 @@ func decodeLotteryBody(t *testing.T, w *httptest.ResponseRecorder) (int, []byte)
 
 func TestLotteryMetaRoute(t *testing.T) {
 	engine := newLotteryTestEngine(t)
-	w := getJSON(t, engine, "/h5/lottery/"+testLotteryRouteToken, nil)
+	w := lotteryGet(t, engine, "/h5/lottery/"+testLotteryRouteToken)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -183,9 +190,31 @@ func TestLotteryRouteErrors(t *testing.T) {
 		t.Fatalf("mismatch: status=%d code=%d", w.Code, code)
 	}
 
-	w = getJSON(t, engine, "/h5/lottery/Unknown1", nil)
+	w = lotteryGet(t, engine, "/h5/lottery/Unknown1")
 	code, _ = decodeLotteryBody(t, w)
 	if w.Code != http.StatusNotFound || code != httpx.CodeNotFound {
 		t.Fatalf("unknown token: status=%d code=%d", w.Code, code)
+	}
+}
+
+// TestLotteryRejectsNonWeChat 校验抽签 H5 接口只允许微信内置浏览器访问。
+func TestLotteryRejectsNonWeChat(t *testing.T) {
+	engine := newLotteryTestEngine(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/h5/lottery/"+testLotteryRouteToken, nil)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if code, _ := decodeLotteryBody(t, w); code != httpx.CodeNotFound {
+		t.Fatalf("non-wechat meta code=%d body=%s", code, w.Body)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/h5/lottery/"+testLotteryRouteToken+"/query",
+		bytes.NewBufferString(`{"id_card":"310101201501011234"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
+	w = httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if code, _ := decodeLotteryBody(t, w); code != httpx.CodeNotFound {
+		t.Fatalf("non-wechat query code=%d body=%s", code, w.Body)
 	}
 }

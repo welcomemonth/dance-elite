@@ -108,6 +108,9 @@ const LotteryPage: React.FC = () => {
       setNotFound('');
       setError('');
       setFresh(Boolean(options.fresh));
+      // 查询只填证件号时，用服务端返回的报名姓名回填抽签表单，避免姓名不一致导致「信息不匹配」。
+      const recordedName = result.find((entry) => entry.name)?.name;
+      if (recordedName) setName(recordedName);
       const drawnAt = latestDrawnAt(result);
       if (options.note) {
         setNotice(options.note);
@@ -177,6 +180,9 @@ const LotteryPage: React.FC = () => {
   };
 
   const goDraw = () => {
+    // 从查询结果进入抽签时，用报名姓名回填，保证与名单中的姓名完全一致。
+    const recordedName = entries?.find((entry) => entry.name)?.name;
+    if (recordedName) setName(recordedName);
     setTab('draw');
     resetView();
   };
@@ -274,7 +280,8 @@ const LotteryPage: React.FC = () => {
       setNotFound('');
       try {
         const data = await queryLottery(token, { id_card: trimmedID });
-        saveRemembered(token, { name: trimmedName, id_card: trimmedID });
+        const recordedName = data.entries.find((entry) => entry.name)?.name ?? trimmedName;
+        saveRemembered(token, { name: recordedName, id_card: trimmedID });
         applyEntries(data.entries, {});
       } catch (err) {
         const message = err instanceof Error ? err.message : '查询失败，请稍后重试。';
@@ -378,6 +385,18 @@ const LotteryPage: React.FC = () => {
           <button type="button" className="lp-notfound-back" onClick={resetView}>
             返回重新输入
           </button>
+          {isDraw && (
+            <button
+              type="button"
+              className="lp-notfound-back"
+              onClick={() => {
+                setTab('query');
+                resetView();
+              }}
+            >
+              改用身份证号查询
+            </button>
+          )}
         </section>
       ) : entries ? (
         <>

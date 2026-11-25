@@ -20,6 +20,8 @@ type lotteryHandler struct {
 // 阈值与音频审核持平，不设得更严。
 func registerLotteryH5Routes(group *gin.RouterGroup, svc *service.LotteryService) {
 	h := &lotteryHandler{svc: svc}
+	// 抽签链接只允许在微信内打开：非微信浏览器直接 404，且不暴露接口存在性。
+	group.Use(middleware.WeChatOnly())
 	group.GET("/lottery/:token", middleware.RateLimit(120, time.Minute), h.meta)
 	group.POST("/lottery/:token/lookup", middleware.RateLimit(60, time.Minute), h.lookup)
 	group.POST("/lottery/:token/query", middleware.RateLimit(60, time.Minute), h.query)

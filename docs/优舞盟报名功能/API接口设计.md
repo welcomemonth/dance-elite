@@ -1561,7 +1561,10 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 | 功能说明 | 每场赛事一个免登录链接：选手输入 **姓名 + 证件号** 抽取出场顺序（同一人报多个舞种时由服务端提示选择），或只凭 **证件号** 查询全部记录；数据存数据库 `lottery_sessions` / `lottery_groups` / `lottery_players`。支持抽签开始/截止时间：开始前禁止抽签，截止后剩余选手自动分配，并可通过短信提醒/通知 |
 | 请求方法 + URL | `GET /h5/lottery/{token}`、`POST /h5/lottery/{token}/lookup`、`POST /h5/lottery/{token}/query`、`POST /h5/lottery/{token}/draw` |
 | 鉴权 | 免登录（URL token，8–64 位字母数字，后台导入时默认生成 16 位） |
+| 访问限制 | 仅允许微信内置浏览器访问（UA 含 `MicroMessenger`）；页面与 `/h5/lottery/*` 接口对其他 UA 均返回 404，不暴露页面存在性 |
 | 页面地址 | `/lottery/{token}`（React H5，移动端优先） |
+
+> 本地调试：可在浏览器 DevTools 中把 User-Agent 临时改为包含 `MicroMessenger`，或直接用微信开发者工具打开；普通浏览器会得到 404。
 
 ### 7.2.1 页面元信息
 
@@ -1684,6 +1687,7 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 ### 7.2.5 结果图片与再次访问
 
 - 抽签完成后 H5 用 Canvas 在本地生成结果图片（不经过服务端、不上传），展示「长按图片保存」；图片含赛事名称、选手、舞种/年龄组、组字母 + 序号、抽签时间与「已抽签」印章。
+- 「查询」Tab 只填证件号；查询结果会回填「抽签」Tab 的姓名（以服务端名单为准），避免手输姓名与报名姓名不一致导致信息不匹配。
 - 页面把最近一次输入的姓名/证件号按 `token` 维度存 `localStorage`；再次打开时自动查询并提示「已于 X月X日 HH:MM 完成抽签」，同时展示全部结果。提供「不是我，清除本机记住的信息」。
 
 ### 7.2.6 数据来源与存储
