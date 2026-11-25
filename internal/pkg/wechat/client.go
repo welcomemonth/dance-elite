@@ -37,6 +37,16 @@ type Session struct {
 	UnionID string
 }
 
+// OAuthUser 是公众号网页授权（snsapi_base）换取的微信身份。
+type OAuthUser struct {
+	OpenID  string
+	UnionID string
+	Scope   string
+}
+
+// AppID 返回客户端使用的微信 appid（拼授权跳转地址用）。
+func (c *Client) AppID() string { return c.appID }
+
 // Option 定制 Client（测试用）。
 type Option func(*Client)
 
@@ -120,6 +130,49 @@ func (c *Client) Code2Session(ctx context.Context, code string) (Session, error)
 		return Session{}, errors.New("wechat code2session: empty openid")
 	}
 	return Session{OpenID: resp.OpenID, UnionID: resp.UnionID}, nil
+}
+
+// OAuthAccessToken 用公众号网页授权的 code 换取 openid/unionid。
+//
+// 与小程序 code2session 不同：这里走 sns/oauth2/access_token，使用公众号
+// appid/secret，返回的 access_token 是该用户的网页授权凭据（本系统不使用，
+// 也不缓存）。code 5 分钟内一次性有效，无效/已使用时返回 ErrInvalidCode。
+func (c *Client) OAuthAccessToken(ctx context.Context, code string) (OAuthUser, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return OAuthUser{}, fmt.Errorf("%w: empty oauth code", ErrInvalidCode)
+	}
+
+	q := url.Values{}
+	q.Set("appid", c.appID)
+	q.Set("secret", c.secret)
+	q.Set("code", code)
+	q.Set("grant_type", "authorization_code")
+
+	var resp struct {
+		AccessToken  string `json:"access_token"`
+		ExpiresIn    int    `json:"expires_in"`
+		RefreshToken string `json:"refresh_token"`
+		OpenID       string `json:"openid"`
+		Scope        string `json:"scope"`
+		UnionID      string `json:"unionid"`
+		ErrCode      int    `json:"errcode"`
+		ErrMsg       string `json:"errmsg"`
+	}
+	if err := c.getJSON(ctx, "/sns/oauth2/access_token?"+q.Encode(), &resp); err != nil {
+		return OAuthUser{}, fmt.Errorf("wechat oauth access token: %w", err)
+	}
+	switch resp.ErrCode {
+	case 0:
+	case 40029, 40163: // invalid code / code been used
+		return OAuthUser{}, fmt.Errorf("%w: errcode=%d %s", ErrInvalidCode, resp.ErrCode, resp.ErrMsg)
+	default:
+		return OAuthUser{}, fmt.Errorf("wechat oauth access token: errcode=%d %s", resp.ErrCode, resp.ErrMsg)
+	}
+	if resp.OpenID == "" {
+		return OAuthUser{}, errors.New("wechat oauth access token: empty openid")
+	}
+	return OAuthUser{OpenID: resp.OpenID, UnionID: resp.UnionID, Scope: resp.Scope}, nil
 }
 
 // PhoneNumber 调用 getuserphonenumber 用手机号授权 code 换取手机号。

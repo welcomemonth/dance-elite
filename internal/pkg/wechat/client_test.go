@@ -162,6 +162,58 @@ func TestPhoneNumberInvalidCode(t *testing.T) {
 	}
 }
 
+func TestOAuthAccessTokenSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/sns/oauth2/access_token" {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("appid") != "mp-app" || q.Get("secret") != "mp-secret" ||
+			q.Get("code") != "code-1" || q.Get("grant_type") != "authorization_code" {
+			t.Errorf("unexpected query: %v", q)
+		}
+		writeJSON(t, w, map[string]any{
+			"access_token": "user-token", "expires_in": 7200, "refresh_token": "refresh",
+			"openid": "openid-1", "scope": "snsapi_base", "unionid": "unionid-1",
+		})
+	}))
+	defer server.Close()
+
+	c := NewClient("mp-app", "mp-secret", WithBaseURL(server.URL))
+	got, err := c.OAuthAccessToken(context.Background(), "code-1")
+	if err != nil {
+		t.Fatalf("OAuthAccessToken: %v", err)
+	}
+	if got.OpenID != "openid-1" || got.UnionID != "unionid-1" || got.Scope != "snsapi_base" {
+		t.Fatalf("oauth user = %+v", got)
+	}
+}
+
+func TestOAuthAccessTokenInvalidCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, map[string]any{"errcode": 40163, "errmsg": "code been used"})
+	}))
+	defer server.Close()
+
+	c := NewClient("mp-app", "mp-secret", WithBaseURL(server.URL))
+	_, err := c.OAuthAccessToken(context.Background(), "used")
+	if !errors.Is(err, ErrInvalidCode) {
+		t.Fatalf("error = %v, want ErrInvalidCode", err)
+	}
+}
+
+func TestOAuthAccessTokenEmptyOpenID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, map[string]any{"scope": "snsapi_base"})
+	}))
+	defer server.Close()
+
+	c := NewClient("mp-app", "mp-secret", WithBaseURL(server.URL))
+	if _, err := c.OAuthAccessToken(context.Background(), "code"); err == nil {
+		t.Fatal("empty openid should fail")
+	}
+}
+
 func writeJSON(t *testing.T, w http.ResponseWriter, v any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
