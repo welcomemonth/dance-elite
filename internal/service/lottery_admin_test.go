@@ -153,6 +153,31 @@ func TestAdminLotteryImportListAndExport(t *testing.T) {
 	if len(detail.Groups) != 2 {
 		t.Fatalf("groups = %+v", detail.Groups)
 	}
+	if len(detail.Draws) != 0 {
+		t.Fatalf("draws before draw = %+v", detail.Draws)
+	}
+
+	// 直接构造一条带公众号身份的抽签记录，导出应带 openid。
+	_, _, players, err := env.stores.Lottery.GetByToken(context.Background(), created.Token)
+	if err != nil {
+		t.Fatalf("load players: %v", err)
+	}
+	var targetID int64
+	for _, player := range players {
+		if player.Name == "张三" && player.Genre == model.DanceTypeClassical {
+			targetID = player.ID
+		}
+	}
+	if targetID == 0 {
+		t.Fatal("target player not found")
+	}
+	if err := env.stores.WithTx(context.Background(), func(tx *sql.Tx) error {
+		_, err := env.stores.Lottery.UpdatePlayerSlotWithIdentity(context.Background(), tx, targetID,
+			"A", 1, "2027-02-05T12:00:00+08:00", "mp-openid-1", "unionid-1")
+		return err
+	}); err != nil {
+		t.Fatalf("draw: %v", err)
+	}
 
 	file, err := env.svc.Export(context.Background(), env.adminID, created.Token)
 	if err != nil {
@@ -176,11 +201,30 @@ func TestAdminLotteryImportListAndExport(t *testing.T) {
 	if rows[0][0] != "序号" || rows[0][2] != "身份证号" {
 		t.Fatalf("header = %v", rows[0])
 	}
+	if len(rows[0]) != 11 || rows[0][10] != "抽签微信标识" {
+		t.Fatalf("wechat header = %v", rows[0])
+	}
 	if rows[1][2] != "310101201501011234" {
 		t.Fatalf("id card = %q, want text", rows[1][2])
 	}
-	if len(rows[1]) < 8 || rows[1][7] != "未抽签" {
-		t.Fatalf("draw order = %v", rows[1])
+	sawPending := false
+	for _, row := range rows[1:] {
+		if len(row) >= 8 && row[7] == "未抽签" {
+			sawPending = true
+			break
+		}
+	}
+	if !sawPending {
+		t.Fatalf("export rows should contain undrawn players: %v", rows)
+	}
+	var wechatCell, drawMode string
+	for _, row := range rows[1:] {
+		if len(row) >= 11 && row[2] == "310101201501011234" && row[4] == "古典舞" {
+			drawMode, wechatCell = row[9], row[10]
+		}
+	}
+	if drawMode != "本人抽取" || wechatCell != "mp-openid-1" {
+		t.Fatalf("drawn row mode=%q wechat=%q", drawMode, wechatCell)
 	}
 }
 

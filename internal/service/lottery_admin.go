@@ -80,15 +80,20 @@ func (s *AdminLotteryService) List(ctx context.Context) (*model.AdminLotteryList
 	return &model.AdminLotteryListResponse{List: list}, nil
 }
 
-// Get 返回单场抽签详情（含分组进度）。
+// Get 返回单场抽签详情（含分组进度与抽签微信明细）。
 func (s *AdminLotteryService) Get(ctx context.Context, token string) (*model.AdminLotteryDetail, error) {
 	session, groups, players, err := s.load(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	draws, err := s.buildDraws(ctx, players)
 	if err != nil {
 		return nil, err
 	}
 	detail := &model.AdminLotteryDetail{
 		AdminLotterySession: s.summary(session),
 		Groups:              lotteryGroupStats(groups, players),
+		Draws:               draws,
 	}
 	return detail, nil
 }

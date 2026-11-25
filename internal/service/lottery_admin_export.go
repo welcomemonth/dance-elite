@@ -50,7 +50,7 @@ func (s *AdminLotteryService) buildLotteryWorkbook(ctx context.Context, players 
 	}
 
 	headers := []any{"序号", "姓名", "身份证号", "年龄组", "舞种",
-		"分组", "组内序号", "出场顺序", "抽签时间", "抽签方式"}
+		"分组", "组内序号", "出场顺序", "抽签时间", "抽签方式", "抽签微信标识"}
 	if err := f.SetSheetRow(lotteryExportSheet, "A1", &headers); err != nil {
 		return nil, fmt.Errorf("write lottery header: %w", err)
 	}
@@ -69,6 +69,7 @@ func (s *AdminLotteryService) buildLotteryWorkbook(ctx context.Context, players 
 			lotteryOrderText(player),
 			lotteryDrawnAtText(player),
 			lotteryDrawMode(player),
+			lotteryWechatText(player),
 		}
 		cell := fmt.Sprintf("A%d", row)
 		if err := f.SetSheetRow(lotteryExportSheet, cell, &values); err != nil {
@@ -114,12 +115,12 @@ func styleLotterySheet(f *excelize.File) error {
 	if err != nil {
 		return fmt.Errorf("create lottery export style: %w", err)
 	}
-	if err := f.SetCellStyle(lotteryExportSheet, "A1", "J1", style); err != nil {
+	if err := f.SetCellStyle(lotteryExportSheet, "A1", "K1", style); err != nil {
 		return fmt.Errorf("apply lottery header style: %w", err)
 	}
 	widths := map[string]float64{
 		"A": 6, "B": 12, "C": 22, "D": 8, "E": 14,
-		"F": 8, "G": 10, "H": 10, "I": 20, "J": 14,
+		"F": 8, "G": 10, "H": 10, "I": 20, "J": 14, "K": 30,
 	}
 	for column, width := range widths {
 		if err := f.SetColWidth(lotteryExportSheet, column, column, width); err != nil {
@@ -189,4 +190,12 @@ func lotteryDrawMode(player model.LotteryPlayer) string {
 	default:
 		return "本人抽取"
 	}
+}
+
+// lotteryWechatText 返回手动抽签的公众号 openid；自动分配或本地调试为空。
+func lotteryWechatText(player model.LotteryPlayer) string {
+	if player.AutoDrawn || player.DrawnOpenID == nil {
+		return ""
+	}
+	return *player.DrawnOpenID
 }

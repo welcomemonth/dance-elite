@@ -25,6 +25,9 @@ type testLotteryPlayer struct {
 	Slot        *model.LotterySlot
 	AutoDrawn   bool
 	DrawnAt     string
+	// DrawnOpenID / DrawnUnionID 用于直接构造「已抽签且记录微信身份」的夹具。
+	DrawnOpenID  string
+	DrawnUnionID string
 }
 
 type testLotterySeed struct {
@@ -107,8 +110,15 @@ func mustSeedLottery(t *testing.T, stores *store.Store, seed testLotterySeed) (i
 				drawAt = utils.NowISO()
 			}
 			err := stores.WithTx(ctx, func(tx *sql.Tx) error {
+				if seed.Players[i].DrawnOpenID != "" || seed.Players[i].DrawnUnionID != "" {
+					_, err := stores.Lottery.UpdatePlayerSlotWithIdentity(ctx, tx, player.ID,
+						seed.Players[i].Slot.Letter, seed.Players[i].Slot.No, drawAt,
+						seed.Players[i].DrawnOpenID, seed.Players[i].DrawnUnionID)
+					return err
+				}
 				_, err := stores.Lottery.UpdatePlayerSlot(ctx, tx, player.ID,
-					seed.Players[i].Slot.Letter, seed.Players[i].Slot.No, drawAt, seed.Players[i].AutoDrawn)
+					seed.Players[i].Slot.Letter, seed.Players[i].Slot.No, drawAt,
+					seed.Players[i].AutoDrawn)
 				return err
 			})
 			if err != nil {
