@@ -83,9 +83,13 @@ type LotteryPlayer struct {
 	SlotNo         *int
 	DrawnAt        *string
 	AutoDrawn      bool
-	SMS            LotterySMSState
-	CreatedAt      string
-	UpdatedAt      string
+	// DrawnOpenID / DrawnUnionID 是手动抽签时的公众号身份（网页授权获取）；
+	// 系统自动分配为 nil。
+	DrawnOpenID  *string
+	DrawnUnionID *string
+	SMS          LotterySMSState
+	CreatedAt    string
+	UpdatedAt    string
 }
 
 // Slot 返回已分配槽位；尚未抽签返回 nil。
@@ -137,6 +141,9 @@ type LotteryMeta struct {
 	EndAt      string         `json:"end_at,omitempty"`
 	ServerTime string         `json:"server_time"`
 	Status     string         `json:"status"`
+	// Authorized 表示当前浏览器已通过公众号网页授权（或服务端处于
+	// 本地调试的 open 模式）。前端在 false 时跳转授权，不渲染表单。
+	Authorized bool `json:"authorized"`
 }
 
 // LotteryEntry 是一名选手在某舞种下的抽签记录（一名选手可报多个舞种）。
@@ -206,6 +213,36 @@ type AdminLotteryGroupStat struct {
 type AdminLotteryDetail struct {
 	AdminLotterySession
 	Groups []AdminLotteryGroupStat `json:"groups"`
+	// Draws 是已抽签选手的明细（含抽签微信身份与匹配到的小程序账号）。
+	Draws []AdminLotteryDraw `json:"draws"`
+}
+
+// AdminLotteryDraw 是后台详情中的一条抽签记录。
+type AdminLotteryDraw struct {
+	PlayerName string       `json:"player_name"`
+	Genre      string       `json:"genre"`
+	GenreLabel string       `json:"genre_label"`
+	AgeGroup   string       `json:"age_group"`
+	Slot       *LotterySlot `json:"slot"`
+	DrawnAt    string       `json:"drawn_at,omitempty"`
+	AutoDrawn  bool         `json:"auto_drawn"`
+	// OpenID / UnionID 是手动抽签时的公众号身份；系统自动分配为空。
+	OpenID  string `json:"openid,omitempty"`
+	UnionID string `json:"unionid,omitempty"`
+	// SameWechatCount 是同一抽签微信在本场抽签中的操作人数（按选手去重，含本人），
+	// 用于发现一个微信替多人抽签的情况；自动分配为 0。
+	SameWechatCount int `json:"same_wechat_count,omitempty"`
+	// IDCardHash 只用于统计同微信人数，不对外输出。
+	IDCardHash string `json:"-"`
+	// User 是按 unionid 匹配到的小程序账号；未匹配为 nil。
+	User *AdminLotteryDrawUser `json:"user,omitempty"`
+}
+
+// AdminLotteryDrawUser 是抽签微信匹配到的小程序账号（手机号已掩码）。
+type AdminLotteryDrawUser struct {
+	ID       int64  `json:"id"`
+	Nickname string `json:"nickname,omitempty"`
+	Phone    string `json:"phone,omitempty"`
 }
 
 // AdminLotteryCreateResult 是导入后返回的结果摘要。

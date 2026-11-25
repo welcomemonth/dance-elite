@@ -251,14 +251,28 @@ func (s *LotteryStore) GetPlayers(ctx context.Context, sessionID int64) ([]model
 	return players, nil
 }
 
-// UpdatePlayerSlot 原子分配槽位；仅当该选手尚未抽签时生效。
+// UpdatePlayerSlot 原子分配槽位（无操作人，系统自动分配用）；仅当该选手尚未抽签时生效。
 // 返回 false 表示槽位已被并发请求占用。
 func (s *LotteryStore) UpdatePlayerSlot(ctx context.Context, tx *sql.Tx, playerID int64,
 	letter string, no int, drawnAt string, auto bool) (bool, error) {
+	return s.updatePlayerSlot(ctx, tx, playerID, letter, no, drawnAt, auto, "", "")
+}
+
+// UpdatePlayerSlotWithIdentity 分配槽位并记录公众号抽签身份（手动抽签用）；
+// openid/unionid 为空时写 NULL。
+func (s *LotteryStore) UpdatePlayerSlotWithIdentity(ctx context.Context, tx *sql.Tx, playerID int64,
+	letter string, no int, drawnAt string, openid, unionid string) (bool, error) {
+	return s.updatePlayerSlot(ctx, tx, playerID, letter, no, drawnAt, false, openid, unionid)
+}
+
+func (s *LotteryStore) updatePlayerSlot(ctx context.Context, tx *sql.Tx, playerID int64,
+	letter string, no int, drawnAt string, auto bool, openid, unionid string) (bool, error) {
 	res, err := tx.ExecContext(ctx, `
 		UPDATE lottery_players
-		SET group_letter = ?, slot_no = ?, drawn_at = ?, auto_drawn = ?
-		WHERE id = ? AND slot_no IS NULL`, letter, no, drawnAt, boolInt(auto), playerID)
+		SET group_letter = ?, slot_no = ?, drawn_at = ?, auto_drawn = ?,
+			drawn_openid = NULLIF(?, ''), drawn_unionid = NULLIF(?, '')
+		WHERE id = ? AND slot_no IS NULL`,
+		letter, no, drawnAt, boolInt(auto), openid, unionid, playerID)
 	if err != nil {
 		return false, fmt.Errorf("update lottery slot: %w", err)
 	}
@@ -347,7 +361,8 @@ func (s *LotteryStore) loadPlayers(ctx context.Context, q lotteryQueryer, sessio
 	rows, err := q.QueryContext(ctx, `
 		SELECT id, session_id, registration_id, name, id_card_hash, id_card_masked, id_card_enc,
 			genre, age_group, institution, program, phone, group_letter, slot_no, drawn_at,
-			auto_drawn, remind_sent_at, remind_attempts, result_sent_at, result_attempts,
+			auto_drawn, drawn_openid, drawn_unionid,
+			remind_sent_at, remind_attempts, result_sent_at, result_attempts,
 			created_at, updated_at
 		FROM lottery_players WHERE session_id = ? ORDER BY id`, sessionID)
 	if err != nil {
@@ -368,12 +383,15 @@ func (s *LotteryStore) loadPlayers(ctx context.Context, q lotteryQueryer, sessio
 			letter       sql.NullString
 			slotNo       sql.NullInt64
 			drawnAt      sql.NullString
+			drawnOpenID  sql.NullString
+			drawnUnionID sql.NullString
 			remindSent   sql.NullString
 			resultSent   sql.NullString
 		)
 		if err := rows.Scan(&player.ID, &player.SessionID, &registration, &player.Name,
 			&player.IDCardHash, &masked, &enc, &player.Genre, &player.AgeGroup,
 			&institution, &program, &phone, &letter, &slotNo, &drawnAt, &autoDrawn,
+			&drawnOpenID, &drawnUnionID,
 			&remindSent, &player.SMS.RemindAttempts, &resultSent, &player.SMS.ResultAttempts,
 			&player.CreatedAt, &player.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan lottery player: %w", err)
@@ -388,6 +406,8 @@ func (s *LotteryStore) loadPlayers(ctx context.Context, q lotteryQueryer, sessio
 		player.SlotNo = nullIntPtr(slotNo)
 		player.DrawnAt = nullStringPtr(drawnAt)
 		player.AutoDrawn = autoDrawn == 1
+		player.DrawnOpenID = nullStringPtr(drawnOpenID)
+		player.DrawnUnionID = nullStringPtr(drawnUnionID)
 		player.SMS.RemindSentAt = nullStringPtr(remindSent)
 		player.SMS.ResultSentAt = nullStringPtr(resultSent)
 		players = append(players, player)

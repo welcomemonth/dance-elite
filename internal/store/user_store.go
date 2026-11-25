@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/meetmonth/dance-elite/internal/model"
 )
@@ -136,6 +137,68 @@ func (s *UserStore) UpdatePhone(ctx context.Context, tx *sql.Tx, userID int64, p
 		return ErrNotFound
 	}
 	return nil
+}
+
+// ByUnionIDs 按 unionid 批量读取用户，返回以 unionid 为键的映射。
+//
+// 用于抽签后台把 H5 记录的公众号 unionid 关联到小程序账号。
+// SQLite 单语句变量数有上限，按 500 一批查询。
+func (s *UserStore) ByUnionIDs(ctx context.Context, unionIDs []string) (map[string]model.User, error) {
+	result := make(map[string]model.User)
+	ids := uniqueNonEmpty(unionIDs)
+	const chunk = 500
+	for start := 0; start < len(ids); start += chunk {
+		end := start + chunk
+		if end > len(ids) {
+			end = len(ids)
+		}
+		part := ids[start:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(part)), ",")
+		args := make([]any, 0, len(part))
+		for _, id := range part {
+			args = append(args, id)
+		}
+		rows, err := s.db.sql.QueryContext(ctx,
+			`SELECT `+userColumns+` FROM users WHERE unionid IN (`+placeholders+`)`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("query users by unionid: %w", err)
+		}
+		for rows.Next() {
+			user, scanErr := scanUser(rows)
+			if scanErr != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("scan user by unionid: %w", scanErr)
+			}
+			if user.UnionID != nil {
+				result[*user.UnionID] = *user
+			}
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("iterate users by unionid: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, fmt.Errorf("close users by unionid: %w", err)
+		}
+	}
+	return result, nil
+}
+
+// uniqueNonEmpty 去重并丢弃空串，保持首次出现顺序。
+func uniqueNonEmpty(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 // DefaultPlayerNo 返回用户最近一条报名对应的选手编号；没有报名记录时返回 nil。
