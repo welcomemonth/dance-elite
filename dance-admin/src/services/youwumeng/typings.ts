@@ -749,6 +749,41 @@ export interface LotteryGroupStat {
 
 export interface LotterySessionDetail extends LotterySession {
   groups: LotteryGroupStat[];
+  /** 已抽签选手明细（含抽签微信身份与匹配到的小程序账号） */
+  draws: LotteryDraw[];
+}
+
+/** 抽签记录的槽位：组字母 + 组内序号。 */
+export interface LotteryDrawSlot {
+  letter: string;
+  no: number;
+}
+
+/** 抽签微信匹配到的小程序账号（手机号已掩码）。 */
+export interface LotteryDrawUser {
+  id: number;
+  nickname?: string;
+  phone?: string;
+}
+
+/** 后台抽签详情中的一条抽签记录。 */
+export interface LotteryDraw {
+  player_name: string;
+  genre: DanceType;
+  genre_label: string;
+  age_group: AgeLevel;
+  slot: LotteryDrawSlot | null;
+  drawn_at?: string;
+  /** 是否为截止后系统自动分配（无操作人） */
+  auto_drawn: boolean;
+  /** 公众号 openid（手动抽签才有） */
+  openid?: string;
+  /** 公众号 unionid（与小程序账号同源） */
+  unionid?: string;
+  /** 同一抽签微信在本场的操作人数（含本人）；自动分配为空 */
+  same_wechat_count?: number;
+  /** 按 unionid 匹配到的小程序账号 */
+  user?: LotteryDrawUser;
 }
 
 export interface LotteryImportResult extends LotterySession {

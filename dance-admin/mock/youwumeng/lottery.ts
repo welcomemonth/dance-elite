@@ -20,6 +20,8 @@ interface MockLotteryPlayer {
   slot: MockSlot | null;
   drawn_at?: string;
   auto_drawn?: boolean;
+  drawn_openid?: string;
+  drawn_unionid?: string;
 }
 
 interface MockLotterySession {
@@ -92,6 +94,37 @@ function summarize(session: MockLotterySession) {
   };
 }
 
+function drawsOf(session: MockLotterySession) {
+  const wechatCounts = new Map<string, number>();
+  for (const player of session.players) {
+    if (player.slot && player.drawn_openid) {
+      wechatCounts.set(
+        player.drawn_openid,
+        (wechatCounts.get(player.drawn_openid) ?? 0) + 1,
+      );
+    }
+  }
+  return session.players
+    .filter((player) => player.slot)
+    .map((player) => ({
+      player_name: player.name,
+      genre: player.genre,
+      genre_label: groupLabels[player.genre] ?? player.genre,
+      age_group: player.age_group,
+      slot: player.slot,
+      drawn_at: player.drawn_at,
+      auto_drawn: Boolean(player.auto_drawn),
+      openid: player.drawn_openid,
+      unionid: player.drawn_unionid,
+      same_wechat_count: player.drawn_openid
+        ? (wechatCounts.get(player.drawn_openid) ?? 1)
+        : 0,
+      user: player.drawn_unionid
+        ? { id: 1, nickname: 'mock 家长', phone: '138****8000' }
+        : undefined,
+    }));
+}
+
 function groupStats(session: MockLotterySession) {
   const map = new Map<string, { genre: string; age_group: string; letter: string; size: number; drawn: number }>();
   for (const player of session.players) {
@@ -149,7 +182,7 @@ export default {
   'GET /api/v1/admin/lottery/sessions/:token': (req: Request, res: Response) => {
     const session = findSession(String(req.params.token));
     if (!session) return fail(res, 40401, '抽签不存在或链接无效');
-    return ok(res, { ...summarize(session), groups: groupStats(session) });
+    return ok(res, { ...summarize(session), groups: groupStats(session), draws: drawsOf(session) });
   },
 
   'POST /api/v1/admin/lottery/sessions': (req: Request, res: Response) => {
@@ -216,6 +249,7 @@ export default {
       end_at: session.end_at,
       server_time: new Date().toISOString(),
       status,
+      authorized: true,
     });
   },
 
@@ -252,6 +286,8 @@ export default {
       }
       target.slot = nextSlot(session, target);
       target.drawn_at = new Date().toISOString();
+      target.drawn_openid = 'oMockOpenid';
+      target.drawn_unionid = 'uMockUnionid';
       return ok(res, { status: 'drawn', entries: entriesOf(session, idCard, name) });
     }
 
@@ -268,6 +304,8 @@ export default {
     }
     pending[0].slot = nextSlot(session, pending[0]);
     pending[0].drawn_at = new Date().toISOString();
+    pending[0].drawn_openid = 'oMockOpenid';
+    pending[0].drawn_unionid = 'uMockUnionid';
     return ok(res, { status: 'drawn', entries: entriesOf(session, idCard, name) });
   },
 };

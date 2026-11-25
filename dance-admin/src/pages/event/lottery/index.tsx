@@ -6,8 +6,12 @@ import { App, Button, Space, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
 import { formatDateTime } from '@/services/youwumeng/format';
-import { exportLotterySession, listLotterySessions } from '@/services/youwumeng/lottery';
+import {
+  exportLotterySession,
+  listLotterySessions,
+} from '@/services/youwumeng/lottery';
 import type { LotterySession } from '@/services/youwumeng/typings';
+import DrawsModal from './draws-modal';
 import ImportLotteryModal from './import-modal';
 import SettingsLotteryModal from './settings-modal';
 
@@ -27,6 +31,7 @@ const EventLottery: React.FC = () => {
   const actionRef = useRef<ActionType>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [settingsToken, setSettingsToken] = useState<string | null>(null);
+  const [drawsToken, setDrawsToken] = useState<string | null>(null);
 
   const handleExport = async (record: LotterySession) => {
     const filename = `lottery_${record.event_id ?? record.token}_${dayjs().format('YYYYMMDD')}.xlsx`;
@@ -34,7 +39,9 @@ const EventLottery: React.FC = () => {
       await exportLotterySession(record.token, filename);
       message.success('导出已开始，请查看浏览器下载');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '导出失败，请稍后重试');
+      message.error(
+        err instanceof Error ? err.message : '导出失败，请稍后重试',
+      );
     }
   };
 
@@ -60,7 +67,11 @@ const EventLottery: React.FC = () => {
       width: 320,
       render: (_, record) => (
         <div>
-          <Typography.Text copyable={{ text: record.link }} ellipsis style={{ maxWidth: 280 }}>
+          <Typography.Text
+            copyable={{ text: record.link }}
+            ellipsis
+            style={{ maxWidth: 280 }}
+          >
             {record.link}
           </Typography.Text>
           <div>
@@ -83,7 +94,8 @@ const EventLottery: React.FC = () => {
       render: (_, record) => (
         <div>
           <div>
-            已抽 <strong>{record.drawn_count}</strong> / 共 {record.player_count} 人
+            已抽 <strong>{record.drawn_count}</strong> / 共{' '}
+            {record.player_count} 人
           </div>
           {record.pending_count > 0 ? (
             <Tag color="warning">未抽 {record.pending_count} 人</Tag>
@@ -97,7 +109,9 @@ const EventLottery: React.FC = () => {
       title: '抽签时间窗口',
       dataIndex: 'start_at',
       width: 230,
-      render: (_, record) => <span style={{ fontSize: 13 }}>{windowText(record)}</span>,
+      render: (_, record) => (
+        <span style={{ fontSize: 13 }}>{windowText(record)}</span>
+      ),
     },
     {
       title: '更新时间',
@@ -111,9 +125,16 @@ const EventLottery: React.FC = () => {
       width: 180,
       render: (_, record) => (
         <Space wrap size={4}>
-          <Typography.Link onClick={() => setSettingsToken(record.token)}>设置</Typography.Link>
+          <Typography.Link onClick={() => setDrawsToken(record.token)}>
+            抽签记录
+          </Typography.Link>
+          <Typography.Link onClick={() => setSettingsToken(record.token)}>
+            设置
+          </Typography.Link>
           {access.canAdmin && (
-            <Typography.Link onClick={() => void handleExport(record)}>导出结果</Typography.Link>
+            <Typography.Link onClick={() => void handleExport(record)}>
+              导出结果
+            </Typography.Link>
           )}
         </Space>
       ),
@@ -164,6 +185,12 @@ const EventLottery: React.FC = () => {
         open={Boolean(settingsToken)}
         onClose={() => setSettingsToken(null)}
         onSuccess={() => actionRef.current?.reload()}
+      />
+
+      <DrawsModal
+        token={drawsToken}
+        open={Boolean(drawsToken)}
+        onClose={() => setDrawsToken(null)}
       />
     </PageContainer>
   );
