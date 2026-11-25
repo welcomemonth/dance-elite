@@ -64,7 +64,7 @@ func TestLotteryDrawChooseGenreThenCompletesAll(t *testing.T) {
 	ctx := context.Background()
 	req := lotteryDrawReq("张三", "310101201501011234", "")
 
-	first, err := svc.Draw(ctx, testLotteryToken, req)
+	first, err := svc.Draw(ctx, testLotteryToken, req, LotteryActor{})
 	if err != nil {
 		t.Fatalf("first draw: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestLotteryDrawChooseGenreThenCompletesAll(t *testing.T) {
 		t.Fatalf("entries = %d, want 2", len(first.Entries))
 	}
 
-	second, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501011234", "classical"))
+	second, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501011234", "classical"), LotteryActor{})
 	if err != nil {
 		t.Fatalf("draw classical: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestLotteryDrawChooseGenreThenCompletesAll(t *testing.T) {
 		t.Fatal("drawn_at is empty")
 	}
 
-	third, err := svc.Draw(ctx, testLotteryToken, req)
+	third, err := svc.Draw(ctx, testLotteryToken, req, LotteryActor{})
 	if err != nil {
 		t.Fatalf("draw remaining: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestLotteryDrawChooseGenreThenCompletesAll(t *testing.T) {
 		t.Fatalf("third = %+v, want folk drawn", third)
 	}
 
-	fourth, err := svc.Draw(ctx, testLotteryToken, req)
+	fourth, err := svc.Draw(ctx, testLotteryToken, req, LotteryActor{})
 	if err != nil {
 		t.Fatalf("draw again: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestLotteryDrawSingleGenreIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	req := lotteryDrawReq("李四", "310101201501015678", "")
 
-	first, err := svc.Draw(ctx, testLotteryToken, req)
+	first, err := svc.Draw(ctx, testLotteryToken, req, LotteryActor{})
 	if err != nil {
 		t.Fatalf("first draw: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestLotteryDrawSingleGenreIsIdempotent(t *testing.T) {
 		t.Fatalf("entry = %+v", entry)
 	}
 
-	second, err := svc.Draw(ctx, testLotteryToken, req)
+	second, err := svc.Draw(ctx, testLotteryToken, req, LotteryActor{})
 	if err != nil {
 		t.Fatalf("repeat draw: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestLotteryDrawSingleGenreIsIdempotent(t *testing.T) {
 func TestLotteryQueryByIdCardOnlyReturnsAllEntries(t *testing.T) {
 	svc, _ := newLotteryServiceForTest(t)
 	ctx := context.Background()
-	if _, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501011234", "classical")); err != nil {
+	if _, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501011234", "classical"), LotteryActor{}); err != nil {
 		t.Fatalf("draw: %v", err)
 	}
 
@@ -168,7 +168,7 @@ func TestLotteryDrawNormalizesNameAndID(t *testing.T) {
 	svc, _ := newLotteryServiceForTest(t)
 	// 姓名中的空格与证件号首尾空白都应被规范化后匹配。
 	req := model.LotteryDrawRequest{Name: " 张 三 ", IDCard: " 310101201501011234 ", Genre: "classical"}
-	if _, err := svc.Draw(context.Background(), testLotteryToken, req); err != nil {
+	if _, err := svc.Draw(context.Background(), testLotteryToken, req, LotteryActor{}); err != nil {
 		t.Fatalf("draw with normalized input: %v", err)
 	}
 }
@@ -177,13 +177,13 @@ func TestLotteryDrawRejectsMismatch(t *testing.T) {
 	svc, _ := newLotteryServiceForTest(t)
 	ctx := context.Background()
 
-	_, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("李四", "310101201501011234", ""))
+	_, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("李四", "310101201501011234", ""), LotteryActor{})
 	assertLotteryBizCode(t, err, httpx.CodeNotFound)
 
-	_, err = svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501019999", ""))
+	_, err = svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501019999", ""), LotteryActor{})
 	assertLotteryBizCode(t, err, httpx.CodeNotFound)
 
-	_, err = svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501011234", "unknown"))
+	_, err = svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501011234", "unknown"), LotteryActor{})
 	assertLotteryBizCode(t, err, httpx.CodeNotFound)
 }
 
@@ -202,13 +202,13 @@ func TestLotteryDrawExhaustedSlots(t *testing.T) {
 	svc, _ := newLotteryServiceForTest(t)
 	ctx := context.Background()
 
-	if _, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501011234", "classical")); err != nil {
+	if _, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("张三", "310101201501011234", "classical"), LotteryActor{}); err != nil {
 		t.Fatalf("draw 张三: %v", err)
 	}
-	if _, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("李四", "310101201501015678", "")); err != nil {
+	if _, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("李四", "310101201501015678", ""), LotteryActor{}); err != nil {
 		t.Fatalf("draw 李四: %v", err)
 	}
-	_, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("王五", "310101201501019012", ""))
+	_, err := svc.Draw(ctx, testLotteryToken, lotteryDrawReq("王五", "310101201501019012", ""), LotteryActor{})
 	assertLotteryBizCode(t, err, httpx.CodeConflict)
 }
 

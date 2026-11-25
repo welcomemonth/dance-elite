@@ -34,3 +34,8 @@ scheduler:
 sms:
   # 抽签提醒/结果短信：生产保持 false，凭据只经环境变量注入
   mock: false
+
+lottery:
+  # 生产必须为 wechat：抽签 H5 强制公众号网页授权并记录抽签微信。
+  # open 仅 APP_ENV=dev 可用，prod 会启动失败。
+  auth_mode: wechat

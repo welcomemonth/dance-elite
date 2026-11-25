@@ -40,6 +40,50 @@ func derivePayment(cfg *Config) error {
 	return nil
 }
 
+// deriveLotteryAuth 推导抽签 H5 访问模式。
+//
+//   - auth_mode=open 仅允许 dev，prod 直接拒绝；
+//   - wechat 需要公众号 appid/secret 与 public_base_url：dev 缺失时回退 open
+//     并记录原因，prod 缺失时启动失败（与支付一致，绝不静默降级）。
+func deriveLotteryAuth(cfg *Config) error {
+	mode := strings.ToLower(strings.TrimSpace(cfg.Lottery.AuthMode))
+	if mode == "" {
+		mode = LotteryAuthModeWechat
+	}
+	switch mode {
+	case LotteryAuthModeOpen:
+		if cfg.Env == EnvProd {
+			return fmt.Errorf("配置文件 lottery.auth_mode=open 仅允许在 APP_ENV=dev 使用（生产必须开启微信授权）")
+		}
+		cfg.Lottery.AuthMode = mode
+		return nil
+	case LotteryAuthModeWechat:
+	default:
+		return fmt.Errorf("配置文件 lottery.auth_mode=%q 不合法（可用 wechat/open）", mode)
+	}
+
+	var issues []string
+	if cfg.Wechat.MPAppID == "" {
+		issues = append(issues, "缺少 WECHAT_MP_APPID")
+	}
+	if cfg.Secrets.WechatMPSecret == "" {
+		issues = append(issues, "缺少 WECHAT_MP_SECRET")
+	}
+	if cfg.Server.PublicBaseURL == "" {
+		issues = append(issues, "缺少 server.public_base_url")
+	}
+	if len(issues) == 0 {
+		cfg.Lottery.AuthMode = LotteryAuthModeWechat
+		return nil
+	}
+	if cfg.Env == EnvProd {
+		return fmt.Errorf("抽签微信授权配置不完整（APP_ENV=prod，不会回退 open）: %s", strings.Join(issues, "; "))
+	}
+	cfg.Lottery.AuthMode = LotteryAuthModeOpen
+	cfg.Lottery.AuthModeReason = strings.Join(issues, "; ")
+	return nil
+}
+
 // paymentMaterialIssues 检查真实支付所需的全部环境变量（不读文件）。
 func paymentMaterialIssues(cfg *Config) []string {
 	var issues []string

@@ -11,7 +11,8 @@ import (
 var envKeys = []string{
 	"APP_ENV", "CONFIG_FILE",
 	"JWT_SECRET", "ID_CARD_HMAC_KEY", "ADMIN_INIT_PASSWORD",
-	"WECHAT_APPID", "WECHAT_SECRET", "WECHAT_MCHID", "WECHAT_MCH_SERIAL_NO",
+	"WECHAT_APPID", "WECHAT_SECRET", "WECHAT_MP_APPID", "WECHAT_MP_SECRET",
+	"WECHAT_MCHID", "WECHAT_MCH_SERIAL_NO",
 	"WECHAT_PAY_PUBLIC_KEY_ID", "WECHAT_PAY_API_V3_KEY",
 	"WECHAT_PAY_PRIVATE_KEY_FILE", "WECHAT_PAY_PUBLIC_KEY_FILE",
 	"SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME",
@@ -121,6 +122,12 @@ func TestLoadDefaultsAndDevMock(t *testing.T) {
 	}
 	if cfg.Payment.MockReason == "" {
 		t.Error("MockReason is empty")
+	}
+	if cfg.Lottery.AuthMode != LotteryAuthModeOpen {
+		t.Errorf("Lottery.AuthMode = %q, want open in dev without MP credentials", cfg.Lottery.AuthMode)
+	}
+	if cfg.Lottery.AuthModeReason == "" {
+		t.Error("Lottery.AuthModeReason is empty")
 	}
 }
 
@@ -377,6 +384,73 @@ func TestInvalidYAMLValues(t *testing.T) {
 				t.Fatalf("Load error = %v, want %s error", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestLotteryAuthUsesWechatWhenConfigured(t *testing.T) {
+	prepare(t, `
+server:
+  public_base_url: https://api.example.com
+`)
+	t.Setenv("WECHAT_MP_APPID", "mp-appid")
+	t.Setenv("WECHAT_MP_SECRET", "mp-secret")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Lottery.AuthMode != LotteryAuthModeWechat {
+		t.Fatalf("Lottery.AuthMode = %q, want wechat", cfg.Lottery.AuthMode)
+	}
+	if cfg.Wechat.MPAppID != "mp-appid" || cfg.Secrets.WechatMPSecret != "mp-secret" {
+		t.Errorf("MP credentials = %q/%q", cfg.Wechat.MPAppID, cfg.Secrets.WechatMPSecret)
+	}
+}
+
+func TestProdRequiresLotteryAuthMaterial(t *testing.T) {
+	dir := prepare(t, `
+server:
+  public_base_url: https://api.example.com
+`)
+	setPaymentEnv(t, dir)
+	t.Setenv("APP_ENV", EnvProd)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("Load should fail in prod without MP credentials")
+	}
+	for _, want := range []string{"WECHAT_MP_APPID", "WECHAT_MP_SECRET", "不会回退 open"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %q", err, want)
+		}
+	}
+}
+
+func TestProdRejectsOpenLotteryAuth(t *testing.T) {
+	dir := prepare(t, `
+server:
+  public_base_url: https://api.example.com
+lottery:
+  auth_mode: open
+`)
+	setPaymentEnv(t, dir)
+	t.Setenv("APP_ENV", EnvProd)
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "auth_mode=open") {
+		t.Fatalf("Load error = %v, want lottery.auth_mode=open rejection", err)
+	}
+}
+
+func TestInvalidLotteryAuthMode(t *testing.T) {
+	prepare(t, `
+lottery:
+  auth_mode: weird
+`)
+
+	_, err := Load()
+	if err == nil || !strings.Contains(err.Error(), "lottery.auth_mode") {
+		t.Fatalf("Load error = %v, want lottery.auth_mode error", err)
 	}
 }
 

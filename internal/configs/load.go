@@ -40,6 +40,9 @@ func Load() (*Config, error) {
 	if err := derivePayment(cfg); err != nil {
 		return nil, err
 	}
+	if err := deriveLotteryAuth(cfg); err != nil {
+		return nil, err
+	}
 	return cfg, nil
 }
 
@@ -96,6 +99,9 @@ func defaultConfig() *Config {
 			RefundWatchdogMinutes:     10,
 			MaterialCleanupDelayHours: 72,
 		},
+		Lottery: LotteryConfig{
+			AuthMode: LotteryAuthModeWechat,
+		},
 	}
 }
 
@@ -103,6 +109,7 @@ func defaultConfig() *Config {
 func readSecrets(cfg *Config) {
 	cfg.Wechat = WechatConfig{
 		AppID:          strings.TrimSpace(os.Getenv("WECHAT_APPID")),
+		MPAppID:        strings.TrimSpace(os.Getenv("WECHAT_MP_APPID")),
 		MchID:          strings.TrimSpace(os.Getenv("WECHAT_MCHID")),
 		MchSerialNo:    strings.TrimSpace(os.Getenv("WECHAT_MCH_SERIAL_NO")),
 		PayPublicKeyID: strings.TrimSpace(os.Getenv("WECHAT_PAY_PUBLIC_KEY_ID")),
@@ -111,6 +118,7 @@ func readSecrets(cfg *Config) {
 		JWTSecret:              os.Getenv("JWT_SECRET"),
 		IDCardHMACKey:          os.Getenv("ID_CARD_HMAC_KEY"),
 		WechatSecret:           os.Getenv("WECHAT_SECRET"),
+		WechatMPSecret:         strings.TrimSpace(os.Getenv("WECHAT_MP_SECRET")),
 		WechatPayAPIv3Key:      strings.TrimSpace(os.Getenv("WECHAT_PAY_API_V3_KEY")),
 		WechatPrivateKeyFile:   strings.TrimSpace(os.Getenv("WECHAT_PAY_PRIVATE_KEY_FILE")),
 		WechatPayPublicKeyFile: strings.TrimSpace(os.Getenv("WECHAT_PAY_PUBLIC_KEY_FILE")),

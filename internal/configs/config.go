@@ -20,6 +20,14 @@ const (
 	PaymentModeMock   = "mock"
 )
 
+// 抽签 H5 访问模式：
+//   - wechat：强制公众号网页授权（scope=snsapi_base），记录抽签微信身份；
+//   - open：仅 APP_ENV=dev 可用，跳过授权便于本地调试。
+const (
+	LotteryAuthModeWechat = "wechat"
+	LotteryAuthModeOpen   = "open"
+)
+
 // Config 是全部运行配置。非敏感字段来自 YAML，密钥字段来自环境变量。
 type Config struct {
 	// Env 是运行环境（APP_ENV），取值 dev/prod，默认 prod（安全的失败方向）。
@@ -32,6 +40,7 @@ type Config struct {
 	Admin     AdminConfig
 	Scheduler SchedulerConfig
 	SMS       SMSConfig
+	Lottery   LotteryConfig
 
 	// Wechat 是微信账户标识（非密钥，但统一经环境变量注入）。
 	Wechat WechatConfig
@@ -89,9 +98,21 @@ type SMSConfig struct {
 	Mock bool `mapstructure:"mock"`
 }
 
+// LotteryConfig 是抽签 H5 的访问配置。
+//
+// AuthMode 可由 YAML 指定 wechat/open；open 仅限 dev。deriveLotteryAuth 会在
+// dev 缺少公众号凭据时自动回退 open，并在 AuthModeReason 中说明原因。
+type LotteryConfig struct {
+	AuthMode       string `mapstructure:"auth_mode"`
+	AuthModeReason string `mapstructure:"-"`
+}
+
 // WechatConfig 是微信账户标识（全部来自环境变量）。
 type WechatConfig struct {
-	AppID          string
+	AppID string
+	// MPAppID 是公众号（服务号）appid，只用于抽签 H5 网页授权；
+	// 小程序登录与支付仍使用 AppID。
+	MPAppID        string
 	MchID          string
 	MchSerialNo    string
 	PayPublicKeyID string
@@ -102,6 +123,7 @@ type Secrets struct {
 	JWTSecret         string
 	IDCardHMACKey     string
 	WechatSecret      string
+	WechatMPSecret    string
 	WechatPayAPIv3Key string
 	// 微信支付密钥只接受文件路径（只读挂载），不接受内联 PEM 文本。
 	WechatPrivateKeyFile   string

@@ -50,6 +50,7 @@ type Deps struct {
 	AudioReview         *service.AudioReviewService
 	Lottery             *service.LotteryService
 	LotteryAdmin        *service.AdminLotteryService
+	LotteryAuth         *service.LotteryAuthService
 	Scores              *service.ScoreService
 	Rankings            *service.RankingAdminService
 	Prizes              *service.PrizeService
@@ -220,9 +221,9 @@ func New(deps Deps) *gin.Engine {
 		registerAudioReviewH5Routes(engine.Group("/h5"), deps.AudioReview)
 	}
 
-	// 抽签 H5（免登录，URL token 鉴权，API 文档 7.2）。
+	// 抽签 H5（免登录，URL token 鉴权 + 公众号网页授权，API 文档 7.2）。
 	if deps.Lottery != nil {
-		registerLotteryH5Routes(engine.Group("/h5"), deps.Lottery)
+		registerLotteryH5Routes(engine.Group("/h5"), deps.Lottery, deps.LotteryAuth, deps.Tokens)
 	}
 
 	// 前端单页应用托管（T32）：后台管理端与音频审核 H5 同源，

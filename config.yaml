@@ -42,3 +42,8 @@ sms:
   # 抽签提醒/结果短信：true 时只记录脱敏日志、不调用阿里云（本地联调用）。
   # 真实发送的凭据只从环境变量读取：SMS_ACCESS_KEY_ID / SMS_ACCESS_KEY_SECRET / SMS_SIGN_NAME。
   mock: true
+
+lottery:
+  # 抽签 H5 访问模式：wechat 强制公众号网页授权（记录抽签微信，生产必须）；
+  # open 仅 APP_ENV=dev 可用，跳过授权便于本地调试。
+  auth_mode: wechat

@@ -54,6 +54,8 @@ func run(ctx context.Context, cfg *config.Config) error {
 	stores := store.New(db)
 	tokens := token.NewSigner(cfg.Secrets.JWTSecret, time.Duration(cfg.Auth.JWTExpireSeconds)*time.Second)
 	wxClient := wechat.NewClient(cfg.Wechat.AppID, cfg.Secrets.WechatSecret)
+	// 公众号（服务号）客户端：只用于抽签 H5 网页授权，与小程序 appid 不同。
+	mpWxClient := wechat.NewClient(cfg.Wechat.MPAppID, cfg.Secrets.WechatMPSecret)
 	authService := service.NewAuthService(stores, wxClient, tokens)
 	adminAuthService := service.NewAdminAuthService(stores, tokens)
 	seasonService := service.NewSeasonService(stores)
@@ -110,6 +112,11 @@ func run(ctx context.Context, cfg *config.Config) error {
 	}
 	lotteryService := service.NewLotteryService(stores, cfg.Secrets.IDCardHMACKey)
 	lotteryAdminService := service.NewAdminLotteryService(stores, cfg.Server.PublicBaseURL, cfg.Secrets.IDCardHMACKey)
+	lotteryAuthService := service.NewLotteryAuthService(stores, mpWxClient, tokens,
+		cfg.Server.PublicBaseURL, cfg.Lottery.AuthMode)
+	if cfg.Lottery.AuthMode == config.LotteryAuthModeOpen {
+		logger.Log.Warn("抽签 H5 未开启微信网页授权（仅限本地调试）", "reason", cfg.Lottery.AuthModeReason)
+	}
 	lotterySweeper := service.NewLotterySweeper(stores, smsClient, cfg.Server.PublicBaseURL)
 
 	// 前端构建产物在编译期嵌入；未构建时（只有 .gitkeep）跳过页面托管，
@@ -158,6 +165,7 @@ func run(ctx context.Context, cfg *config.Config) error {
 		AudioReview:         audioReviewService,
 		Lottery:             lotteryService,
 		LotteryAdmin:        lotteryAdminService,
+		LotteryAuth:         lotteryAuthService,
 		Tokens:              tokens,
 		UploadDir:           cfg.Storage.UploadDir,
 		SlowRequestMS:       cfg.Server.SlowRequestMS,

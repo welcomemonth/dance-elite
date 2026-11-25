@@ -7,11 +7,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/meetmonth/dance-elite/internal/model"
 	"github.com/meetmonth/dance-elite/internal/pkg/httpx"
+	"github.com/meetmonth/dance-elite/internal/pkg/token"
+	"github.com/meetmonth/dance-elite/internal/pkg/wechat"
 	"github.com/meetmonth/dance-elite/internal/service"
 	"github.com/meetmonth/dance-elite/internal/store"
 	"github.com/meetmonth/dance-elite/internal/utils"
@@ -27,6 +31,180 @@ const (
 func newLotteryTestEngine(t *testing.T) *gin.Engine {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	stores := newLotteryRouteStores(t)
+	return New(Deps{Stores: stores, Lottery: service.NewLotteryService(stores, testLotteryRouteKey)})
+}
+
+// newLotteryAuthRouteEngine 装配开启微信授权的抽签 H5 路由（open 模式的反面）。
+func newLotteryAuthRouteEngine(t *testing.T) (*gin.Engine, *store.Store) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	stores := newLotteryRouteStores(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/sns/oauth2/access_token" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("code") != "good-code" {
+			_, _ = w.Write([]byte(`{"errcode":40029,"errmsg":"invalid code"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"openid":"mp-openid-1","unionid":"unionid-1","scope":"snsapi_base"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	signer := token.NewSigner("jwt-secret", time.Hour)
+	oauth := wechat.NewClient("mp-app", "mp-secret", wechat.WithBaseURL(server.URL))
+	authSvc := service.NewLotteryAuthService(stores, oauth, signer, "https://api.example.com", "wechat")
+	engine := New(Deps{
+		Stores:      stores,
+		Lottery:     service.NewLotteryService(stores, testLotteryRouteKey),
+		LotteryAuth: authSvc,
+		Tokens:      signer,
+	})
+	return engine, stores
+}
+
+func cookieNamed(cookies []*http.Cookie, name string) *http.Cookie {
+	for _, cookie := range cookies {
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	return nil
+}
+
+// TestLotteryWeChatAuthFlow 覆盖：未授权 meta → 跳转授权 → 回调种 cookie →
+// 带 cookie 抽签并记录公众号身份；无 cookie 的查询/抽签被拒绝。
+func TestLotteryWeChatAuthFlow(t *testing.T) {
+	engine, stores := newLotteryAuthRouteEngine(t)
+	base := "/h5/lottery/" + testLotteryRouteToken
+
+	// 1) 未授权：meta 正常返回，但 authorized=false。
+	w := lotteryGet(t, engine, base)
+	_, raw := decodeLotteryBody(t, w)
+	var meta model.LotteryMeta
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		t.Fatalf("decode meta: %v", err)
+	}
+	if meta.Authorized {
+		t.Fatal("meta should be unauthorized before OAuth")
+	}
+
+	// 2) 授权跳转：302 到微信，并种下 state cookie。
+	req := httptest.NewRequest(http.MethodGet, base+"/auth/start", nil)
+	req.Header.Set("User-Agent", testWeChatUA)
+	w = httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusFound {
+		t.Fatalf("auth start status = %d, body=%s", w.Code, w.Body.String())
+	}
+	location := w.Header().Get("Location")
+	parsed, err := url.Parse(location)
+	if err != nil {
+		t.Fatalf("parse location: %v", err)
+	}
+	if parsed.Host != "open.weixin.qq.com" {
+		t.Fatalf("auth start host = %q", parsed.Host)
+	}
+	state := parsed.Query().Get("state")
+	stateCookie := cookieNamed(w.Result().Cookies(), "de_lottery_state")
+	if state == "" || stateCookie == nil || stateCookie.Value != state {
+		t.Fatalf("state = %q, cookie = %+v", state, stateCookie)
+	}
+
+	// 3) 回调：换 openid/unionid，种授权 cookie，回到抽签页。
+	req = httptest.NewRequest(http.MethodGet, base+"/auth/callback?code=good-code&state="+url.QueryEscape(state), nil)
+	req.Header.Set("User-Agent", testWeChatUA)
+	req.AddCookie(stateCookie)
+	w = httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "/lottery/"+testLotteryRouteToken {
+		t.Fatalf("callback status=%d location=%q body=%s",
+			w.Code, w.Header().Get("Location"), w.Body.String())
+	}
+	authCookie := cookieNamed(w.Result().Cookies(), "de_lottery_auth")
+	if authCookie == nil || authCookie.Value == "" {
+		t.Fatal("auth cookie not set")
+	}
+	if !authCookie.HttpOnly || !authCookie.Secure || authCookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("auth cookie flags = %+v", authCookie)
+	}
+
+	// 4) 带 cookie：meta authorized=true。
+	req = httptest.NewRequest(http.MethodGet, base, nil)
+	req.Header.Set("User-Agent", testWeChatUA)
+	req.AddCookie(authCookie)
+	w = httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	_, raw = decodeLotteryBody(t, w)
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		t.Fatalf("decode authorized meta: %v", err)
+	}
+	if !meta.Authorized {
+		t.Fatal("meta should be authorized with valid cookie")
+	}
+
+	// 5) 不带 cookie 的查询与抽签被拒绝（40101）。
+	w = lotteryPost(t, engine, base+"/query", `{"id_card":"310101201501011234"}`)
+	if code, _ := decodeLotteryBody(t, w); w.Code != http.StatusUnauthorized || code != httpx.CodeUnauthorized {
+		t.Fatalf("unauthorized query status=%d code=%d", w.Code, code)
+	}
+	w = lotteryPost(t, engine, base+"/draw", `{"name":"张三","id_card":"310101201501011234","genre":"classical"}`)
+	if code, _ := decodeLotteryBody(t, w); w.Code != http.StatusUnauthorized || code != httpx.CodeUnauthorized {
+		t.Fatalf("unauthorized draw status=%d code=%d", w.Code, code)
+	}
+
+	// 6) 带 cookie 抽签成功，并把身份写入选手记录。
+	req = httptest.NewRequest(http.MethodPost, base+"/draw",
+		bytes.NewBufferString(`{"name":"张三","id_card":"310101201501011234","genre":"classical"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", testWeChatUA)
+	req.AddCookie(authCookie)
+	w = httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("authorized draw status = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	_, _, players, err := stores.Lottery.GetByToken(context.Background(), testLotteryRouteToken)
+	if err != nil {
+		t.Fatalf("GetByToken: %v", err)
+	}
+	var found bool
+	for _, player := range players {
+		if player.Genre == model.DanceTypeClassical && player.SlotNo != nil {
+			found = true
+			if player.DrawnOpenID == nil || *player.DrawnOpenID != "mp-openid-1" ||
+				player.DrawnUnionID == nil || *player.DrawnUnionID != "unionid-1" {
+				t.Fatalf("drawn identity = %+v / %+v", player.DrawnOpenID, player.DrawnUnionID)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("classical player was not drawn")
+	}
+}
+
+// TestLotteryWeChatAuthCallbackFailureRedirects 校验回调失败时回到页面并带 auth_error。
+func TestLotteryWeChatAuthCallbackFailureRedirects(t *testing.T) {
+	engine, _ := newLotteryAuthRouteEngine(t)
+	base := "/h5/lottery/" + testLotteryRouteToken
+
+	req := httptest.NewRequest(http.MethodGet, base+"/auth/callback?code=bad-code&state=whatever", nil)
+	req.Header.Set("User-Agent", testWeChatUA)
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusFound || w.Header().Get("Location") != "/lottery/"+testLotteryRouteToken+"?auth_error=1" {
+		t.Fatalf("callback failure status=%d location=%q", w.Code, w.Header().Get("Location"))
+	}
+	if cookie := cookieNamed(w.Result().Cookies(), "de_lottery_auth"); cookie != nil && cookie.Value != "" {
+		t.Fatalf("failure must not set auth cookie: %+v", cookie)
+	}
+}
+
+// newLotteryRouteStores 打开内存库、完成迁移并写入测试抽签。
+func newLotteryRouteStores(t *testing.T) *store.Store {
+	t.Helper()
 	db, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -53,7 +231,7 @@ func newLotteryTestEngine(t *testing.T) *gin.Engine {
 	if err != nil {
 		t.Fatalf("seed lottery: %v", err)
 	}
-	return New(Deps{Stores: stores, Lottery: service.NewLotteryService(stores, testLotteryRouteKey)})
+	return stores
 }
 
 func mustRoutePlayer(name, idCard, genre string) store.LotteryPlayerParams {
@@ -108,6 +286,9 @@ func TestLotteryMetaRoute(t *testing.T) {
 	}
 	if meta.EventName != "测试赛事抽签" || len(meta.Genres) != 2 {
 		t.Fatalf("meta = %+v", meta)
+	}
+	if !meta.Authorized {
+		t.Fatal("open mode meta should be authorized")
 	}
 }
 

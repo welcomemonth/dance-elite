@@ -43,7 +43,7 @@ func TestLotteryDrawRejectedBeforeStart(t *testing.T) {
 	svc, _ := newLotteryServiceWithSeed(t, lotteryWindowSeed(now.Add(time.Hour), now.Add(24*time.Hour)))
 	svc.now = func() time.Time { return now }
 
-	_, err := svc.Draw(context.Background(), windowTestToken, lotteryDrawReq("张三", "310101201501011234", ""))
+	_, err := svc.Draw(context.Background(), windowTestToken, lotteryDrawReq("张三", "310101201501011234", ""), LotteryActor{})
 	assertLotteryBizCode(t, err, httpx.CodeConflict)
 }
 
@@ -52,7 +52,7 @@ func TestLotteryDrawAutoAssignsAfterEnd(t *testing.T) {
 	svc, _ := newLotteryServiceWithSeed(t, lotteryWindowSeed(now.Add(-24*time.Hour), now.Add(-time.Minute)))
 	svc.now = func() time.Time { return now }
 
-	result, err := svc.Draw(context.Background(), windowTestToken, lotteryDrawReq("张三", "310101201501011234", ""))
+	result, err := svc.Draw(context.Background(), windowTestToken, lotteryDrawReq("张三", "310101201501011234", ""), LotteryActor{})
 	if err != nil {
 		t.Fatalf("draw after end: %v", err)
 	}

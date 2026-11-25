@@ -108,6 +108,13 @@ func (s *LotteryService) Lookup(ctx context.Context, token string, req model.Lot
 	return &model.LotteryLookupResult{Entries: entries}, nil
 }
 
+// LotteryActor 是执行抽签的微信身份（公众号网页授权获取）。
+// 本地调试的 open 模式或系统自动分配为空。
+type LotteryActor struct {
+	OpenID  string
+	UnionID string
+}
+
 // drawOutcome 是 Draw 在事务闭包内计算出的结果。
 type drawOutcome struct {
 	status  string
@@ -121,7 +128,7 @@ type drawOutcome struct {
 //   - 同一选手有多个舞种都待抽：返回 choose_genre，前端弹窗让家长选择；
 //   - 已全部抽完：返回 already_drawn（前端据此提示「已于 X 月 X 日 HH:MM 抽签」）；
 //   - 已过截止时间：按系统规则自动分配，不重新随机。
-func (s *LotteryService) Draw(ctx context.Context, token string, req model.LotteryDrawRequest) (*model.LotteryDrawResult, error) {
+func (s *LotteryService) Draw(ctx context.Context, token string, req model.LotteryDrawRequest, actor LotteryActor) (*model.LotteryDrawResult, error) {
 	idCard := utils.NormalizeIDNumber(utils.IDTypeIDCard, req.IDCard)
 	hash := s.hashID(idCard)
 	name := normalizeLotteryName(req.Name)
@@ -194,7 +201,7 @@ func (s *LotteryService) Draw(ctx context.Context, token string, req model.Lotte
 				entries = matchingLotteryEntries(players, hash, name)
 				return nil
 			}
-			if err := s.assignSlot(ctx, tx, groups, players, &players[target], now); err != nil {
+			if err := s.assignSlot(ctx, tx, groups, players, &players[target], now, actor); err != nil {
 				return err
 			}
 			outcome.status = model.LotteryOutcomeDrawn
@@ -213,7 +220,7 @@ func (s *LotteryService) Draw(ctx context.Context, token string, req model.Lotte
 		case 0:
 			outcome.status = model.LotteryOutcomeAlreadyDrawn
 		case 1:
-			if err := s.assignSlot(ctx, tx, groups, players, &players[pending[0]], now); err != nil {
+			if err := s.assignSlot(ctx, tx, groups, players, &players[pending[0]], now, actor); err != nil {
 				return err
 			}
 			outcome.status = model.LotteryOutcomeDrawn
@@ -248,7 +255,7 @@ func (s *LotteryService) Draw(ctx context.Context, token string, req model.Lotte
 
 // assignSlot 为一名选手分配随机槽位并写库。
 func (s *LotteryService) assignSlot(ctx context.Context, tx *sql.Tx, groups []model.LotteryGroup,
-	players []model.LotteryPlayer, player *model.LotteryPlayer, now time.Time) error {
+	players []model.LotteryPlayer, player *model.LotteryPlayer, now time.Time, actor LotteryActor) error {
 	slots := availableLotterySlots(groups, players, player.Genre, player.AgeGroup)
 	if len(slots) == 0 {
 		return httpx.ErrConflict("该组别已无可抽签位，请联系赛事客服")
@@ -258,7 +265,7 @@ func (s *LotteryService) assignSlot(ctx context.Context, tx *sql.Tx, groups []mo
 		return httpx.ErrInternal(err, "抽签失败，请稍后重试")
 	}
 	drawnAt := utils.FormatISO(now)
-	ok, err := s.stores.Lottery.UpdatePlayerSlot(ctx, tx, player.ID, slot.Letter, slot.No, drawnAt, false)
+	ok, err := s.stores.Lottery.UpdatePlayerSlotWithIdentity(ctx, tx, player.ID, slot.Letter, slot.No, drawnAt, actor.OpenID, actor.UnionID)
 	if err != nil {
 		return httpx.ErrInternal(err, "抽签失败，请稍后重试")
 	}
