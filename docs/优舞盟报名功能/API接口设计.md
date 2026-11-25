@@ -1559,12 +1559,12 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 |---|---|
 | 接口名称 | 抽签 H5 |
 | 功能说明 | 每场赛事一个免登录链接：选手输入 **姓名 + 证件号** 抽取出场顺序（同一人报多个舞种时由服务端提示选择），或只凭 **证件号** 查询全部记录；数据存数据库 `lottery_sessions` / `lottery_groups` / `lottery_players`。支持抽签开始/截止时间：开始前禁止抽签，截止后剩余选手自动分配，并可通过短信提醒/通知 |
-| 请求方法 + URL | `GET /h5/lottery/{token}`、`POST /h5/lottery/{token}/lookup`、`POST /h5/lottery/{token}/query`、`POST /h5/lottery/{token}/draw` |
-| 鉴权 | 免登录（URL token，8–64 位字母数字，后台导入时默认生成 16 位） |
+| 请求方法 + URL | `GET /h5/lottery/{token}`、`GET /h5/lottery/{token}/auth/start`、`GET /h5/lottery/{token}/auth/callback`、`POST /h5/lottery/{token}/lookup`、`POST /h5/lottery/{token}/query`、`POST /h5/lottery/{token}/draw` |
+| 鉴权 | 免登录（URL token，8–64 位字母数字，后台导入时默认生成 16 位）+ **公众号网页授权**（`snsapi_base` 静默授权）。授权成功后签发 HttpOnly cookie `de_lottery_auth`（7 天，绑定当次 token）；查询/抽签缺少有效 cookie 返回 40101。仅 `APP_ENV=dev` 且缺少公众号凭据时回退 `open` 模式（跳过授权，见 7.2.8） |
 | 访问限制 | 仅允许微信内置浏览器访问（UA 含 `MicroMessenger`）；页面与 `/h5/lottery/*` 接口对其他 UA 均返回 404，不暴露页面存在性 |
 | 页面地址 | `/lottery/{token}`（React H5，移动端优先） |
 
-> 本地调试：可在浏览器 DevTools 中把 User-Agent 临时改为包含 `MicroMessenger`，或直接用微信开发者工具打开；普通浏览器会得到 404。
+> 本地调试：可使用 `APP_ENV=dev` + `lottery.auth_mode=open`（或缺少 `WECHAT_MP_*` 时自动回退），配合浏览器 DevTools 把 User-Agent 改为包含 `MicroMessenger`；生产必须配置公众号网页授权（见 7.2.8）。
 
 ### 7.2.1 页面元信息
 
@@ -1582,6 +1582,7 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 | end_at | string | 抽签截止时间（ISO 8601）；缺省表示不限制 |
 | server_time | string | 服务端当前时间（ISO 8601），前端据此校准倒计时 |
 | status | string | 服务端判定状态：`not_started` / `ongoing` / `ended`（未配置时间窗口时恒为 `ongoing`） |
+| authorized | boolean | 当前浏览器是否已通过公众号网页授权；`false` 时前端跳转 `auth/start`（`open` 调试模式恒为 `true`） |
 
 **失败响应**：40401（token 无效或已失效）。
 
@@ -1675,7 +1676,9 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 - 到达 `end_at`：剩余未抽选手由系统自动分配（同一套随机槽位规则），`auto_drawn=true`；用户此时再点抽签会返回自动分配的结果，不会重抽。
 - 未配置时间窗口：随时可抽、无自动分配、不发短信。
 
-**失败响应**：40001（缺参数）、40401（token 无效 / 信息不匹配）、40901（未到开始时间 / 该组别已无槽位）、42901（限流）。
+**失败响应**：40001（缺参数）、40101（未完成微信授权 / 授权已过期）、40401（token 无效 / 信息不匹配）、40901（未到开始时间 / 该组别已无槽位）、42901（限流）。
+
+**身份记录**：手动抽签成功时，服务端把当前公众号的 `openid` / `unionid` 写入该选手记录（`lottery_players.drawn_openid` / `drawn_unionid`）；系统自动分配为空。后续重复抽签返回原结果，不会改写操作人。
 
 **分组规则**
 
@@ -1701,7 +1704,7 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 
 - `lottery_sessions`：一次赛事抽签（event_id、event_name、token、source=excel/event、时间窗口、短信模板、创建人）。
 - `lottery_groups`：`赛事 × 舞种 × 年龄组 × 字母组` 的人数，槽位 = 字母 + 1..size。
-- `lottery_players`：选手记录、分组槽位、抽签时间、自动分配标记与短信发送状态。
+- `lottery_players`：选手记录、分组槽位、抽签时间、自动分配标记与短信发送状态；手动抽签另记 `drawn_openid` / `drawn_unionid`（公众号网页授权身份，迁移 0021），自动分配为 NULL。
 - 证件号不落明文：`id_card_hash`（HMAC）用于 H5 比对；`id_card_enc`（AES-256-GCM，密钥由 `ID_CARD_HMAC_KEY` 派生）只对 Excel 来源写入，供后台导出解密；赛事报名来源只有哈希，`id_card_enc` 为空（导出显示「（报名库无明文）」）。
 - 唯一约束：同一 session 同一选手同一舞种一条记录；已分配槽位 `(session, genre, age_group, group_letter, slot_no)` 唯一。
 - 旧版 `data/lottery/*.json` 不再读取，也不做迁移（保留文件仅作历史参考）。
@@ -1710,7 +1713,8 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 
 - 抽签与查询均用 POST body，避免证件号进入访问日志、浏览器历史和 Referer。
 - 响应不含身份证号；业务日志只记录舞种、组别与槽位；导出解密失败只记 `lottery.id_decrypt_failed` 并回退掩码。
-- 限流（按 IP）：元信息 120 次/分、lookup/query/draw 各 60 次/分。
+- 抽签微信 `openid` / `unionid` 只用于身份追溯：日志不记录原值；后台抽签详情展示完整值，导出包含完整 `openid`（导出仅 admin / super_admin），列表页不展示。
+- 限流（按 IP）：元信息、授权跳转、授权回调各 120 次/分；lookup/query/draw 各 60 次/分。
 
 ### 7.2.7 短信提醒与结果通知（阿里云）
 
@@ -1745,6 +1749,43 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 - 手机号在抽签 JSON 中明文存储；日志中手机号统一脱敏、姓氏打码。
 - 抽签链接即访问凭据，短信文案提示「请勿转发」；链接到期后服务端自动分配，泄露风险仅限于查看结果。
 
+### 7.2.8 微信网页授权（强制身份记录）
+
+抽签 H5 只记录「谁抽的」，不阻止他人代抽：拿到链接 + 证件号的人仍可操作，但操作会绑定到其微信账号，后台可追溯。生产环境强制开启；仅 `APP_ENV=dev` 在缺少公众号凭据时可回退 `open`。
+
+**前置条件**
+
+| 项 | 说明 |
+|---|---|
+| 公众号类型 | 已认证服务号（具备网页授权权限） |
+| 网页授权域名 | 公众号后台「设置与开发 → 公众号设置 → 功能设置 → 网页授权域名」填写 `server.public_base_url` 的域名（https、无端口） |
+| 域名校验文件 | 微信提供的 `MP_verify_xxx.txt` 放到站点根目录。可放入 `dance-admin/public/`（构建后由内嵌静态资源直接返回），或用反向代理直接托管 |
+| 开放平台 | 公众号与小程序绑定同一微信开放平台账号；绑定后两边拿到的 `unionid` 相同，才能关联到报名时登录的小程序账号（`users.unionid`）。未绑定时只有 `openid`，无法关联 |
+| 环境变量 | `WECHAT_MP_APPID` / `WECHAT_MP_SECRET`（公众号，不是小程序的 `WECHAT_APPID` / `WECHAT_SECRET`） |
+
+**访问模式**
+
+| `lottery.auth_mode` | 行为 |
+|---|---|
+| `wechat`（默认，生产必须） | 强制网页授权；缺少 `WECHAT_MP_APPID` / `WECHAT_MP_SECRET` / `server.public_base_url` 时，prod 启动失败 |
+| `open`（仅 dev） | 跳过授权与 UA 以外的校验，抽签不记录身份；prod 配置该值会启动失败 |
+
+**授权流程**
+
+1. 页面加载 `GET /h5/lottery/{token}`，`authorized=false` 时自动跳转 `auth/start`（同一标签页只自动跳一次，失败后展示「重新授权」）。
+2. `GET /h5/lottery/{token}/auth/start`：校验 token 存在 → 生成一次性 `state`（hex，含过期与 HMAC）并写入 HttpOnly cookie → 302 到 `https://open.weixin.qq.com/connect/oauth2/authorize?...&scope=snsapi_base&state=...#wechat_redirect`。
+3. `GET /h5/lottery/{token}/auth/callback?code=&state=`：校验 `state` 签名、有效期与双提交 cookie → 调用 `sns/oauth2/access_token` 换取 `openid`/`unionid` → 签发 `de_lottery_auth` cookie（HttpOnly、Secure、SameSite=Lax，7 天，绑定 token 摘要）→ 302 回 `/lottery/{token}`。
+4. 之后 `lookup` / `query` / `draw` 都校验 cookie；未授权返回 **40101**，前端展示重新授权入口。
+
+**说明**
+
+- `snsapi_base` 为静默授权：不弹授权页，不获取昵称/头像，仅拿 `openid`（开放平台绑定时同时返回 `unionid`）。
+- 开放平台绑定前创建的老用户 `users.unionid` 可能为空，后台会显示「未匹配」；该用户重新登录小程序后 `unionid` 自动回填，抽签记录随之可关联。
+- `state` 只含 `a-zA-Z0-9`，回调校验签名、过期时间与 `de_lottery_state` cookie，防止伪造与 CSRF。
+- cookie 绑定抽签 token 摘要：换一场赛事会静默重新授权，不影响使用。
+- iOS 微信偶发丢 cookie：前端在同一标签页只自动重试一次，之后展示「重新授权」，避免无限跳转。
+- 记录身份属于个人信息：页面底部与授权失败页均提示；日志与后台列表按掩码展示，完整 `openid` 仅在后台抽签详情中可见。
+
 ## 7.3 后台赛事抽签（`/api/v1/admin/lottery`）
 
 后台「赛事管理 → 赛事抽签」页使用的接口。数据与 7.2 共用 `lottery_*` 表；创建、修改设置、导出均记 `admin_logs`（`admin.lottery.import` / `admin.lottery.settings` / `admin.lottery.export`）。
@@ -1776,7 +1817,14 @@ curl "https://api.example.com/h5/audio-review/a8K2mP9x?keyword=%E5%BC%A0%E5%B0%8
 
 `GET /api/v1/admin/lottery/sessions/{token}`
 
-在 7.3.1 字段基础上增加 `groups`（分组进度）：`genre` / `genre_label` / `age_group` / `letter` / `size` / `drawn`。
+在 7.3.1 字段基础上增加 `groups`（分组进度）与 `draws`（已抽签明细）：
+
+- `groups[]`：`genre` / `genre_label` / `age_group` / `letter` / `size` / `drawn`。
+- `draws[]`：`player_name` / `genre` / `genre_label` / `age_group` / `slot{letter,no}` / `drawn_at` / `auto_drawn` / `openid` / `unionid` / `same_wechat_count` / `user{id,nickname,phone}`。
+  - `openid` / `unionid`：手动抽签的公众号网页授权身份；系统自动分配为空。
+  - `same_wechat_count`：同一 `openid` 在本场操作的选手人数（按证件号哈希去重，同一选手多个舞种只计 1 人），用于发现一个微信替多人抽签；自动分配为空。
+  - `user`：按 `unionid` 匹配 `users.unionid` 得到的小程序账号（`phone` 已掩码）；未匹配为空，表示不是报名账号本人操作。
+  - 完整 `openid` 仅供后台追溯，不返回给抽签 H5。
 
 角色：`cs` 及以上可读。
 
@@ -1823,7 +1871,7 @@ source=excel 且未传 event_id 时：`title` 必填；每次生成都会创建�
 
 `GET /api/v1/admin/lottery/sessions/{token}/export`
 
-返回 xlsx 文件流（`Content-Disposition: attachment`），工作表「抽签结果」，列：序号、姓名、身份证号、年龄组、舞种、分组、组内序号、出场顺序、抽签时间、抽签方式（本人抽取 / 系统自动分配）；身份证号列强制为文本，避免 Excel 转科学计数法。未抽签记录出场顺序显示「未抽签」。Excel 来源的证件号解密后输出完整值；赛事报名来源因报名库只有哈希，该列显示「（报名库无明文）」。
+返回 xlsx 文件流（`Content-Disposition: attachment`），工作表「抽签结果」，列：序号、姓名、身份证号、年龄组、舞种、分组、组内序号、出场顺序、抽签时间、抽签方式（本人抽取 / 系统自动分配）、抽签微信标识（公众号 `openid`，自动分配为空）；身份证号列强制为文本，避免 Excel 转科学计数法。未抽签记录出场顺序显示「未抽签」。Excel 来源的证件号解密后输出完整值；赛事报名来源因报名库只有哈希，该列显示「（报名库无明文）」。
 
 角色：仅 `admin` / `super_admin`。
 
